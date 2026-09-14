@@ -125,15 +125,6 @@ export async function importarInstructores(req, res) {
           const esLiderFicha = item.esLider !== undefined ? item.esLider : esLider
           if (targetFichaId) {
             if (esLiderFicha) {
-              const otraFicha = await Ficha.findOne({
-                instructorLiderId: instructor._id,
-                _id: { $ne: targetFichaId }
-              })
-              if (otraFicha) {
-                return res.status(409).json({
-                  error: `Este instructor ya es líder de la ficha ${otraFicha.codigoFicha}. Un instructor solo puede ser líder de una ficha a la vez.`
-                })
-              }
               await Ficha.findByIdAndUpdate(targetFichaId, { instructorLiderId: instructor._id })
             } else {
               await Ficha.findByIdAndUpdate(targetFichaId, { $addToSet: { instructores: instructor._id } })

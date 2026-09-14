@@ -23,8 +23,10 @@ const DEDOS = [
 ]
 
 const ficha = ref(null)
+const fichasDisponibles = ref([])
 const estudiantes = ref([])
 const cargando = ref(true)
+const cargandoEstudiantes = ref(false)
 const errorInicial = ref('')
 
 const busqueda = ref('')
@@ -68,24 +70,44 @@ onMounted(async () => {
     }
   })
 
-  const fichaLider = await window.huellero.getFichaLider()
-  if (!fichaLider.ok) {
-    errorInicial.value = fichaLider.error
+  const resFichas = await window.huellero.getFichasLider()
+  if (!resFichas.ok) {
+    errorInicial.value = resFichas.error
     cargando.value = false
     return
   }
-  ficha.value = fichaLider.ficha
 
-  const resEstudiantes = await window.huellero.getEstudiantesFicha(fichaLider.ficha._id)
+  fichasDisponibles.value = resFichas.fichas
+  cargando.value = false
+
+  // Si solo lidera una ficha, entra directo — sin fricción extra.
+  if (resFichas.fichas.length === 1) {
+    await elegirFicha(resFichas.fichas[0])
+  }
+})
+
+async function elegirFicha(f) {
+  ficha.value = f
+  errorInicial.value = ''
+  cargandoEstudiantes.value = true
+
+  const resEstudiantes = await window.huellero.getEstudiantesFicha(f._id)
   if (!resEstudiantes.ok) {
     errorInicial.value = resEstudiantes.error
-    cargando.value = false
+    cargandoEstudiantes.value = false
     return
   }
 
   estudiantes.value = resEstudiantes.estudiantes
-  cargando.value = false
-})
+  cargandoEstudiantes.value = false
+}
+
+function cambiarFicha() {
+  ficha.value = null
+  estudiantes.value = []
+  seleccionadoId.value = null
+  errorInicial.value = ''
+}
 
 onUnmounted(() => {
   if (offProgreso) offProgreso()
@@ -149,12 +171,38 @@ async function iniciarCaptura() {
 
       <div v-if="cargando" class="cuerpo centrado">
         <AppIcon name="loader" :size="22" class="spin" />
-        <p class="hint">Cargando ficha y estudiantes…</p>
+        <p class="hint">Cargando tus fichas…</p>
       </div>
 
       <div v-else-if="errorInicial" class="cuerpo centrado">
         <AppIcon name="alert-triangle" :size="22" />
         <p class="error">{{ errorInicial }}</p>
+        <button v-if="fichasDisponibles.length > 1" class="ghost" @click="cambiarFicha">
+          Elegir otra ficha
+        </button>
+      </div>
+
+      <!-- Catálogo: el líder tiene más de una ficha, debe elegir en cuál enrolar -->
+      <div v-else-if="!ficha" class="cuerpo">
+        <p class="hint">Eres líder de varias fichas. Elige en cuál quieres registrar huellas:</p>
+        <ul class="lista lista-fichas">
+          <li
+            v-for="f in fichasDisponibles"
+            :key="f._id"
+            class="item-fila"
+            @click="elegirFicha(f)"
+          >
+            <div>
+              <strong>{{ f.codigoFicha }}</strong>
+              <span class="hint">{{ f.nombrePrograma }}</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div v-else-if="cargandoEstudiantes" class="cuerpo centrado">
+        <AppIcon name="loader" :size="22" class="spin" />
+        <p class="hint">Cargando estudiantes de {{ ficha.codigoFicha }}…</p>
       </div>
 
       <template v-else>
@@ -167,8 +215,13 @@ async function iniciarCaptura() {
 
         <div class="cuerpo">
           <div class="ficha-info">
-            <span class="hint">Ficha</span>
-            <strong>{{ ficha.codigoFicha }} · {{ ficha.nombrePrograma }}</strong>
+            <div>
+              <span class="hint">Ficha</span>
+              <strong>{{ ficha.codigoFicha }} · {{ ficha.nombrePrograma }}</strong>
+            </div>
+            <button v-if="fichasDisponibles.length > 1" class="ghost" @click="cambiarFicha">
+              Cambiar ficha
+            </button>
           </div>
 
           <div class="busqueda-wrap">
@@ -369,6 +422,19 @@ h2 {
 }
 
 .ficha-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ficha-info > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lista-fichas .item-fila > div {
   display: flex;
   flex-direction: column;
   gap: 2px;

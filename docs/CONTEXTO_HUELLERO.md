@@ -662,3 +662,20 @@ Verificado con 4 pruebas reales: líder edita estudiante propio (éxito), líder
 2. **Bug real encontrado en el camino** (introducido en el rediseño visual de hoy mismo, no preexistente): el mensaje de error del reintento NUNCA llegaba a mostrarse en la UI. `DocenteLogin.vue` usaba `await emit('login', ...)` asumiendo que devolvía el resultado del handler del padre — pero `emit()` en Vue 3 siempre devuelve `undefined` y no espera handlers async. Por eso siempre se veía el mensaje genérico de repuesto "No se pudo iniciar sesión", inmediatamente, sin importar la causa real. Fix: `DocenteLogin.vue` ahora recibe `onLogin` como prop-función y hace `await props.onLogin(...)` (llamada directa, sí devuelve el valor real), en vez de depender del retorno de `emit()`.
 
 Verificado con reproducción real: reiniciar backend + login dentro de los primeros 2-4s → ahora entra sin mostrar error (reintento silencioso). Con backend apagado del todo → muestra el mensaje correcto tras ~16.5s. Con credenciales incorrectas → mensaje específico inmediato, sin retardo.
+
+`[RESUELTO 2026-09-14]` — Se revierte la decisión documentada previamente de "líder de una sola ficha a la vez" (petición explícita del profesor). Eliminadas las 3 validaciones 409 que lo bloqueaban (`createFicha`, `updateFicha`, `importarInstructores` en `fichaController.js` e `instructorController.js`). El frontend (`Fichas.vue`) ya tenía el mensaje informativo correcto de antes ("Se permite ser líder de múltiples fichas"), solo el backend bloqueaba. `Instructor.esLider` (booleano desnormalizado) confirmado correcto para múltiples fichas en lectura (`getInstructores` calcula "líder de al menos una"). Verificado con prueba real: instructor asignado como líder de una segunda ficha, guardado exitoso sin error.
+
+En el mismo día se corrigió: `getFichaLider()` fue renombrado a `getFichasLider()` (`engine.js`) y ahora devuelve **todas** las fichas líder (`filter()` en vez de `find()`, con forma `{ ok: true, fichas: [...] }`), junto con el canal IPC `huellero:getFichasLider` (`main/index.js`) y `window.huellero.getFichasLider()` (`preload/index.js`). `EnrolarHuellaModal.vue` ya consume ese array y muestra un catálogo de selección de ficha cuando el líder tiene más de una (`fichasDisponibles` / `elegirFicha`). **Pendiente de commit** (cambios aún en working tree, no commiteados).
+
+Nota residual (no en alcance): `Instructor.esLider` puede quedar obsoleto en `true` si un instructor deja de liderar todas sus fichas, ya que nada lo resetea explícitamente a `false` — mitigado hoy porque `getInstructores()` usa `inst.esLider || esLiderEnFicha` (el cálculo en vivo manda). No se corrige hoy, queda anotado.
+
+# Pendientes — 2026-09-14
+
+Consolidado honesto de lo que falta, verificado contra `git log` y `git status` de hoy. Nada iniciado salvo indicación contraria.
+
+- **Tardanza escalonada (5 min / 1h / 2h / 6h de falla)** — retroalimentación del profesor. **NO iniciado.** Hoy solo existe la tolerancia única de 15 min que produce un único estado "Tardanza".
+- **Máximo 2 huellas (dedos) por persona** — retroalimentación del profesor. **NO iniciado.** El enrolamiento actual guarda una sola huella por aprendiz (`POST /api/enrolamiento/guardar`).
+- **Catálogo de selección de ficha para enrolamiento (huellero)** — **IMPLEMENTADO en working tree pero sin commitear** (`EnrolarHuellaModal.vue` + `getFichasLider()` en `engine.js`/`main/index.js`/`preload/index.js`). Pendiente de hacer commit.
+- **Rotación de `MONGODB_URI` y `GMAIL_PASS`** — pendiente de coordinar con el otro colaborador. (`backend/.env` ya fuera del tracking desde 2026-09-10, commit `bcb0376`.)
+- **Prueba del instalador `.exe` en un PC/VM realmente limpio** — sin hacerse. Es la única prueba de todo el proyecto que sigue sin ejecutarse (confirmada 2026-09-11).
+- **Nota residual `Instructor.esLider`** — puede quedar obsoleto en `true` si un instructor deja de liderar todas sus fichas (nada lo resetea a `false`); mitigado por el cálculo en vivo de `getInstructores()`. Sin prioridad urgente, no corregido.

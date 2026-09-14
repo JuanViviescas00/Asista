@@ -342,7 +342,7 @@ export async function loginDocente(correo, password) {
   return { ok: true, docente: { correo: docente.correo, nombre: docente.nombre } }
 }
 
-export async function getFichaLider() {
+export async function getFichasLider() {
   if (!docente) {
     return { ok: false, error: 'No hay sesión docente activa' }
   }
@@ -356,7 +356,7 @@ export async function getFichaLider() {
       signal: AbortSignal.timeout(10000),
     })
   } catch {
-    return { ok: false, error: 'Sin conexión: no se puede obtener la ficha' }
+    return { ok: false, error: 'Sin conexión: no se pueden obtener las fichas' }
   }
 
   if (res.status === 401) {
@@ -371,18 +371,18 @@ export async function getFichaLider() {
   }
 
   if (!res.ok) {
-    return { ok: false, error: 'No se pudo obtener la ficha del líder' }
+    return { ok: false, error: 'No se pudieron obtener las fichas del líder' }
   }
 
   const fichas = await res.json().catch(() => null)
   const lista = Array.isArray(fichas) ? fichas : []
-  const fichaLider = lista.find((f) => f.esLider) || null
+  const fichasLider = lista.filter((f) => f.esLider)
 
-  if (!fichaLider) {
-    return { ok: false, error: 'No tienes una ficha asignada como líder' }
+  if (fichasLider.length === 0) {
+    return { ok: false, error: 'No tienes ninguna ficha asignada como líder' }
   }
 
-  return { ok: true, ficha: fichaLider }
+  return { ok: true, fichas: fichasLider }
 }
 
 export async function getEstudiantesFicha(fichaId) {

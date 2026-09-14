@@ -119,15 +119,6 @@ export async function getPlantillasFicha(req, res) {
 
 export async function createFicha(req, res) {
   try {
-    if (req.body.instructorLiderId) {
-      const otraFicha = await Ficha.findOne({ instructorLiderId: req.body.instructorLiderId })
-      if (otraFicha) {
-        return res.status(409).json({
-          error: `Este instructor ya es líder de la ficha ${otraFicha.codigoFicha}. Un instructor solo puede ser líder de una ficha a la vez.`,
-        })
-      }
-    }
-
     const ficha = new Ficha(req.body)
     await ficha.save()
     const populated = await ficha
@@ -141,18 +132,6 @@ export async function createFicha(req, res) {
 
 export async function updateFicha(req, res) {
   try {
-    if (req.body.instructorLiderId) {
-      const otraFicha = await Ficha.findOne({
-        instructorLiderId: req.body.instructorLiderId,
-        _id: { $ne: req.params.id },
-      })
-      if (otraFicha) {
-        return res.status(409).json({
-          error: `Este instructor ya es líder de la ficha ${otraFicha.codigoFicha}. Un instructor solo puede ser líder de una ficha a la vez.`,
-        })
-      }
-    }
-
     const ficha = await Ficha.findByIdAndUpdate(req.params.id, req.body, { new: true })
       .populate('instructorLiderId', 'nombres apellidos correo')
       .populate('instructores', 'nombres apellidos correo')

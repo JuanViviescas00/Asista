@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld('huellero', {
   capturarYVerificar: () => ipcRenderer.invoke('huellero:capture'),
   loginDocente: (correo, password) => ipcRenderer.invoke('huellero:login', correo, password),
   logoutDocente: () => ipcRenderer.invoke('huellero:logout'),
-  getFichaLider: () => ipcRenderer.invoke('huellero:getFichaLider'),
+  getFichasLider: () => ipcRenderer.invoke('huellero:getFichasLider'),
   getEstudiantesFicha: (fichaId) => ipcRenderer.invoke('huellero:getEstudiantesFicha', fichaId),
   enrolarEstudiante: (payload) => ipcRenderer.invoke('huellero:enrolar', payload),
   cancelarEnrolamiento: () => ipcRenderer.invoke('huellero:cancelarEnrolar'),
