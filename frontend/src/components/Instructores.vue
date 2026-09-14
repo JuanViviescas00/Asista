@@ -434,8 +434,8 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
 }
 
 .badge-filtros-activos {
-  background: rgba(26, 115, 232, 0.12);
-  color: #1a73e8;
+  background: rgba(57, 169, 0, 0.14);
+  color: #1F5C00;
   padding: 3px 10px;
   border-radius: 12px;
   font-size: 12px;
@@ -443,14 +443,14 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
 }
 
 .btn-limpiar {
-  color: #dc2626;
-  border-color: #fca5a5;
-  background: #fef2f2;
+  color: #C4432B;
+  border-color: #F3CFC6;
+  background: #FBEAE6;
 }
 
 .btn-limpiar:hover {
-  background: #fee2e2;
-  border-color: #f87171;
+  background: #F6D9D0;
+  border-color: #C4432B;
 }
 
 .busqueda-body {
@@ -489,7 +489,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
 .campo-busqueda label {
   font-size: 12px;
   font-weight: 700;
-  color: #475569;
+  color: #4A5344;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 2px;
@@ -506,20 +506,20 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
   width: 100%;
   height: 40px;
   padding: 8px 32px 8px 12px;
-  border: 1.5px solid #cbd5e1;
+  border: 1.5px solid #E2E6DE;
   border-radius: 8px;
   font-size: 13.5px;
   font-family: inherit;
   background: #ffffff;
-  color: #1e293b;
+  color: #16210F;
   transition: all 0.2s ease;
   box-sizing: border-box;
 }
 
 .input-control:focus {
   outline: none;
-  border-color: #1a73e8;
-  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+  border-color: #39A900;
+  box-shadow: 0 0 0 3px rgba(57, 169, 0, 0.15);
   background: #ffffff;
 }
 
@@ -530,27 +530,27 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
   border: none;
   font-size: 18px;
   line-height: 1;
-  color: #94a3b8;
+  color: #7C857A;
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 50%;
 }
 
 .btn-clear-campo:hover {
-  color: #ef4444;
-  background: #f1f5f9;
+  color: #C4432B;
+  background: #EEF0EC;
 }
 
 .select-control {
   width: 100%;
   height: 40px;
   padding: 8px 12px;
-  border: 1.5px solid #cbd5e1;
+  border: 1.5px solid #E2E6DE;
   border-radius: 8px;
   font-size: 13.5px;
   font-family: inherit;
   background: #ffffff;
-  color: #1e293b;
+  color: #16210F;
   cursor: pointer;
   transition: all 0.2s ease;
   box-sizing: border-box;
@@ -558,7 +558,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
 
 .select-control:focus {
   outline: none;
-  border-color: #1a73e8;
-  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+  border-color: #39A900;
+  box-shadow: 0 0 0 3px rgba(57, 169, 0, 0.15);
 }
 </style>

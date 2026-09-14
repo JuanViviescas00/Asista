@@ -415,11 +415,11 @@ async function procesarCambioPassword() {
 
 <style scoped>
 .admin-profile-button-security {
-  background: #334155;
+  background: #4A5344;
   color: #ffffff;
 }
 .admin-profile-button-security:hover {
-  background: #1e293b;
+  background: #16210F;
 }
 
 /* MODAL DE CONTRASEÑA */
@@ -429,7 +429,7 @@ async function procesarCambioPassword() {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(22, 33, 15, 0.55);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -440,10 +440,10 @@ async function procesarCambioPassword() {
 
 .password-modal-card {
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: 20px;
   max-width: 440px;
   width: 100%;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08);
   overflow: hidden;
   animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
@@ -458,8 +458,8 @@ async function procesarCambioPassword() {
   justify-content: space-between;
   align-items: center;
   padding: 18px 22px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid #E2E6DE;
+  background: #F7F9F5;
 }
 
 .password-modal-close-btn {
@@ -467,7 +467,7 @@ async function procesarCambioPassword() {
   border: none;
   font-size: 18px;
   cursor: pointer;
-  color: #64748b;
+  color: #7C857A;
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -478,16 +478,16 @@ async function procesarCambioPassword() {
 }
 
 .password-modal-close-btn:hover {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: #E2E6DE;
+  color: #16210F;
 }
 
 .password-modal-error {
   margin: 16px 22px 0 22px;
   padding: 10px 14px;
-  background: #fef2f2;
-  border: 1px solid #fca5a5;
-  color: #991b1b;
+  background: #FBEAE6;
+  border: 1px solid #F3CFC6;
+  color: #C4432B;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
@@ -509,7 +509,7 @@ async function procesarCambioPassword() {
 .password-input-group label {
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: #4A5344;
 }
 
 .password-input-wrapper {
@@ -521,16 +521,17 @@ async function procesarCambioPassword() {
 .password-input-wrapper input {
   width: 100%;
   padding: 10px 42px 10px 14px;
-  border: 1.5px solid #cbd5e1;
+  border: 1.5px solid #E2E6DE;
   border-radius: 8px;
   font-size: 14px;
+  font-family: 'Work Sans', system-ui, sans-serif;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .password-input-wrapper input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #39A900;
+  box-shadow: 0 0 0 3px rgba(57, 169, 0, 0.14);
 }
 
 .password-toggle-btn {
@@ -541,7 +542,7 @@ async function procesarCambioPassword() {
   cursor: pointer;
   font-size: 16px;
   padding: 4px;
-  color: #64748b;
+  color: #7C857A;
 }
 
 .password-modal-actions {

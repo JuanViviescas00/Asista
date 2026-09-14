@@ -1,90 +1,99 @@
 .admin-profile-page-header {
-  margin-bottom: 24px;
+  margin-bottom: 34px;
 }
 
 .admin-profile-page-header h1 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  color: #16210F;
 }
 
 .admin-profile-page-header p {
-  color: #64748b;
-  font-size: 14px;
+  color: #7C857A;
+  font-size: 14.5px;
+  margin-top: 6px;
 }
 
 .admin-profile-card {
   background: #ffffff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
+  border-radius: 20px;
+  padding: 32px 36px 34px;
+  box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09);
+  margin-bottom: 22px;
 }
 
 .admin-profile-card-header {
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
 
 .admin-profile-card-header h3 {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: 16.5px;
+  font-weight: 600;
+  color: #16210F;
 }
 
 .admin-profile-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
+  gap: 20px 22px;
 }
 
 .admin-profile-form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .admin-profile-form-group label {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #475569;
+  color: #16210F;
 }
 
 .admin-profile-form-group input {
-  padding: 8px 12px;
-  border: 1px solid #cbd5e1;
+  padding: 13px 15px;
+  border: 1px solid #E2E6DE;
   border-radius: 8px;
-  font-size: 14px;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  font-family: 'Work Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  transition: border-color .18s, box-shadow .18s;
+  color: #16210F;
+}
+
+.admin-profile-form-group input:hover {
+  border-color: #CBD3C6;
 }
 
 .admin-profile-form-group input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #39A900;
+  box-shadow: 0 0 0 3px rgba(57,169,0,.14);
 }
 
 .admin-profile-form-group input:disabled {
-  background: #f8fafc;
-  color: #64748b;
+  background: #F7F9F5;
+  color: #7C857A;
 }
 
 .admin-profile-button {
-  padding: 10px 20px;
+  padding: 13px 24px;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 14.5px;
   border: none;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background .18s, box-shadow .18s;
 }
 
 .admin-profile-button-primary {
-  background: #2563eb;
+  background: #39A900;
   color: #ffffff;
 }
 
 .admin-profile-button-primary:hover {
-  background: #1d4ed8;
+  background: #2F8C00;
+  box-shadow: 0 6px 18px rgba(57,169,0,.26);
 }
 
 .admin-profile-button:disabled {
@@ -100,32 +109,32 @@
 
 .admin-profile-field label {
   font-size: 12px;
-  color: #64748b;
+  color: #7C857A;
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .admin-profile-value {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 600;
-  color: #1e293b;
+  color: #16210F;
 }
 
 .admin-profile-badge {
   display: inline-block;
-  border-radius: 20px;
-  font-size: 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .admin-profile-badge-primary {
-  background: #e8f0fe;
-  color: #1a73e8;
+  background: #E8F5E0;
+  color: #1F5C00;
 }
 
 .admin-profile-badge-neutral {
-  background: #f1f5f9;
-  color: #64748b;
+  background: #EEF0EC;
+  color: #7C857A;
 }
 
 .admin-profile-toast {
@@ -137,19 +146,20 @@
   font-weight: 600;
   color: #ffffff;
   z-index: 9999;
+  box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08);
 }
 
 .admin-profile-toast-success {
-  background: #16a34a;
+  background: #2F8C00;
 }
 
 .admin-profile-toast-error {
-  background: #dc2626;
+  background: #C4432B;
 }
 
 @media (max-width: 640px) {
   .admin-profile-card {
-    padding: 20px 16px;
+    padding: 24px 20px 26px;
   }
 
   .admin-profile-form-grid,
