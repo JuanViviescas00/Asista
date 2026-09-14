@@ -2,7 +2,11 @@
 import { ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 
-const emit = defineEmits(['volver', 'login'])
+const props = defineProps({
+  onLogin: { type: Function, required: true },
+})
+
+const emit = defineEmits(['volver'])
 
 const correo = ref('')
 const password = ref('')
@@ -26,7 +30,7 @@ async function enviar() {
   }
 
   cargando.value = true
-  const res = await emit('login', { correo: valor, password: password.value })
+  const res = await props.onLogin({ correo: valor, password: password.value })
   if (res === true) return
 
   error.value = res || 'No se pudo iniciar sesión'

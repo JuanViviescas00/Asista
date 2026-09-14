@@ -267,6 +267,22 @@ function registrarAsistenciaLocal(clase, resultado, timestamp) {
   return false
 }
 
+const LOGIN_TIMEOUT_MS = 7000
+const LOGIN_RETRY_DELAY_MS = 2500
+
+function esperar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function peticionLogin(backendUrl, correo, password) {
+  return fetch(`${backendUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ correo, password }),
+    signal: AbortSignal.timeout(LOGIN_TIMEOUT_MS),
+  })
+}
+
 export async function loginDocente(correo, password) {
   if (!correo || !password) {
     return { ok: false, error: 'Ingresa correo y contraseña' }
@@ -276,14 +292,17 @@ export async function loginDocente(correo, password) {
 
   let res
   try {
-    res = await fetch(`${backendUrl}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ correo, password }),
-      signal: AbortSignal.timeout(10000),
-    })
+    res = await peticionLogin(backendUrl, correo, password)
   } catch {
-    return { ok: false, error: 'Sin conexión: no se puede validar el acceso docente' }
+    // Primer fallo de RED (sin respuesta del servidor): un único reintento tras
+    // una espera corta, para cubrir el arranque del backend (Atlas conectando).
+    // NO reintenta 401/403 (el backend sí respondió; reintentar no cambia nada).
+    await esperar(LOGIN_RETRY_DELAY_MS)
+    try {
+      res = await peticionLogin(backendUrl, correo, password)
+    } catch {
+      return { ok: false, error: 'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.' }
+    }
   }
 
   let data = null
