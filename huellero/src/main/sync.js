@@ -2,10 +2,10 @@ import { getConfig } from './config.js'
 import * as store from './store.js'
 
 // Sincroniza las asistencias pendientes (guardadas localmente offline) con el
-// backend vía POST /api/asistencias/sync. Idempotente por uuid en el backend.
+// backend vía POST /api/asistencias/sync. Idempendientes por uuid en el backend.
 //
 // NOTA: el disparador periódico (cron de las 12:00 AM / polling) se decide en otro
-// archivo (probablemente main/index.js); esta función solo hace UNA pasada.
+// archivo (scheduler.js); esta función solo hace UNA pasada.
 
 export async function syncPendientes() {
   const pendientes = store.getPendientes()
