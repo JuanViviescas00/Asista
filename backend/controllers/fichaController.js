@@ -97,6 +97,7 @@ export async function getPlantillasFicha(req, res) {
 
     const estudiantes = await Estudiante.find({
       fichaId: { $in: idsBuscar },
+      estado: 'Activo',
       huellaEnrolada: true,
       huellaTemplate: { $ne: '' },
     }).select('nombres apellidos huellaTemplate')

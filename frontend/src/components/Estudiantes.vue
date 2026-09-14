@@ -60,6 +60,12 @@ function getFichaById(fichaId) {
   )
 }
 
+function esLiderDeEstudiante(estudiante) {
+  if (!esInstructor.value) return true
+  const ficha = getFichaById(estudiante.fichaId)
+  return !!(ficha && ficha.esLider)
+}
+
 const estudiantesFiltrados = computed(() => {
   let lista = estudiantes.value
   if (filtroEstado.value !== 'Todos') lista = lista.filter(e => e.estado === filtroEstado.value)
@@ -302,7 +308,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
         </select>
       </div>
-      <button class="btn btn-primary" @click="openCreate">+ Nuevo Estudiante</button>
+      <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate">+ Nuevo Estudiante</button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
@@ -331,12 +337,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
             </td>
             <td>
               <div class="btn-group">
-                <button class="btn btn-outline btn-sm" @click="openEdit(e)">Editar</button>
-                <template v-if="e.estado === 'Activo'">
-                  <button class="btn btn-warning btn-sm" @click="abrirRetirar(e, 'Inactivo')">Inhabilitar</button>
-                  <button class="btn btn-danger btn-sm" @click="abrirRetirar(e, 'Retirado')">Retirar</button>
+                <template v-if="esLiderDeEstudiante(e)">
+                  <button class="btn btn-outline btn-sm" @click="openEdit(e)">Editar</button>
+                  <template v-if="e.estado === 'Activo'">
+                    <button class="btn btn-warning btn-sm" @click="abrirRetirar(e, 'Inactivo')">Inhabilitar</button>
+                    <button class="btn btn-danger btn-sm" @click="abrirRetirar(e, 'Retirado')">Retirar</button>
+                  </template>
+                  <button v-else class="btn btn-success btn-sm" @click="activarEstudiante(e)">Activar</button>
                 </template>
-                <button v-else class="btn btn-success btn-sm" @click="activarEstudiante(e)">Activar</button>
+                <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder de ficha</span>
               </div>
             </td>
           </tr>
@@ -372,7 +381,11 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         <div class="form-group"><label>Telefono</label><input v-model="estudianteForm.telefono" type="tel" placeholder="+57 300 000 0000" /></div>
         <div class="form-group">
           <label>Ficha Asignada</label>
-          <select v-model="estudianteForm.fichaId">
+          <select
+            v-model="estudianteForm.fichaId"
+            :disabled="esInstructor"
+            :style="esInstructor ? 'background: #f1f5f9; color: #94a3b8; cursor: not-allowed;' : ''"
+          >
             <option :value="null" disabled>Selecciona una ficha</option>
             <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
           </select>

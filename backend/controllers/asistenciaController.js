@@ -55,6 +55,14 @@ export async function createAsistencia(req, res) {
       return res.status(400).json({ error: 'No es posible registrar asistencias en fechas futuras.' })
     }
 
+    const estudiante = await Estudiante.findById(estudianteId)
+    if (!estudiante) {
+      return res.status(404).json({ error: 'Estudiante no encontrado' })
+    }
+    if (estudiante.estado !== 'Activo') {
+      return res.status(400).json({ error: 'El estudiante está inactivo o retirado, no se puede registrar asistencia' })
+    }
+
     // 1. Guardar en MongoDB Atlas
     const asistencia = await Asistencia.findOneAndUpdate(
       { estudianteId, fichaId, fecha },
@@ -137,6 +145,9 @@ async function procesarAsistencia(item) {
   ])
   if (!estudiante) {
     return { uuid, estado: 'error', error: 'Estudiante no encontrado' }
+  }
+  if (estudiante.estado !== 'Activo') {
+    return { uuid, estado: 'error', error: 'Estudiante inactivo o retirado' }
   }
   if (!ficha) {
     return { uuid, estado: 'error', error: 'Ficha no encontrada' }

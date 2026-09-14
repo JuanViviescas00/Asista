@@ -201,7 +201,7 @@ const memoriaBiometricaRAM = ref([])
 
 async function cargarDatosFicha(fichaId) {
   try {
-    const estRes = await api.estudiantes.getAll({ fichaId }).catch(e => { console.error('Error est:', e); return [] })
+    const estRes = await api.estudiantes.getAll({ fichaId, estado: 'Activo' }).catch(e => { console.error('Error est:', e); return [] })
     const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => { console.error('Error asis:', e); return [] })
     const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
 
@@ -1832,10 +1832,11 @@ function descargarExcel(data, nombreArchivo) {
                     </span>
                   </td>
                   <td>
-                    <button class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)">
+                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
                       Editar
                     </button>
+                    <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder</span>
                   </td>
                 </tr>
                 <tr v-if="estudiantesFicha.length === 0">

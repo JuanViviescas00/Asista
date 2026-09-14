@@ -105,7 +105,7 @@ async function cargarEstudiantesYAsistencias(targetFichaId) {
   if (!idParaCargar) return
   try {
     const [estRes, asisRes] = await Promise.all([
-      api.estudiantes.getAll({ fichaId: idParaCargar }),
+      api.estudiantes.getAll({ fichaId: idParaCargar, estado: 'Activo' }),
       api.asistencias.getAll({ fichaId: idParaCargar, fecha: props.fecha }),
     ])
 
