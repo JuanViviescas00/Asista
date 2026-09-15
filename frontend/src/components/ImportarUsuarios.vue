@@ -446,8 +446,10 @@ function descargarPlantilla(formato = 'csv') {
   }
 
   if (formato === 'xlsx') {
-    const matriz = [headers, ...datosEjemplo]
+    // Solo la plantilla con sus encabezados de columna, sin filas de datos de ejemplo
+    const matriz = [headers]
     const ws = XLSX.utils.aoa_to_sheet(matriz)
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(String(h).length + 4, 18) }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
     XLSX.writeFile(wb, `${nombreBase}.xlsx`)
