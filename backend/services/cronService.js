@@ -7,13 +7,17 @@ import { getHoyString } from './asistenciaService.js'
 
 /**
  * Calcula la cantidad de días hábiles transcurridos entre una fecha y la fecha actual (hoy).
- * Omite Sábados, Domingos y Días Festivos institucionales.
+ * - Para jornadas Diurnas (Mañana / Tarde): los días hábiles son Lunes a Viernes (omite Sábados y Domingos).
+ * - Para jornadas Nocturnas (Noche / Nocturna): los SÁBADOS SÍ son días hábiles con clases (solo omite Domingos).
+ * - En ambas jornadas se omiten los Días Festivos institucionales.
+ * 
  * @param {string} fechaStr - 'YYYY-MM-DD'
  * @param {Set<string>} festivosSet - Set de strings 'YYYY-MM-DD'
  * @param {string} hoyStr - 'YYYY-MM-DD'
+ * @param {string} jornada - 'Mañana' | 'Tarde' | 'Noche' | 'Nocturna'
  * @returns {number} Número de días hábiles transcurridos
  */
-export function calcularDiasHabilesTranscurridos(fechaStr, festivosSet = new Set(), hoyStr = getHoyString()) {
+export function calcularDiasHabilesTranscurridos(fechaStr, festivosSet = new Set(), hoyStr = getHoyString(), jornada = '') {
   if (!fechaStr || fechaStr >= hoyStr) return 0
 
   const [y1, m1, d1] = fechaStr.split('-').map(Number)
@@ -21,6 +25,10 @@ export function calcularDiasHabilesTranscurridos(fechaStr, festivosSet = new Set
 
   let cursor = new Date(y1, m1 - 1, d1, 12, 0, 0)
   const fechaFin = new Date(y2, m2 - 1, d2, 12, 0, 0)
+
+  // Determinar si la jornada incluye sábados lectivos
+  const jNorm = String(jornada || '').toLowerCase()
+  const esJornadaNocturna = jNorm.includes('noche') || jNorm.includes('nocturn')
 
   // Avanzar un día para no contar el día de la propia clase
   cursor.setDate(cursor.getDate() + 1)
@@ -32,15 +40,22 @@ export function calcularDiasHabilesTranscurridos(fechaStr, festivosSet = new Set
     const dia = String(cursor.getDate()).padStart(2, '0')
     const fechaISO = `${cursor.getFullYear()}-${mes}-${dia}`
 
-    // Si es día laboral (Lunes a Viernes) y no es festivo
-    if (diaSemana !== 0 && diaSemana !== 6 && !festivosSet.has(fechaISO)) {
-      diasHabiles++
+    // Si es festivo institucional, no cuenta como día hábil
+    if (!festivosSet.has(fechaISO)) {
+      if (diaSemana !== 0) { // No es domingo
+        if (diaSemana !== 6 || esJornadaNocturna) {
+          // Es Lunes a Viernes, O es Sábado en jornada nocturna
+          diasHabiles++
+        }
+      }
     }
+
     cursor.setDate(cursor.getDate() + 1)
   }
 
   return diasHabiles
 }
+
 
 /**
  * Servicio Cron Job para exportación y sincronización nocturna de asistencias agrupadas por Docente.
@@ -111,7 +126,7 @@ export async function sincronizarSqlitePorDocente() {
       })
     }
 
-    const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr)
+    const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId?.jornada || '')
     const esElegible = diasHabiles >= 3
     const estadoCarga = esElegible ? 'LISTO_PARA_SUBIR' : 'EN_ESPERA'
 
