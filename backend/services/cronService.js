@@ -2,8 +2,68 @@ import cron from 'node-cron'
 import Asistencia from '../models/Asistencia.js'
 import Instructor from '../models/Instructor.js'
 import DiaFestivo from '../models/DiaFestivo.js'
+import Clase from '../models/Clase.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
 import { getHoyString } from './asistenciaService.js'
+import { emitirDesactivacion, emitirClaseDesactivada } from './socketService.js'
+
+/**
+ * Cierra automáticamente las clases que lleven más de 3 horas activas.
+ * Si el docente olvidó finalizar la clase, el sistema la finaliza de forma automática,
+ * actualiza el estado en MongoDB ('Finalizada') y emite DEACTIVATE al lector físico y al frontend.
+ */
+export async function cerrarClasesExpiradas() {
+  const LIMITE_HORAS = 3
+  const limiteMs = LIMITE_HORAS * 60 * 60 * 1000
+  const ahora = new Date()
+  const fechaLimite = new Date(ahora.getTime() - limiteMs)
+
+  try {
+    const clasesExpiradas = await Clase.find({
+      estado: 'Activa',
+      iniciadaAt: { $lte: fechaLimite }
+    }).populate('fichaId')
+
+    if (!clasesExpiradas || clasesExpiradas.length === 0) {
+      return { cerradas: 0 }
+    }
+
+    let cerradas = 0
+    for (const clase of clasesExpiradas) {
+      clase.estado = 'Finalizada'
+      clase.finalizadaAt = ahora
+      await clase.save()
+
+      const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
+      const instructorIdStr = String(clase.instructorId)
+
+      // 1. Notificar al lector físico para que apague la captura de huellas
+      if (clase.deviceId) {
+        emitirDesactivacion(clase.deviceId, {
+          type: 'DEACTIVATE',
+          fichaId: fichaIdStr,
+          instructorId: instructorIdStr,
+          motivo: 'AUTO_CIERRE_3_HORAS'
+        })
+      }
+
+      // 2. Notificar a las salas del frontend/dashboard y kioscos
+      emitirClaseDesactivada(fichaIdStr, {
+        fichaId: fichaIdStr,
+        motivo: 'AUTO_CIERRE_3_HORAS'
+      })
+
+      cerradas++
+      const codFicha = clase.fichaId?.codigoFicha || fichaIdStr
+      console.log(`[AutoCierre] ⏱ Clase de la ficha ${codFicha} finalizada automáticamente (superó las ${LIMITE_HORAS} horas).`)
+    }
+
+    return { cerradas }
+  } catch (err) {
+    console.error('[AutoCierre] ❌ Error en auto-cierre de clases:', err.message)
+    return { cerradas: 0, error: err.message }
+  }
+}
 
 /**
  * Calcula la cantidad de días hábiles transcurridos entre una fecha y la fecha actual (hoy).
@@ -58,13 +118,24 @@ export function calcularDiasHabilesTranscurridos(fechaStr, festivosSet = new Set
 
 
 /**
- * Servicio Cron Job para exportación y sincronización nocturna de asistencias agrupadas por Docente.
- * Se ejecuta periódicamente según CRON_SCHEDULE (por defecto medianoche: '0 0 * * *').
+ * Servicio Cron Job para:
+ * 1. Auto-cierre de clases que superen las 3 horas (cada minuto).
+ * 2. Exportación y sincronización nocturna de asistencias agrupadas por Docente (medianoche).
  */
 export function iniciarCronJobs() {
   const schedule = process.env.CRON_SCHEDULE || '0 0 * * *'
   const timezone = process.env.CRON_TIMEZONE || 'America/Bogota'
 
+  // 1. Cron de auto-cierre de clases cada minuto
+  cron.schedule('* * * * *', async () => {
+    await cerrarClasesExpiradas()
+  })
+
+  // Ejecución inicial preventiva al arrancar el servidor
+  cerrarClasesExpiradas().catch(e => console.warn('[AutoCierre] Error inicial:', e.message))
+  console.log('[CRON] Auto-cierre de clases cada minuto activo (límite 3 horas)')
+
+  // 2. Cron nocturno de sincronización SQLite por Docente
   cron.schedule(schedule, async () => {
     console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO')}: Iniciando procesamiento nocturno de SQLite por DOCENTE (filtro 3 días hábiles)...`)
     try {
