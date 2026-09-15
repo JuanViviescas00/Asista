@@ -2,7 +2,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/api.js'
 import * as XLSX from 'xlsx'
-import KioscoAsistencia from './KioscoAsistencia.vue'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/socket.js'
 
 const usuarioStr = sessionStorage.getItem('user_data')
@@ -17,8 +16,7 @@ const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
 
-// Modo Kiosco y Control Remoto en Vivo
-const modoKioscoActivo = ref(false)
+// Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
@@ -145,13 +143,6 @@ async function detenerSesionRemotaDocente() {
     showToast('Clase finalizada.', 'info')
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
-  }
-}
-
-function onKioscoAsistenciaMarcada(data) {
-  if (data?.estudianteId && asistenciaDia.value[data.estudianteId]) {
-    asistenciaDia.value[data.estudianteId].estado = data.estado
-    asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
   }
 }
 
@@ -1210,17 +1201,7 @@ function descargarExcel(data, nombreArchivo) {
 </script>
 
 <template>
-  <!-- MODO KIOSCO DE PANTALLA COMPLETA / AULA -->
-  <KioscoAsistencia
-    v-if="modoKioscoActivo && fichaSeleccionada"
-    :ficha="fichaSeleccionada"
-    :instructor="usuario"
-    :fecha="fechaAsistencia"
-    @salir-kiosco="modoKioscoActivo = false"
-    @asistencia-marcada="onKioscoAsistenciaMarcada"
-  />
-
-  <div v-else class="panel-instructor">
+  <div class="panel-instructor">
     <!-- Toast Notification -->
     <Transition name="toast-fade">
       <div v-if="toast.show" class="toast-notification" :class="'toast-' + toast.type">
@@ -1356,7 +1337,7 @@ function descargarExcel(data, nombreArchivo) {
                 </div>
                 <p class="remote-desc">
                   {{ sesionRemotaActiva 
-                    ? 'El Kiosco del aula está recibiendo huellas de los aprendices. Las marcaciones se sincronizan aquí en tiempo real.' 
+                    ? 'El lector de huellas del aula está recibiendo marcas biométricas de los aprendices. Las asistencias se reflejan aquí en tiempo real.' 
                     : 'Inicia el pase de lista desde este dispositivo móvil/web para activar automáticamente el lector en el computador del aula.' 
                   }}
                 </p>

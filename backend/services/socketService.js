@@ -166,10 +166,6 @@ export function initSocket(httpServer) {
 
       console.log(`[Socket.IO] ▶ Docente activó asistencia remota para ficha ${fichaCodigo} (${room})`)
 
-      // Notificar a la sala de la ficha y a todos los Kioscos en modo Standby global
-      io.to(room).emit('kiosco:activar_lectura', sesion)
-      io.to('global_kioscos').emit('kiosco:activar_lectura', sesion)
-      io.emit('kiosco:activar_lectura_global', sesion)
       io.to(room).emit('estado_sesion', { activa: true, sesion })
     })
 
@@ -181,9 +177,6 @@ export function initSocket(httpServer) {
 
       console.log(`[Socket.IO] ⏹ Docente detuvo la asistencia para ficha ${fichaId}`)
 
-      io.to(room).emit('kiosco:desactivar_lectura', { fichaId })
-      io.to('global_kioscos').emit('kiosco:desactivar_lectura', { fichaId })
-      io.emit('kiosco:desactivar_lectura_global', { fichaId })
       io.to(room).emit('estado_sesion', { activa: false, sesion: null })
     })
 
@@ -314,18 +307,6 @@ export function initSocket(httpServer) {
       }
     })
 
-    // 7. El Kiosco registra una huella y notifica en vivo a todos (móvil del docente)
-    socket.on('kiosco:asistencia_marcada', (data) => {
-      const { fichaId } = data
-      if (!fichaId) return
-      const room = `ficha_${fichaId}`
-
-      console.log(`[Socket.IO] 🖐 Asistencia marcada en Kiosco: ${data.nombres} ${data.apellidos} (${data.estado})`)
-
-      // Re-transmitir a todos en la sala (especialmente al celular del docente)
-      socket.to(room).emit('docente:nueva_marcacion', data)
-    })
-
     socket.on('disconnect', async () => {
       const deviceId = socket.data.deviceId ? String(socket.data.deviceId) : null
       if (!deviceId) {
@@ -396,9 +377,6 @@ export function emitirClaseDesactivada(fichaId, data = {}) {
     sesionesActivas.delete(sFichaId)
     io.to(`ficha_${sFichaId}`).emit('CLASS_DEACTIVATED', data)
     io.to(`ficha_${sFichaId}`).emit('estado_sesion', { activa: false, sesion: null })
-    io.to(`ficha_${sFichaId}`).emit('kiosco:desactivar_lectura', { fichaId: sFichaId })
-    io.to('global_kioscos').emit('kiosco:desactivar_lectura', { fichaId: sFichaId })
-    io.emit('kiosco:desactivar_lectura_global', { fichaId: sFichaId })
   }
 }
 

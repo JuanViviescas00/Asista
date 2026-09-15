@@ -12,11 +12,9 @@ import PanelDispositivos from './components/PanelDispositivos.vue'
 import PanelInstructor from './components/PanelInstructor.vue'
 import PanelEstudiante from './components/PanelEstudiante.vue'
 import Login from './components/Login.vue'
-import KioscoAsistencia from './components/KioscoAsistencia.vue'
 
 const INACTIVIDAD_MS = 10 * 60 * 1000
 
-const modoKioscoStandalone = ref(false)
 const autenticado = ref(sessionStorage.getItem('admin_auth') === 'true')
 const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : null)
@@ -238,13 +236,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <KioscoAsistencia
-    v-if="modoKioscoStandalone"
-    :standalone="true"
-    @salir-kiosco="modoKioscoStandalone = false"
-  />
-
-  <Login v-else-if="!autenticado" @login-success="onLoginSuccess" @abrir-kiosco="modoKioscoStandalone = true" />
+  <Login v-if="!autenticado" @login-success="onLoginSuccess" />
 
   <template v-else>
     <button class="menu-toggle" @click="sidebarOpen = !sidebarOpen">&#9776;</button>

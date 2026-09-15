@@ -47,7 +47,7 @@ export async function cerrarClasesExpiradas() {
         })
       }
 
-      // 2. Notificar a las salas del frontend/dashboard y kioscos
+      // 2. Notificar a las salas del frontend/dashboard
       emitirClaseDesactivada(fichaIdStr, {
         fichaId: fichaIdStr,
         motivo: 'AUTO_CIERRE_3_HORAS'
