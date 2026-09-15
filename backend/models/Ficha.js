@@ -7,6 +7,7 @@ const fichaSchema = new mongoose.Schema({
   aulaAsignada: { type: String, required: true },
   instructorLiderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Instructor', default: null },
   instructores: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Instructor' }],
+  dispositivoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispositivo', default: null },
   fechaInicio: { type: String, required: true },
   fechaFin: { type: String, required: true },
 }, { timestamps: true, collection: 'fichas' })

@@ -8,6 +8,7 @@ const router = Router()
 // Lectura de fichas (accesible para usuarios y Kiosco)
 router.get('/', autenticarOpcional, fichaController.getFichas)
 router.get('/mis-fichas/:instructorId', autenticarJWT, fichaController.getMisFichas)
+router.get('/:id/plantillas', fichaController.getPlantillasFicha)
 
 // Gestión de fichas (restringido a Administrador)
 router.post('/',

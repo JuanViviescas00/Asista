@@ -26,6 +26,10 @@ router.post('/reactivar-jornada',
   asistenciaController.reactivarJornada
 )
 
+// Sincronización idempotente de asistencias pendientes del huellero local.
+// Autenticación por deviceId + token (dentro del controller, no con JWT de usuario).
+router.post('/sync', asistenciaController.syncAsistencias)
+
 // Gestión de base de datos SQLite offline (restringido a Administrador)
 router.get('/sqlite/download', autenticarJWT, verificarRol(['Administrador']), asistenciaController.downloadSqlite)
 router.post('/sqlite/sync-all', autenticarJWT, verificarRol(['Administrador']), asistenciaController.syncAllSqlite)

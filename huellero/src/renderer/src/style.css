@@ -1,0 +1,200 @@
+@font-face {
+  font-family: 'Bahnschrift';
+  src: local('Bahnschrift');
+  font-weight: 300 700;
+}
+
+:root {
+  /* Superficie: negro con tinte verde-grafito, no el slate azulado genérico */
+  --bg: #0a130f;
+  --bg-elev: #101d17;
+  --bg-elev-2: #17271f;
+  --line: #24382c;
+
+  --text: #eaf3ed;
+  --muted: #83a191;
+  --muted-dim: #5a7268;
+
+  /* Acento: verde refinado, no ácido/neón */
+  --accent: #46d67c;
+  --accent-strong: #2fb867;
+  --accent-dim: rgba(70, 214, 124, 0.14);
+  --accent-line: rgba(70, 214, 124, 0.32);
+
+  --warn: #f2a93c;
+  --warn-dim: rgba(242, 169, 60, 0.14);
+
+  --danger: #ff6f6f;
+  --danger-dim: rgba(255, 111, 111, 0.14);
+
+  --font-display: 'Bahnschrift', 'Segoe UI Semibold', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.1px;
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 12px 22px;
+  font-size: 15px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.18s var(--ease-out), border-color 0.18s var(--ease-out),
+    transform 0.12s var(--ease-out), box-shadow 0.18s var(--ease-out);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #052e16;
+  box-shadow: 0 8px 20px -8px rgba(70, 214, 124, 0.55);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -8px rgba(70, 214, 124, 0.6);
+}
+
+button.primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button.secondary {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+button.secondary:hover:not(:disabled) {
+  border-color: var(--muted-dim);
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+button.ghost:hover:not(:disabled) {
+  color: var(--text);
+}
+
+button.danger-outline {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+button.danger-outline:hover:not(:disabled) {
+  background: var(--danger-dim);
+}
+
+input,
+select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0b1712;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+::selection {
+  background: var(--accent-dim);
+}
+
+/* Transición compartida al cambiar de vista (Kiosko / Login / Docente) */
+.view-swap-enter-active,
+.view-swap-leave-active {
+  transition: opacity 0.28s var(--ease-out), transform 0.28s var(--ease-out);
+}
+
+.view-swap-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.99);
+}
+
+.view-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.99);
+}
+
+/* Transición compartida del modal de enrolamiento */
+.modal-pop-enter-active {
+  transition: opacity 0.22s var(--ease-out);
+}
+
+.modal-pop-leave-active {
+  transition: opacity 0.16s var(--ease-in-out);
+}
+
+.modal-pop-enter-from,
+.modal-pop-leave-to {
+  opacity: 0;
+}
+
+.modal-pop-enter-active .modal,
+.modal-pop-leave-active .modal {
+  transition: transform 0.24s var(--ease-out), opacity 0.24s var(--ease-out);
+}
+
+.modal-pop-enter-from .modal {
+  transform: scale(0.94) translateY(10px);
+  opacity: 0;
+}
+
+.modal-pop-leave-to .modal {
+  transform: scale(0.97);
+  opacity: 0;
+}

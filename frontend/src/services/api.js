@@ -27,10 +27,16 @@ async function request(url, options = {}) {
     }
   }
 
-  const res = await fetch(`${BASE}${url}`, {
-    ...options,
-    headers,
-  })
+  let res
+  try {
+    res = await fetch(`${BASE}${url}`, {
+      ...options,
+      headers,
+    })
+  } catch (err) {
+    // Error de red (servidor inaccesible, DNS, timeout): NO es un error de credenciales.
+    throw new Error('Sin conexión: no se pudo contactar el servidor')
+  }
 
   const data = await res.json().catch(() => ({}))
 
@@ -153,5 +159,20 @@ export default {
     create(body) { return request('/dias-festivos', { method: 'POST', body: JSON.stringify(body) }) },
     update(id, body) { return request(`/dias-festivos/${id}`, { method: 'PUT', body: JSON.stringify(body) }) },
     delete(id) { return request(`/dias-festivos/${id}`, { method: 'DELETE' }) },
+  },
+
+  dispositivos: {
+    listar() { return request('/dispositivos') },
+    asociarFichas(id, fichaIds) { return request(`/dispositivos/${id}/fichas`, { method: 'PUT', body: JSON.stringify({ fichaIds }) }) },
+    resetFingerprint(id) { return request(`/dispositivos/${id}/reset-fingerprint`, { method: 'PUT' }) },
+    aprobar(id) { return request(`/dispositivos/${id}/aprobar`, { method: 'PUT' }) },
+    deshabilitar(id) { return request(`/dispositivos/${id}/deshabilitar`, { method: 'PUT' }) },
+    eliminar(id) { return request(`/dispositivos/${id}`, { method: 'DELETE' }) },
+  },
+
+  clases: {
+    activar(body) { return request('/clases/activar', { method: 'POST', body: JSON.stringify(body) }) },
+    finalizar(body) { return request('/clases/finalizar', { method: 'POST', body: JSON.stringify(body) }) },
+    estado() { return request('/clases/estado') },
   },
 }

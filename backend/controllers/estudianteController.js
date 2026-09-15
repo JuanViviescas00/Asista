@@ -3,6 +3,29 @@ import Ficha from '../models/Ficha.js'
 import mongoose from 'mongoose'
 import * as fp from '../services/fingerprint.js'
 
+// Resuelve un fichaId (campo Mixed: ObjectId o codigoFicha) a su documento Ficha.
+// Reutiliza el mismo patrón de resolución ya presente en getEstudiantes y getPlantillasFicha.
+async function resolverFicha(fichaId) {
+  if (!fichaId) return null
+  const query = []
+  if (mongoose.Types.ObjectId.isValid(fichaId)) {
+    query.push({ _id: fichaId })
+  }
+  query.push({ codigoFicha: String(fichaId).trim() })
+  try {
+    return await Ficha.findOne({ $or: query })
+  } catch (_) {
+    return null
+  }
+}
+
+// Campos que un Docente Líder puede modificar en un aprendiz de su ficha.
+// Excluye campos sensibles/estructurales: fichaId (reubicación de ficha),
+// estadoAsistencia, y todo lo biométrico (huellaEnrolada, huellaTemplate,
+// fechaEnrolamiento, dedoEnrolado) que queda reservado a Administrador o al
+// flujo de enrolamiento real.
+const CAMPOS_PERMITIDOS_LIDER = ['nombres', 'apellidos', 'tipoDocumento', 'numeroDocumento', 'correo', 'telefono', 'genero', 'estado', 'motivo']
+
 export async function getEstudiantes(req, res) {
   try {
     const { fichaId, documento, nombres, estado, instructorId } = req.query
@@ -96,7 +119,34 @@ export async function createEstudiante(req, res) {
 
 export async function updateEstudiante(req, res) {
   try {
-    const estudiante = await Estudiante.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    let updateData = req.body
+
+    if (!esAdmin) {
+      // Docente: debe ser el líder de la ficha del estudiante que intenta modificar.
+      const estudianteActual = await Estudiante.findById(req.params.id)
+      if (!estudianteActual) return res.status(404).json({ error: 'Estudiante no encontrado' })
+
+      const ficha = await resolverFicha(estudianteActual.fichaId)
+      if (!ficha) {
+        return res.status(403).json({ error: 'No se pudo determinar la ficha del estudiante' })
+      }
+
+      const liderId = String(ficha.instructorLiderId || '')
+      if (liderId !== String(req.usuario.id)) {
+        return res.status(403).json({ error: 'Solo el líder de esta ficha puede modificar este estudiante' })
+      }
+
+      // Restringir los campos que puede tocar un Docente Líder.
+      updateData = {}
+      for (const campo of CAMPOS_PERMITIDOS_LIDER) {
+        if (Object.prototype.hasOwnProperty.call(req.body, campo)) {
+          updateData[campo] = req.body[campo]
+        }
+      }
+    }
+
+    const estudiante = await Estudiante.findByIdAndUpdate(req.params.id, updateData, { new: true })
     if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado' })
     res.json(estudiante)
   } catch (err) {

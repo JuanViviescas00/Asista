@@ -13,6 +13,9 @@ import estudiantesRoutes from './routes/estudiantes.js'
 import asistenciasRoutes from './routes/asistencias.js'
 import diasFestivosRoutes from './routes/diasFestivos.js'
 import excusasRoutes from './routes/excusas.js'
+import clasesRoutes from './routes/clases.js'
+import enrolamientoRoutes from './routes/enrolamiento.js'
+import dispositivosRoutes from './routes/dispositivos.js'
 import { initSocket } from './services/socketService.js'
 import { hashPassword } from './services/passwordService.js'
 
@@ -125,3 +128,6 @@ app.use('/api/estudiantes', estudiantesRoutes)
 app.use('/api/asistencias', asistenciasRoutes)
 app.use('/api/dias-festivos', diasFestivosRoutes)
 app.use('/api/excusas', excusasRoutes)
+app.use('/api/clases', clasesRoutes)
+app.use('/api/enrolamiento', enrolamientoRoutes)
+app.use('/api/dispositivos', dispositivosRoutes)
