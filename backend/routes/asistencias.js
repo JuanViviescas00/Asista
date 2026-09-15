@@ -30,8 +30,10 @@ router.post('/reactivar-jornada',
 // Autenticación por deviceId + token (dentro del controller, no con JWT de usuario).
 router.post('/sync', asistenciaController.syncAsistencias)
 
-// Gestión de base de datos SQLite offline (restringido a Administrador)
+// Gestión de base de datos SQLite offline
 router.get('/sqlite/download', autenticarJWT, verificarRol(['Administrador']), asistenciaController.downloadSqlite)
+router.get('/sqlite/docente/:identificador', autenticarJWT, verificarRol(['Administrador', 'Instructor']), asistenciaController.downloadSqliteDocente)
 router.post('/sqlite/sync-all', autenticarJWT, verificarRol(['Administrador']), asistenciaController.syncAllSqlite)
+router.post('/sqlite/sync-docentes', autenticarJWT, verificarRol(['Administrador']), asistenciaController.ejecutarSincronizacionDocentes)
 
 export default router

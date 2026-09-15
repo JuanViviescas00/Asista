@@ -18,6 +18,7 @@ import enrolamientoRoutes from './routes/enrolamiento.js'
 import dispositivosRoutes from './routes/dispositivos.js'
 import { initSocket } from './services/socketService.js'
 import { hashPassword } from './services/passwordService.js'
+import { iniciarCronJobs } from './services/cronService.js'
 
 const app = express()
 const httpServer = http.createServer(app)
@@ -98,6 +99,7 @@ async function iniciarServidor() {
 
   httpServer.listen(PORT, () => {
     console.log(`Backend en http://localhost:${PORT}`)
+    iniciarCronJobs()
   })
 }
 
