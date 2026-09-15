@@ -902,6 +902,7 @@ const capturasCompletadas = ref(0)
 const enrolando = ref(false)
 const enrollmentSessionId = ref(null)
 const dedoSeleccionado = ref('indice_derecho')
+const slotEnrolamiento = ref(null)
 
 const sdkDisponible = computed(() => {
   return !!(lectorConectado.value && !sdkCargando.value)
@@ -925,7 +926,24 @@ function abrirModalEnrolamiento(estudiante) {
   pasoEnrolamiento.value = 1
   capturasCompletadas.value = 0
   enrolando.value = false
-  dedoSeleccionado.value = estudiante.dedoEnrolado || 'indice_derecho'
+
+  // Slot: auto-asignar el primer vacío; si ambos llenos, elegir cuál reemplazar.
+  const ocupado1 = !!estudiante.huellaTemplate
+  const ocupado2 = !!estudiante.huellaTemplate2
+  if (!ocupado1) {
+    slotEnrolamiento.value = 1
+  } else if (!ocupado2) {
+    slotEnrolamiento.value = 2
+  } else {
+    const dedo1 = estudiante.dedoEnrolado || 'Huella 1'
+    const dedo2 = estudiante.dedoEnrolado2 || 'Huella 2'
+    const reemplazarSlot1 = window.confirm(
+      `Este estudiante ya tiene el máximo de 2 huellas registradas.\n\nAceptar → reemplazar la huella 1 (${dedo1}).\nCancelar → reemplazar la huella 2 (${dedo2}).`
+    )
+    slotEnrolamiento.value = reemplazarSlot1 ? 1 : 2
+  }
+
+  dedoSeleccionado.value = (slotEnrolamiento.value === 1 ? estudiante.dedoEnrolado : estudiante.dedoEnrolado2) || 'indice_derecho'
   modoCaptura = 'enrolamiento'
   showEnrolarModal.value = true
   verificarEstadoLectorUSB()
@@ -991,7 +1009,7 @@ async function enviarCapturaAlBackend(imageBase64) {
 
       // 2. Completar enrolamiento en el servidor con validación de no-duplicado
       try {
-        const compRes = await api.estudiantes.fingerprint.enrollComplete(enrollmentSessionId.value)
+        const compRes = await api.estudiantes.fingerprint.enrollComplete(enrollmentSessionId.value, slotEnrolamiento.value)
         if (compRes.success) {
           pasoEnrolamiento.value = 3
           showToast(`¡Huella enrolada exitosamente para ${estudianteTarget.value.nombres}!`, 'success')
@@ -1036,6 +1054,7 @@ async function cancelarEnrolamiento() {
   pasoEnrolamiento.value = 1
   capturasCompletadas.value = 0
   enrollmentSessionId.value = null
+  slotEnrolamiento.value = null
   modoCaptura = 'asistencia'
 }
 
@@ -1154,7 +1173,7 @@ function exportarListaEstudiantes() {
     'Teléfono': est.telefono,
     'Género': est.genero || '',
     'Estado': est.estado,
-    'Huella Enrolada': est.huellaEnrolada ? 'Sí' : 'No',
+    'Huellas': (est.huellaTemplate ? 1 : 0) + (est.huellaTemplate2 ? 1 : 0),
   }))
   descargarExcel(data, `Estudiantes_${fichaSeleccionada.value.codigoFicha}`)
 }

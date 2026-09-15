@@ -117,8 +117,10 @@ export default {
       enrollCapture(sessionId, image) {
         return request('/estudiantes/enroll-capture', { method: 'POST', body: JSON.stringify({ sessionId, image }) })
       },
-      enrollComplete(sessionId) {
-        return request('/estudiantes/enroll-complete', { method: 'POST', body: JSON.stringify({ sessionId }) })
+      enrollComplete(sessionId, slot) {
+        const body = { sessionId }
+        if (slot != null) body.slot = slot
+        return request('/estudiantes/enroll-complete', { method: 'POST', body: JSON.stringify(body) })
       },
       enrollCancel(sessionId) {
         return request('/estudiantes/enroll-cancel', { method: 'POST', body: JSON.stringify({ sessionId }) })

@@ -63,6 +63,17 @@ function limpiarBusqueda() {
   excusasEstudiante.value = []
 }
 
+const textoHuella = computed(() => {
+  const e = estudianteSeleccionado.value
+  if (!e) return ''
+  const d1 = e.dedoEnrolado || ''
+  const d2 = e.dedoEnrolado2 || ''
+  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
+  if (n === 0) return '🟡 Sin huella'
+  if (n === 1) return `🟢 1/2 · ${d1 || 'Sin dedo'}`
+  return `🟢 2/2 · ${d1 || 'Sin dedo'} + ${d2 || 'Sin dedo'}`
+})
+
 const metricasEstudiante = computed(() => {
   let presentes = 0, retardos = 0, fallas = 0
   asistenciasEstudiante.value.forEach(a => {
@@ -192,7 +203,7 @@ function asistenciaBadge(estado) {
             <div>
               <span class="student-consult-field-label">Registro Biométrico:</span>
               <strong :style="{ color: estudianteSeleccionado.huellaEnrolada ? '#16a34a' : '#d97706' }">
-                {{ estudianteSeleccionado.huellaEnrolada ? '🟢 Huella Enrolada' : '🟡 Huella Pendiente' }}
+                {{ textoHuella }}
               </strong>
             </div>
             <div>
