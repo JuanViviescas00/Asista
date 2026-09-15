@@ -5,7 +5,8 @@ function toEngineRecord(record) {
     _id: record.estudianteId,
     nombres: record.nombres,
     apellidos: record.apellidos,
-    huellaTemplate: record.template,
+    huellaTemplate: record.template || '',
+    huellaTemplate2: record.template2 || '',
   }
 }
 

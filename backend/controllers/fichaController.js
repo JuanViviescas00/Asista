@@ -99,16 +99,20 @@ export async function getPlantillasFicha(req, res) {
       fichaId: { $in: idsBuscar },
       estado: 'Activo',
       huellaEnrolada: true,
-      huellaTemplate: { $ne: '' },
-    }).select('nombres apellidos huellaTemplate')
+      $or: [
+        { huellaTemplate: { $ne: '' } },
+        { huellaTemplate2: { $ne: '' } },
+      ],
+    }).select('nombres apellidos huellaTemplate huellaTemplate2')
 
     // Formato mínimo que consume el huellero (verify.js → toEngineRecord):
-    // { estudianteId, nombres, apellidos, template }
+    // { estudianteId, nombres, apellidos, template, template2 }
     const plantillas = estudiantes.map((e) => ({
       estudianteId: String(e._id),
       nombres: e.nombres,
       apellidos: e.apellidos,
-      template: e.huellaTemplate,
+      template: e.huellaTemplate || '',
+      template2: e.huellaTemplate2 || '',
     }))
 
     res.json(plantillas)

@@ -47,7 +47,7 @@ async function manejarLogout() {
 <template>
   <Transition name="view-swap" mode="out-in">
     <KioskoView v-if="vista === 'kiosko'" key="kiosko" :status="status" @abrir-login="abrirLogin" />
-    <DocenteLogin v-else-if="vista === 'login'" key="login" @volver="vista = 'kiosko'" :on-login="manejarLogin" />
+    <DocenteLogin v-else-if="vista === 'login'" key="login" @volver="vista = 'kiosko'" :on-login="manejarLogin" :online="status.online" />
     <DocenteView v-else-if="vista === 'docente'" key="docente" :status="status" @logout="manejarLogout" />
   </Transition>
 </template>

@@ -218,10 +218,16 @@ export async function enrollComplete(req, res) {
   if (!fp.isAvailable()) {
     return res.status(500).json({ success: false, error: 'SDK de huella no disponible' })
   }
-  const { sessionId } = req.body
+  const { sessionId, slot } = req.body
   if (!sessionId) {
     return res.status(400).json({ success: false, error: 'sessionId es requerido' })
   }
+
+  const slotExplicito = slot == null ? null : Number(slot)
+  if (slotExplicito !== null && slotExplicito !== 1 && slotExplicito !== 2) {
+    return res.status(400).json({ success: false, error: 'slot debe ser 1 o 2' })
+  }
+
   const result = fp.completeEnrollment(sessionId)
   if (result.error) {
     return res.status(500).json({ success: false, error: result.error })
@@ -230,7 +236,10 @@ export async function enrollComplete(req, res) {
     const otrosEstudiantesEnrolados = await Estudiante.find({
       _id: { $ne: result.studentId },
       huellaEnrolada: true,
-      huellaTemplate: { $ne: '' }
+      $or: [
+        { huellaTemplate: { $ne: '' } },
+        { huellaTemplate2: { $ne: '' } },
+      ],
     })
 
     const duplicateCheck = fp.checkDuplicateFingerprint(result.template, otrosEstudiantesEnrolados, result.studentId)
@@ -242,23 +251,45 @@ export async function enrollComplete(req, res) {
       })
     }
 
-    const estudiante = await Estudiante.findByIdAndUpdate(
-      result.studentId,
-      {
-        huellaEnrolada: true,
-        huellaTemplate: result.template,
-        fechaEnrolamiento: new Date().toISOString().split('T')[0],
-        dedoEnrolado: result.dedo || '',
-      },
-      { new: true }
-    )
+    const estudiante = await Estudiante.findById(result.studentId)
     if (!estudiante) {
       return res.status(404).json({ success: false, error: 'Estudiante no encontrado' })
     }
+
+    const slot1Libre = !estudiante.huellaTemplate
+    const slot2Libre = !estudiante.huellaTemplate2
+
+    let targetSlot = slotExplicito
+    if (targetSlot === null) {
+      if (slot1Libre) targetSlot = 1
+      else if (slot2Libre) targetSlot = 2
+      else {
+        return res.status(409).json({
+          success: false,
+          error: 'Este estudiante ya tiene el máximo de 2 huellas registradas. Elige cuál quieres reemplazar.',
+        })
+      }
+    }
+
+    const fecha = new Date().toISOString().split('T')[0]
+    const update = { huellaEnrolada: true }
+    if (targetSlot === 1) {
+      update.huellaTemplate = result.template
+      update.dedoEnrolado = result.dedo || ''
+      update.fechaEnrolamiento = fecha
+    } else {
+      update.huellaTemplate2 = result.template
+      update.dedoEnrolado2 = result.dedo || ''
+      update.fechaEnrolamiento2 = fecha
+    }
+
+    await Estudiante.findByIdAndUpdate(result.studentId, update, { new: true })
+
     res.json({
       success: true,
       studentId: result.studentId,
       name: result.name,
+      slot: targetSlot,
       message: `Huella registrada exitosamente para "${result.name}"`,
     })
   } catch (err) {
