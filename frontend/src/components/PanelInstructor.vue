@@ -1,10 +1,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import api from '../services/index.js'
+import api from '../services/api.js'
 import * as XLSX from 'xlsx'
-import KioscoAsistencia from './KioscoAsistencia.vue'
-import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
-import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
+import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/socket.js'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -18,12 +16,10 @@ const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
 
-// Modo Kiosco y Control Remoto en Vivo
-const modoKioscoActivo = ref(false)
+// Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
-const claseIniciadaAt = ref(null)
 
 const emit = defineEmits(['cerrar-sesion'])
 
@@ -114,10 +110,8 @@ async function restaurarEstadoClase() {
         await seleccionarFicha(fichaActiva)
       }
       sesionRemotaActiva.value = true
-      claseIniciadaAt.value = estado.iniciadaAt ? new Date(estado.iniciadaAt).getTime() : Date.now()
     } else {
       sesionRemotaActiva.value = false
-      claseIniciadaAt.value = null
     }
   } catch (e) {
     console.error('Error al restaurar el estado de la clase:', e)
@@ -127,12 +121,11 @@ async function restaurarEstadoClase() {
 async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
   try {
-    const resultado = await api.clases.activar({
+    await api.clases.activar({
       fichaId: fichaSeleccionada.value._id,
       instructorId: usuario.value.id,
     })
     sesionRemotaActiva.value = true
-    claseIniciadaAt.value = resultado?.clase?.iniciadaAt ? new Date(resultado.clase.iniciadaAt).getTime() : Date.now()
     showToast('Clase activada: el lector del aula está listo para tomar asistencia.', 'success')
   } catch (e) {
     showToast(e.message || 'No se pudo activar la clase', 'error')
@@ -147,17 +140,9 @@ async function detenerSesionRemotaDocente() {
       instructorId: usuario.value.id,
     })
     sesionRemotaActiva.value = false
-    claseIniciadaAt.value = null
     showToast('Clase finalizada.', 'info')
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
-  }
-}
-
-function onKioscoAsistenciaMarcada(data) {
-  if (data?.estudianteId && asistenciaDia.value[data.estudianteId]) {
-    asistenciaDia.value[data.estudianteId].estado = data.estado
-    asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
   }
 }
 
@@ -465,6 +450,22 @@ function inicializarAsistenciaDia() {
   asistenciaDia.value = registros
 }
 
+function calcularEstadoPorHora(jornada) {
+  const ahora = new Date()
+  const hora = ahora.getHours()
+  const minuto = ahora.getMinutes()
+  const minutosTotales = hora * 60 + minuto
+
+  let limiteTolerancia = 375 // 6:15 AM por defecto
+  if (jornada === 'Tarde') {
+    limiteTolerancia = 765 // 12:45 PM
+  } else if (jornada === 'Noche') {
+    limiteTolerancia = 1125 // 6:45 PM
+  }
+
+  return minutosTotales > limiteTolerancia ? 'Tardanza' : 'Presente'
+}
+
 function marcarPresente(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para tomar asistencia.', 'warning')
@@ -482,14 +483,14 @@ function marcarPresente(estId) {
   } else {
     const ahora = new Date()
     const horaFormateada = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    const ahoraMs = ahora.getTime()
-    const minutos = calcularMinutosTranscurridos(claseIniciadaAt.value || ahoraMs, ahoraMs)
-    const tardanzaInfo = calcularEstadoPorTiempo(minutos)
+    const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
+    const estadoCalculado = calcularEstadoPorHora(jornadaFicha)
+    const tardanzaInfo = estadoCalculado === 'Tardanza' ? calcularHorasTardanza(ahora, jornadaFicha) : { horas: 0, texto: '0 horas' }
 
-    reg.estado = tardanzaInfo.estado
+    reg.estado = estadoCalculado
     reg.horaMarcacion = horaFormateada
-    reg.horasTardanza = tardanzaInfo.horasTardanza
-    reg.tiempoTardanza = tardanzaInfo.tiempoTardanza
+    reg.horasTardanza = tardanzaInfo.horas
+    reg.tiempoTardanza = tardanzaInfo.texto
     reg.excusa = false
   }
 }
@@ -1200,17 +1201,7 @@ function descargarExcel(data, nombreArchivo) {
 </script>
 
 <template>
-  <!-- MODO KIOSCO DE PANTALLA COMPLETA / AULA -->
-  <KioscoAsistencia
-    v-if="modoKioscoActivo && fichaSeleccionada"
-    :ficha="fichaSeleccionada"
-    :instructor="usuario"
-    :fecha="fechaAsistencia"
-    @salir-kiosco="modoKioscoActivo = false"
-    @asistencia-marcada="onKioscoAsistenciaMarcada"
-  />
-
-  <div v-else class="panel-instructor">
+  <div class="panel-instructor">
     <!-- Toast Notification -->
     <Transition name="toast-fade">
       <div v-if="toast.show" class="toast-notification" :class="'toast-' + toast.type">
@@ -1346,7 +1337,7 @@ function descargarExcel(data, nombreArchivo) {
                 </div>
                 <p class="remote-desc">
                   {{ sesionRemotaActiva 
-                    ? 'El Kiosco del aula está recibiendo huellas de los aprendices. Las marcaciones se sincronizan aquí en tiempo real.' 
+                    ? 'El lector de huellas del aula está recibiendo marcas biométricas de los aprendices. Las asistencias se reflejan aquí en tiempo real.' 
                     : 'Inicia el pase de lista desde este dispositivo móvil/web para activar automáticamente el lector en el computador del aula.' 
                   }}
                 </p>

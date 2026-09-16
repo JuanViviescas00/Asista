@@ -123,6 +123,30 @@ export async function estado(req, res) {
     if (!clase) {
       return res.json({ activa: false, ficha: null, iniciadaAt: null })
     }
+
+    // Si la clase superó el límite de 3 horas, se finaliza automáticamente
+    const LIMITE_3_HORAS_MS = 3 * 60 * 60 * 1000
+    const tiempoTranscurrido = clase.iniciadaAt ? (Date.now() - new Date(clase.iniciadaAt).getTime()) : 0
+    if (tiempoTranscurrido >= LIMITE_3_HORAS_MS) {
+      clase.estado = 'Finalizada'
+      clase.finalizadaAt = new Date()
+      await clase.save()
+
+      const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
+      emitirDesactivacion(clase.deviceId, {
+        type: 'DEACTIVATE',
+        fichaId: fichaIdStr,
+        instructorId: String(clase.instructorId),
+        motivo: 'AUTO_CIERRE_3_HORAS'
+      })
+      emitirClaseDesactivada(fichaIdStr, {
+        fichaId: fichaIdStr,
+        motivo: 'AUTO_CIERRE_3_HORAS'
+      })
+
+      return res.json({ activa: false, ficha: null, iniciadaAt: null })
+    }
+
     res.json({
       activa: true,
       ficha: clase.fichaId || null,

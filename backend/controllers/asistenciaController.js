@@ -405,3 +405,35 @@ export async function syncAllSqlite(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+/**
+ * Descarga el archivo .sqlite de un Docente específico
+ */
+export async function downloadSqliteDocente(req, res) {
+  try {
+    const { identificador } = req.params
+    const { getDBDocente } = await import('../services/sqliteExport.js')
+    const { filePath, db } = getDBDocente(identificador)
+    try { db.close() } catch (e) {}
+
+    res.setHeader('Content-Type', 'application/vnd.sqlite3')
+    res.setHeader('Content-Disposition', `attachment; filename="asistencias_docente_${identificador}.sqlite"`)
+    res.download(filePath, `asistencias_docente_${identificador}.sqlite`)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+/**
+ * Ejecuta bajo demanda la sincronización y agrupamiento nocturno de asistencias por Docente
+ */
+export async function ejecutarSincronizacionDocentes(req, res) {
+  try {
+    const { sincronizarSqlitePorDocente } = await import('../services/cronService.js')
+    const resultado = await sincronizarSqlitePorDocente()
+    res.json({ ok: true, mensaje: 'Sincronización por Docente (regla 3 días hábiles) ejecutada con éxito', ...resultado })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+

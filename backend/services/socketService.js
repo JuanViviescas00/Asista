@@ -166,10 +166,6 @@ export function initSocket(httpServer) {
 
       console.log(`[Socket.IO] ▶ Docente activó asistencia remota para ficha ${fichaCodigo} (${room})`)
 
-      // Notificar a la sala de la ficha y a todos los Kioscos en modo Standby global
-      io.to(room).emit('kiosco:activar_lectura', sesion)
-      io.to('global_kioscos').emit('kiosco:activar_lectura', sesion)
-      io.emit('kiosco:activar_lectura_global', sesion)
       io.to(room).emit('estado_sesion', { activa: true, sesion })
     })
 
@@ -181,9 +177,6 @@ export function initSocket(httpServer) {
 
       console.log(`[Socket.IO] ⏹ Docente detuvo la asistencia para ficha ${fichaId}`)
 
-      io.to(room).emit('kiosco:desactivar_lectura', { fichaId })
-      io.to('global_kioscos').emit('kiosco:desactivar_lectura', { fichaId })
-      io.emit('kiosco:desactivar_lectura_global', { fichaId })
       io.to(room).emit('estado_sesion', { activa: false, sesion: null })
     })
 
@@ -263,20 +256,40 @@ export function initSocket(httpServer) {
         try {
           const claseActiva = await Clase.findOne({ deviceId: String(deviceId), estado: 'Activa' })
           if (claseActiva) {
-            let codigoFicha = ''
-            try {
-              const ficha = await Ficha.findById(claseActiva.fichaId).select('codigoFicha')
-              codigoFicha = ficha?.codigoFicha || ''
-            } catch (_) {
-              // fichaId inválido o ficha borrada: se omite el código (no es crítico).
+            // Comprobar si la clase superó el límite de 3 horas durante la desconexión
+            const LIMITE_3_HORAS_MS = 3 * 60 * 60 * 1000
+            const tiempoTranscurrido = claseActiva.iniciadaAt ? (Date.now() - new Date(claseActiva.iniciadaAt).getTime()) : 0
+            if (tiempoTranscurrido >= LIMITE_3_HORAS_MS) {
+              claseActiva.estado = 'Finalizada'
+              claseActiva.finalizadaAt = new Date()
+              await claseActiva.save()
+              emitirDesactivacion(deviceId, {
+                type: 'DEACTIVATE',
+                fichaId: null,
+                instructorId: null,
+                motivo: 'AUTO_CIERRE_3_HORAS'
+              })
+              emitirClaseDesactivada(String(claseActiva.fichaId), {
+                fichaId: String(claseActiva.fichaId),
+                motivo: 'AUTO_CIERRE_3_HORAS'
+              })
+              console.log(`[Socket.IO] Clase para ${deviceId} expiró (>3h) durante desconexión. Cerrada automáticamente.`)
+            } else {
+              let codigoFicha = ''
+              try {
+                const ficha = await Ficha.findById(claseActiva.fichaId).select('codigoFicha')
+                codigoFicha = ficha?.codigoFicha || ''
+              } catch (_) {
+                // fichaId inválido o ficha borrada: se omite el código (no es crítico).
+              }
+              socket.emit('ACTIVATE', {
+                type: 'ACTIVATE',
+                fichaId: String(claseActiva.fichaId),
+                instructorId: String(claseActiva.instructorId),
+                codigoFicha,
+              })
+              console.log(`[Socket.IO] Reenviando ACTIVATE pendiente a ${deviceId} tras reconexión (ficha ${codigoFicha || claseActiva.fichaId})`)
             }
-            socket.emit('ACTIVATE', {
-              type: 'ACTIVATE',
-              fichaId: String(claseActiva.fichaId),
-              instructorId: String(claseActiva.instructorId),
-              codigoFicha,
-            })
-            console.log(`[Socket.IO] Reenviando ACTIVATE pendiente a ${deviceId} tras reconexión (ficha ${codigoFicha || claseActiva.fichaId})`)
           } else {
             emitirDesactivacion(deviceId, {
               type: 'DEACTIVATE',
@@ -292,18 +305,6 @@ export function initSocket(httpServer) {
         console.log(`[Socket.IO] HELLO rechazado por error: ${deviceId} (socket ${socket.id}) - ${err.message}`)
         rechazarHELLO(socket, 'INTERNAL_ERROR', 'Error interno al verificar el dispositivo.')
       }
-    })
-
-    // 7. El Kiosco registra una huella y notifica en vivo a todos (móvil del docente)
-    socket.on('kiosco:asistencia_marcada', (data) => {
-      const { fichaId } = data
-      if (!fichaId) return
-      const room = `ficha_${fichaId}`
-
-      console.log(`[Socket.IO] 🖐 Asistencia marcada en Kiosco: ${data.nombres} ${data.apellidos} (${data.estado})`)
-
-      // Re-transmitir a todos en la sala (especialmente al celular del docente)
-      socket.to(room).emit('docente:nueva_marcacion', data)
     })
 
     socket.on('disconnect', async () => {
@@ -370,9 +371,12 @@ export function emitirClaseActivada(fichaId, data) {
   }
 }
 
-export function emitirClaseDesactivada(fichaId, data) {
+export function emitirClaseDesactivada(fichaId, data = {}) {
   if (io && fichaId) {
-    io.to(`ficha_${String(fichaId)}`).emit('CLASS_DEACTIVATED', data)
+    const sFichaId = String(fichaId)
+    sesionesActivas.delete(sFichaId)
+    io.to(`ficha_${sFichaId}`).emit('CLASS_DEACTIVATED', data)
+    io.to(`ficha_${sFichaId}`).emit('estado_sesion', { activa: false, sesion: null })
   }
 }
 
