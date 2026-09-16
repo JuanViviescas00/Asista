@@ -2,6 +2,7 @@ import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import mongoose from 'mongoose'
 import * as fp from '../services/fingerprint.js'
+import { calcularResumenAsistencia } from '../services/asistenciaService.js'
 
 // Resuelve un fichaId (campo Mixed: ObjectId o codigoFicha) a su documento Ficha.
 // Reutiliza el mismo patrón de resolución ya presente en getEstudiantes y getPlantillasFicha.
@@ -102,6 +103,19 @@ export async function getEstudiantes(req, res) {
     }
     const estudiantes = await Estudiante.find(filter).sort({ createdAt: -1 })
     res.json(estudiantes)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function getAsistenciaResumen(req, res) {
+  try {
+    const { id } = req.params
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({ error: 'ID de estudiante inválido' })
+    }
+    const resumen = await calcularResumenAsistencia(id)
+    res.json({ success: true, estudianteId: String(id), ...resumen })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

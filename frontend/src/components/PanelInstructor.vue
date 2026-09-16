@@ -378,23 +378,16 @@ async function reactivarJornada() {
   }
 }
 
+// Horarios de inicio de jornada (minutos desde medianoche) — misma fuente que el backend:
+// Mañana 06:00 · Tarde 12:00 · Noche 18:00. Tolerancia de 5 minutos.
+function horarioInicioMin(jornada) {
+  if (jornada === 'Tarde') return 720
+  if (jornada === 'Noche') return 1080
+  return 360
+}
+
 function calcularHorasTardanza(horaMarcacionStr, jornada) {
   if (!horaMarcacionStr) return { horas: 0, texto: '0 horas' }
-
-  // Horarios de inicio oficial:
-  // Mañana: 6:00 AM (360 min) -> Tolerancia hasta 6:15 AM (375 min)
-  // Tarde: 12:30 PM (750 min) -> Tolerancia hasta 12:45 PM (765 min)
-  // Noche: 6:30 PM / 18:30 (1110 min) -> Tolerancia hasta 6:45 PM (1125 min)
-  let inicioMin = 360 // 6:00 AM por defecto
-  let limiteTolerancia = 375 // 6:15 AM
-
-  if (jornada === 'Tarde') {
-    inicioMin = 750 // 12:30 PM
-    limiteTolerancia = 765 // 12:45 PM
-  } else if (jornada === 'Noche') {
-    inicioMin = 1110 // 6:30 PM (18:30)
-    limiteTolerancia = 1125 // 6:45 PM
-  }
 
   let minutosMarcacion = 0
   if (horaMarcacionStr instanceof Date) {
@@ -412,17 +405,13 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
     }
   }
 
-  if (minutosMarcacion <= limiteTolerancia) {
-    return { horas: 0, texto: '0 horas' }
-  }
+  const minutosTardanza = minutosMarcacion - horarioInicioMin(jornada)
 
-  const minutosPasadosInicio = minutosMarcacion - inicioMin
-  const horasTardanza = Math.max(1, Math.ceil(minutosPasadosInicio / 60))
-
-  return {
-    horas: horasTardanza,
-    texto: `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
-  }
+  // Escala escalonada: 0-5min = 0h · 5min-1h = 1h · 1h-2h = 2h · +2h = 6h (Falta).
+  if (minutosTardanza <= 5) return { horas: 0, texto: '0 horas' }
+  if (minutosTardanza <= 60) return { horas: 1, texto: '1 hora' }
+  if (minutosTardanza <= 120) return { horas: 2, texto: '2 horas' }
+  return { horas: 6, texto: '6 horas' }
 }
 
 function inicializarAsistenciaDia() {
@@ -451,19 +440,10 @@ function inicializarAsistenciaDia() {
 }
 
 function calcularEstadoPorHora(jornada) {
-  const ahora = new Date()
-  const hora = ahora.getHours()
-  const minuto = ahora.getMinutes()
-  const minutosTotales = hora * 60 + minuto
-
-  let limiteTolerancia = 375 // 6:15 AM por defecto
-  if (jornada === 'Tarde') {
-    limiteTolerancia = 765 // 12:45 PM
-  } else if (jornada === 'Noche') {
-    limiteTolerancia = 1125 // 6:45 PM
-  }
-
-  return minutosTotales > limiteTolerancia ? 'Tardanza' : 'Presente'
+  const info = calcularHorasTardanza(new Date(), jornada)
+  if (info.horas === 0) return 'Presente'
+  if (info.horas === 6) return 'Falta'
+  return 'Tardanza'
 }
 
 function marcarPresente(estId) {
@@ -474,7 +454,7 @@ function marcarPresente(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
 
-  if (reg.estado === 'Presente' || reg.estado === 'Tardanza') {
+  if (reg.estado === 'Presente' || reg.estado === 'Tardanza' || reg.estado === 'Falta') {
     // Desmarcar al hacer clic de nuevo
     reg.estado = 'Ninguno'
     reg.horaMarcacion = ''
@@ -485,7 +465,9 @@ function marcarPresente(estId) {
     const horaFormateada = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
     const estadoCalculado = calcularEstadoPorHora(jornadaFicha)
-    const tardanzaInfo = estadoCalculado === 'Tardanza' ? calcularHorasTardanza(ahora, jornadaFicha) : { horas: 0, texto: '0 horas' }
+    const tardanzaInfo = (estadoCalculado === 'Tardanza' || estadoCalculado === 'Falta')
+      ? calcularHorasTardanza(ahora, jornadaFicha)
+      : { horas: 0, texto: '0 horas' }
 
     reg.estado = estadoCalculado
     reg.horaMarcacion = horaFormateada

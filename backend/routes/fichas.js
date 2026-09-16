@@ -9,6 +9,7 @@ const router = Router()
 router.get('/', autenticarOpcional, fichaController.getFichas)
 router.get('/mis-fichas/:instructorId', autenticarJWT, fichaController.getMisFichas)
 router.get('/:id/plantillas', fichaController.getPlantillasFicha)
+router.get('/:id/tardanzas-resumen', autenticarOpcional, fichaController.getTardanzasResumen)
 
 // Gestión de fichas (restringido a Administrador)
 router.post('/',
