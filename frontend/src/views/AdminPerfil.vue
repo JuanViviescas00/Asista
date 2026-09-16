@@ -241,12 +241,8 @@ async function procesarCambioPassword() {
       </div>
     </div>
     <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
-      <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading">
-        {{ loading ? 'Guardando...' : '💾 Guardar Cambios' }}
-      </button>
-      <button class="admin-profile-button admin-profile-button-security" @click="abrirModalPassword">
-        🔒 Cambiar Contraseña
-      </button>
+      <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading" title="Guardar Cambios"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+      <button class="admin-profile-button admin-profile-button-security" @click="abrirModalPassword" title="Cambiar Contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
     </div>
   </div>
 
@@ -274,12 +270,8 @@ async function procesarCambioPassword() {
       </div>
     </div>
     <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
-      <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading">
-        {{ loading ? 'Guardando...' : '💾 Guardar Cambios' }}
-      </button>
-      <button class="admin-profile-button admin-profile-button-security" @click="abrirModalPassword">
-        🔒 Cambiar Contraseña
-      </button>
+      <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading" title="Guardar Cambios"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+      <button class="admin-profile-button admin-profile-button-security" @click="abrirModalPassword" title="Cambiar Contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
     </div>
   </div>
 
@@ -336,7 +328,7 @@ async function procesarCambioPassword() {
             <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Ingresa tu contraseña actual para autorizar el cambio</p>
           </div>
         </div>
-        <button class="password-modal-close-btn" @click="cerrarModalPassword">✕</button>
+        <button class="password-modal-close-btn" @click="cerrarModalPassword" title="Cerrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
       <div v-if="passError" class="password-modal-error">
@@ -355,9 +347,7 @@ async function procesarCambioPassword() {
               required
               autocomplete="current-password"
             />
-            <button type="button" class="password-toggle-btn" @click="showPass.actual = !showPass.actual">
-              {{ showPass.actual ? '🙈' : '👁️' }}
-            </button>
+            <button type="button" class="password-toggle-btn" @click="showPass.actual = !showPass.actual" title="Mostrar/Ocultar contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
         </div>
 
@@ -372,9 +362,7 @@ async function procesarCambioPassword() {
               required
               autocomplete="new-password"
             />
-            <button type="button" class="password-toggle-btn" @click="showPass.nueva = !showPass.nueva">
-              {{ showPass.nueva ? '🙈' : '👁️' }}
-            </button>
+            <button type="button" class="password-toggle-btn" @click="showPass.nueva = !showPass.nueva" title="Mostrar/Ocultar contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
           <small style="color: #64748b; font-size: 11px;">Mínimo 6 caracteres alfanuméricos.</small>
         </div>
@@ -390,19 +378,13 @@ async function procesarCambioPassword() {
               required
               autocomplete="new-password"
             />
-            <button type="button" class="password-toggle-btn" @click="showPass.confirmar = !showPass.confirmar">
-              {{ showPass.confirmar ? '🙈' : '👁️' }}
-            </button>
+            <button type="button" class="password-toggle-btn" @click="showPass.confirmar = !showPass.confirmar" title="Mostrar/Ocultar contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
         </div>
 
         <div class="password-modal-actions">
-          <button type="button" class="btn btn-outline" @click="cerrarModalPassword" :disabled="passLoading">
-            Cancelar
-          </button>
-          <button type="submit" class="btn btn-primary" :disabled="passLoading">
-            {{ passLoading ? 'Verificando...' : '💾 Actualizar Contraseña' }}
-          </button>
+          <button type="button" class="btn btn-outline" @click="cerrarModalPassword" :disabled="passLoading" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button type="submit" class="btn btn-primary" :disabled="passLoading" title="Actualizar Contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
         </div>
       </form>
     </div>

@@ -3,7 +3,7 @@ import bcryptjs from 'bcryptjs'
 import mongoose from 'mongoose'
 import Dispositivo from '../models/Dispositivo.js'
 import Ficha from '../models/Ficha.js'
-import { desconectarDispositivo } from '../services/socketService.js'
+import { desconectarDispositivo, emitirNuevoDispositivo } from '../services/socketService.js'
 
 export async function registrar(req, res) {
   try {
@@ -21,7 +21,7 @@ export async function registrar(req, res) {
 
     // Los dispositivos se registran como PENDIENTES de aprobación:
     // activo=false y aprobadoEn=null hasta que el Admin los apruebe.
-    await Dispositivo.create({
+    const dispositivo = await Dispositivo.create({
       deviceId,
       tokenHash,
       hardwareFingerprintHash,
@@ -29,6 +29,16 @@ export async function registrar(req, res) {
       nombre: nombre || '',
       activo: false,
       aprobadoEn: null,
+    })
+
+    // Notifica en tiempo real al panel de Administrador que hay un dispositivo
+    // nuevo pendiente de aprobación.
+    emitirNuevoDispositivo({
+      _id: String(dispositivo._id),
+      deviceId,
+      hostname: hostname || null,
+      nombre: nombre || '',
+      createdAt: dispositivo.createdAt,
     })
 
     // Este es el ÚNICO momento en que el token viaja en texto plano:

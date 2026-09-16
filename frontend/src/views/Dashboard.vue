@@ -213,7 +213,7 @@ onMounted(() => loadDiasFestivos())
   <div class="card">
     <div class="card-header">
       <h3>Filtros</h3>
-      <button class="btn btn-outline btn-sm" @click="limpiarFiltros">Limpiar</button>
+      <button class="btn btn-outline btn-sm" @click="limpiarFiltros" title="Limpiar filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="form-grid">
       <div class="form-group">
@@ -232,9 +232,9 @@ onMounted(() => loadDiasFestivos())
     <div class="stat-card stat-presente"><span class="stat-num">{{ porcentajeGeneral }}%</span><span class="stat-label">% Asistencia General</span></div>
     <div class="stat-card stat-tardanza"><span class="stat-num">{{ resumenAsistencia.tardanzas }}</span><span class="stat-label">Tardanzas</span></div>
     <div class="stat-card stat-falta"><span class="stat-num">{{ resumenAsistencia.fallas }}</span><span class="stat-label">Fallas Totales</span></div>
-    <div v-if="estudiantesEnRiesgo.length > 0" class="stat-card" style="border-left-color: #ef4444; background: #fef2f2;">
-      <span class="stat-num" style="color: #dc2626;">{{ estudiantesEnRiesgo.length }}</span>
-      <span class="stat-label" style="color: #dc2626;">En Riesgo</span>
+    <div v-if="estudiantesEnRiesgo.length > 0" class="stat-card stat-rojo">
+      <span class="stat-num">{{ estudiantesEnRiesgo.length }}</span>
+      <span class="stat-label">En Riesgo</span>
     </div>
   </div>
 
@@ -274,7 +274,7 @@ onMounted(() => loadDiasFestivos())
   <div class="card">
     <div class="card-header">
       <h3>Tabla de Asistencias</h3>
-      <div class="btn-group"><button class="btn btn-primary btn-sm" @click="abrirRegistrar">+ Registrar Asistencia</button></div>
+      <div class="btn-group"><button class="btn btn-primary btn-sm" @click="abrirRegistrar" title="Registrar Asistencia"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>
     </div>
 
     <div v-if="!filtroFicha" class="empty-state"><p>Selecciona una ficha y un rango de fechas para ver el registro de asistencias.</p></div>
@@ -318,8 +318,8 @@ onMounted(() => loadDiasFestivos())
         <div class="form-group"><label>Hora</label><input v-model="registroForm.hora" type="time" /></div>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="showRegistrar = false">Cancelar</button>
-        <button class="btn btn-primary" @click="registrarAsistencia" :disabled="loading">Registrar</button>
+        <button class="btn btn-outline" @click="showRegistrar = false" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="btn btn-primary" @click="registrarAsistencia" :disabled="loading" title="Registrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
       </div>
     </div>
   </div>

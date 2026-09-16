@@ -388,7 +388,53 @@ table tbody tr:hover {
 }
 
 .table-container {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 70vh;
+}
+
+/* Scrollbar siempre visible y estilizada en tablas */
+.table-container,
+.fichas-table-container,
+.import-users-table-container,
+.student-portal-table-container,
+.holidays-table-container {
+  scrollbar-width: thin;
+  scrollbar-color: #B9C3B2 var(--hueso);
+}
+
+.table-container::-webkit-scrollbar,
+.fichas-table-container::-webkit-scrollbar,
+.import-users-table-container::-webkit-scrollbar,
+.student-portal-table-container::-webkit-scrollbar,
+.holidays-table-container::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.table-container::-webkit-scrollbar-track,
+.fichas-table-container::-webkit-scrollbar-track,
+.import-users-table-container::-webkit-scrollbar-track,
+.student-portal-table-container::-webkit-scrollbar-track,
+.holidays-table-container::-webkit-scrollbar-track {
+  background: var(--hueso);
+  border-radius: 999px;
+}
+
+.table-container::-webkit-scrollbar-thumb,
+.fichas-table-container::-webkit-scrollbar-thumb,
+.import-users-table-container::-webkit-scrollbar-thumb,
+.student-portal-table-container::-webkit-scrollbar-thumb,
+.holidays-table-container::-webkit-scrollbar-thumb {
+  background: #B9C3B2;
+  border-radius: 999px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover,
+.fichas-table-container::-webkit-scrollbar-thumb:hover,
+.import-users-table-container::-webkit-scrollbar-thumb:hover,
+.student-portal-table-container::-webkit-scrollbar-thumb:hover,
+.holidays-table-container::-webkit-scrollbar-thumb:hover {
+  background: var(--verde);
 }
 
 .badge {
@@ -696,17 +742,47 @@ table tbody tr:hover {
   box-shadow: var(--sombra-suave);
   padding: 24px 24px 22px;
   text-align: left;
-  border-left: 4px solid transparent;
+  transition: transform .18s var(--ease), box-shadow .18s var(--ease);
 }
 
-.stat-activo { border-left-color: var(--verde); }
-.stat-inactivo { border-left-color: var(--ambar); }
-.stat-retirado { border-left-color: var(--rojo); }
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sombra-card);
+}
+
+/* Tarjetas de color sólido (estilo Quasar) */
+.stat-verde, .stat-activo, .stat-presente { background: var(--verde); }
+.stat-ambar, .stat-inactivo, .stat-tardanza { background: var(--ambar); }
+.stat-rojo, .stat-retirado, .stat-falta { background: var(--rojo); }
+.stat-azul { background: var(--azul); }
+.stat-indigo { background: #6366f1; }
+.stat-morado { background: #8b5cf6; }
+.stat-gris, .stat-sinregistro { background: #6b7280; }
+
+.stat-verde, .stat-ambar, .stat-rojo, .stat-azul, .stat-indigo, .stat-morado, .stat-gris,
+.stat-activo, .stat-presente, .stat-inactivo, .stat-tardanza,
+.stat-retirado, .stat-falta, .stat-sinregistro {
+  box-shadow: 0 10px 28px rgba(22, 33, 15, .16);
+}
+
+.stat-verde .stat-num, .stat-ambar .stat-num, .stat-rojo .stat-num,
+.stat-azul .stat-num, .stat-indigo .stat-num, .stat-morado .stat-num, .stat-gris .stat-num,
+.stat-activo .stat-num, .stat-presente .stat-num, .stat-inactivo .stat-num,
+.stat-tardanza .stat-num, .stat-retirado .stat-num, .stat-falta .stat-num, .stat-sinregistro .stat-num {
+  color: #fff;
+}
+
+.stat-verde .stat-label, .stat-ambar .stat-label, .stat-rojo .stat-label,
+.stat-azul .stat-label, .stat-indigo .stat-label, .stat-morado .stat-label, .stat-gris .stat-label,
+.stat-activo .stat-label, .stat-presente .stat-label, .stat-inactivo .stat-label,
+.stat-tardanza .stat-label, .stat-retirado .stat-label, .stat-falta .stat-label, .stat-sinregistro .stat-label {
+  color: rgba(255, 255, 255, .92);
+}
 
 .stat-num {
   display: block;
   font-size: 27px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--tinta);
   line-height: 1;
   letter-spacing: -.01em;
@@ -714,7 +790,7 @@ table tbody tr:hover {
 
 .stat-label {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--texto-suave);
   text-transform: none;
   letter-spacing: normal;
@@ -742,6 +818,13 @@ table tbody tr:hover {
 .badge-neutral {
   background: var(--gris-suave);
   color: var(--texto-suave);
+}
+
+.doc-tipo {
+  color: var(--texto-suave);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: .03em;
 }
 
 .busqueda-grid {
@@ -797,11 +880,6 @@ table tbody tr:hover {
 .fila-error:hover {
   background: #F6D9D0 !important;
 }
-
-.stat-presente { border-left-color: var(--verde); }
-.stat-tardanza { border-left-color: var(--ambar); }
-.stat-falta { border-left-color: var(--rojo); }
-.stat-sinregistro { border-left-color: var(--texto-suave); }
 
 .dash-stats {
   margin-bottom: 24px;

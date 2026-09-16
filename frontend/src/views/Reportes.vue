@@ -481,8 +481,8 @@ function limpiar() {
           placeholder="Escribe el nombre del aprendiz, número de documento o nombre del docente..."
           style="flex: 1; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 14px;"
         />
-        <button v-if="busquedaTexto" class="btn btn-outline btn-sm" @click="busquedaTexto = ''">
-          ✕ Limpiar
+        <button v-if="busquedaTexto" class="btn btn-outline btn-sm" @click="busquedaTexto = ''" title="Limpiar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
     </div>
@@ -494,30 +494,33 @@ function limpiar() {
         class="btn btn-sm"
         :class="filtroTipoInasistencia === 'todas' ? 'btn-primary' : 'btn-outline'"
         @click="filtroTipoInasistencia = 'todas'"
+        title="Horas Totales (Todas)"
       >
-        📊 Horas Totales (Todas)
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
       <button
         class="btn btn-sm"
         :class="filtroTipoInasistencia === 'sin_excusa' ? 'btn-danger' : 'btn-outline'"
         @click="filtroTipoInasistencia = 'sin_excusa'"
+        title="Solo Sin Excusa (Injustificadas)"
       >
-        ❌ Solo Sin Excusa (Injustificadas)
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <button
         class="btn btn-sm"
         :class="filtroTipoInasistencia === 'con_excusa' ? 'btn-info' : 'btn-outline'"
         @click="filtroTipoInasistencia = 'con_excusa'"
+        title="Solo Con Excusa (Justificadas)"
       >
-        📋 Solo Con Excusa (Justificadas)
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </button>
     </div>
 
     <div class="btn-group" style="margin-top: 20px;">
-      <button class="btn btn-primary" :disabled="!filtroFicha" @click="generarReporte">
-        🔍 Consultar y Generar Reporte
+      <button class="btn btn-primary" :disabled="!filtroFicha" @click="generarReporte" title="Consultar y Generar Reporte">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
-      <button class="btn btn-outline" @click="limpiar">Limpiar Filtros</button>
+      <button class="btn btn-outline" @click="limpiar" title="Limpiar Filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
   </div>
 
@@ -530,33 +533,34 @@ function limpiar() {
             class="btn btn-sm"
             :class="vistaReporte === 'aprendices' ? 'btn-primary' : 'btn-outline'"
             @click="vistaReporte = 'aprendices'"
+            title="Vista por Aprendiz"
           >
-            👤 Vista por Aprendiz ({{ datosReporteAprendicesFiltrados.length }})
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <button
             class="btn btn-sm"
             :class="vistaReporte === 'docentes' ? 'btn-primary' : 'btn-outline'"
             @click="vistaReporte = 'docentes'"
+            title="Vista por Docente"
           >
-            👨‍🏫 Vista por Docente ({{ datosReporteDocentes.length }})
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <button
             class="btn btn-sm"
             :class="vistaReporte === 'sesiones' ? 'btn-primary' : 'btn-outline'"
             @click="vistaReporte = 'sesiones'"
+            title="Vista por Sesión"
           >
-            📅 Vista por Sesión ({{ datosReporteSesiones.length }})
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
 
         <div class="btn-group">
-          <button v-if="formato === 'pdf'" class="btn btn-primary btn-sm" @click="descargarPDF">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Descargar PDF
+          <button v-if="formato === 'pdf'" class="btn btn-primary btn-sm" @click="descargarPDF" title="Descargar PDF">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
-          <button v-else class="btn btn-success btn-sm" @click="descargarXLSX">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Descargar CSV (Excel)
+          <button v-else class="btn btn-success btn-sm" @click="descargarXLSX" title="Descargar CSV (Excel)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         </div>
       </div>
@@ -582,23 +586,23 @@ function limpiar() {
           <span class="stat-num">{{ resumenReporte.porcentajeGeneral }}%</span>
           <span class="stat-label">Asistencia General</span>
         </div>
-        <div class="stat-card" style="border-left-color: #6366f1;">
+        <div class="stat-card stat-indigo">
           <span class="stat-num">{{ resumenReporte.totalHorasFalladas }}h</span>
           <span class="stat-label">Total Horas Ausente</span>
         </div>
-        <div class="stat-card" style="border-left-color: #ef4444;">
-          <span class="stat-num" style="color: #ef4444;">{{ resumenReporte.totalHorasSinExcusa }}h</span>
+        <div class="stat-card stat-rojo">
+          <span class="stat-num">{{ resumenReporte.totalHorasSinExcusa }}h</span>
           <span class="stat-label">❌ Sin Excusa</span>
         </div>
-        <div class="stat-card" style="border-left-color: #0284c7;">
-          <span class="stat-num" style="color: #0284c7;">{{ resumenReporte.totalHorasConExcusa }}h</span>
+        <div class="stat-card stat-azul">
+          <span class="stat-num">{{ resumenReporte.totalHorasConExcusa }}h</span>
           <span class="stat-label">📋 Con Excusa</span>
         </div>
-        <div class="stat-card" style="border-left-color: #8b5cf6;">
+        <div class="stat-card stat-morado">
           <span class="stat-num">{{ resumenReporte.totalDocentesActivos }}</span>
           <span class="stat-label">Docentes Registrados</span>
         </div>
-        <div class="stat-card" style="border-left-color: #f59e0b;">
+        <div class="stat-card stat-ambar">
           <span class="stat-num">{{ resumenReporte.totalSesionesDictadas }}</span>
           <span class="stat-label">Sesiones de Clase</span>
         </div>

@@ -2,7 +2,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import * as XLSX from 'xlsx'
-import KioscoAsistencia from './KioscoAsistencia.vue'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 
@@ -18,8 +17,7 @@ const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
 
-// Modo Kiosco y Control Remoto en Vivo
-const modoKioscoActivo = ref(false)
+// Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
@@ -143,13 +141,6 @@ async function detenerSesionRemotaDocente() {
     showToast('Clase finalizada.', 'info')
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
-  }
-}
-
-function onKioscoAsistenciaMarcada(data) {
-  if (data?.estudianteId && asistenciaDia.value[data.estudianteId]) {
-    asistenciaDia.value[data.estudianteId].estado = data.estado
-    asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
   }
 }
 
@@ -1192,17 +1183,7 @@ function descargarExcel(data, nombreArchivo) {
 </script>
 
 <template>
-  <!-- MODO KIOSCO DE PANTALLA COMPLETA / AULA -->
-  <KioscoAsistencia
-    v-if="modoKioscoActivo && fichaSeleccionada"
-    :ficha="fichaSeleccionada"
-    :instructor="usuario"
-    :fecha="fechaAsistencia"
-    @salir-kiosco="modoKioscoActivo = false"
-    @asistencia-marcada="onKioscoAsistenciaMarcada"
-  />
-
-  <div v-else class="panel-instructor">
+  <div class="panel-instructor">
     <!-- Toast Notification -->
     <Transition name="toast-fade">
       <div v-if="toast.show" class="toast-notification" :class="'toast-' + toast.type">
@@ -1280,34 +1261,34 @@ function descargarExcel(data, nombreArchivo) {
               class="tab-btn"
               :class="{ active: vistaFicha === 'asistencia' }"
               @click="vistaFicha = 'asistencia'"
+              title="Tomar Asistencia"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-              Tomar Asistencia
             </button>
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'editar_asistencia' }"
               @click="vistaFicha = 'editar_asistencia'"
+              title="Historial"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
-              Historial
             </button>
             <!-- BOTÓN GESTIONAR ESTUDIANTES -->
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'gestionar_estudiantes' }"
               @click="vistaFicha = 'gestionar_estudiantes'"
+              title="Gestionar Estudiantes"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
-              Gestionar Estudiantes
             </button>
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'docentes' }"
               @click="vistaFicha = 'docentes'"
+              title="Equipo Docente"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3.3"/><path d="M2.5 19c1.2-3.4 3.8-5.2 6.5-5.2s5.3 1.8 6.5 5.2z"/><circle cx="17" cy="8.5" r="2.6" opacity="0.75"/><path d="M15 13.6c2.2.4 4 2 5 5H18" opacity="0.75"/></svg>
-              Equipo Docente
             </button>
           </div>
         </div>
@@ -1316,7 +1297,7 @@ function descargarExcel(data, nombreArchivo) {
         <!-- VISTA 1: TOMAR ASISTENCIA (POR DÍAS)      -->
         <!-- ========================================= -->
         <div v-if="vistaFicha === 'asistencia'" class="section-body">
-          <!-- CENTRO DE CONTROL REMOTO Y MODO KIOSCO -->
+          <!-- CENTRO DE CONTROL REMOTO -->
           <div class="remote-control-panel">
             <div class="remote-control-header">
               <div class="remote-control-info">
@@ -1344,20 +1325,18 @@ function descargarExcel(data, nombreArchivo) {
                   class="btn-remote-start"
                   @click="iniciarSesionRemotaDocente"
                   :disabled="jornadaInhabilitada"
-                  title="Iniciar pase de lista remoto para el aula"
+                  title="Iniciar pase de lista"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5-13-7.5z"/></svg>
-                  Iniciar Pase de Lista Remoto
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>
                 <button
                   v-else
                   type="button"
                   class="btn-remote-stop"
                   @click="detenerSesionRemotaDocente"
-                  title="Finalizar pase de lista remoto"
+                  title="Finalizar pase de lista"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                  Finalizar Pase de Lista
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                 </button>
 
               </div>
@@ -1398,10 +1377,10 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-nav-day"
                   @click="cambiarFechaDia(-1)"
-                  title="Día Anterior"
+                  title="Día anterior"
                   style="background: transparent; border: none; font-size: 13px; font-weight: 700; color: #475569; padding: 5px 8px; cursor: pointer; border-radius: 4px;"
                 >
-                  ◀
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                 </button>
                 <input
                   type="date"
@@ -1421,7 +1400,7 @@ function descargarExcel(data, nombreArchivo) {
                   class="btn-nav-day"
                   :disabled="esFechaActualOHoy"
                   @click="cambiarFechaDia(1)"
-                  :title="esFechaActualOHoy ? 'No puedes avanzar a días futuros' : 'Día Siguiente'"
+                  :title="esFechaActualOHoy ? 'No puedes avanzar a días futuros' : 'Día siguiente'"
                   :style="{
                     background: 'transparent',
                     border: 'none',
@@ -1433,14 +1412,14 @@ function descargarExcel(data, nombreArchivo) {
                     borderRadius: '4px'
                   }"
                 >
-                  ▶
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
                 <button
                   type="button"
                   class="btn-today"
                   @click="irAHoy"
                   :disabled="fechaAsistencia === fechaHoyMax"
-                  title="Ir al día de hoy"
+                  title="Ir a hoy"
                   :style="{
                     background: fechaAsistencia === fechaHoyMax ? '#f1f5f9' : '#e2e8f0',
                     border: 'none',
@@ -1453,7 +1432,7 @@ function descargarExcel(data, nombreArchivo) {
                     cursor: fechaAsistencia === fechaHoyMax ? 'default' : 'pointer'
                   }"
                 >
-                  Hoy
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 </button>
               </div>
 
@@ -1464,11 +1443,10 @@ function descargarExcel(data, nombreArchivo) {
                 class="btn-inhabilitar-action"
                 @click="abrirModalInhabilitar"
                 :disabled="fechaAsistencia > fechaHoyMax"
-                title="Inhabilitar la toma de asistencia para esta jornada"
+                title="Inhabilitar día"
                 style="background: #fff1f2; border: 1.5px solid #fecdd3; color: #e11d48; font-weight: 600; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
-                Inhabilitar Sesión
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               </button>
               <button
                 v-else
@@ -1476,10 +1454,10 @@ function descargarExcel(data, nombreArchivo) {
                 class="btn-reactivar-action"
                 @click="reactivarJornada"
                 :disabled="inhabilitando"
-                title="Reactivar la jornada para tomar asistencia"
+                title="Reactivar día"
                 style="background: #f0fdf4; border: 1.5px solid #bbf7d0; color: #16a34a; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
-                {{ inhabilitando ? 'Reactivando...' : 'Reactivar Sesión' }}
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
             </div>
           </div>
@@ -1505,8 +1483,9 @@ function descargarExcel(data, nombreArchivo) {
               class="btn btn-reactivar-hud"
               @click="reactivarJornada"
               :disabled="inhabilitando"
+              title="Reactivar día"
             >
-              {{ inhabilitando ? 'Reactivando...' : 'Reactivar Jornada' }}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
           </div>
 
@@ -1667,8 +1646,9 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
                       :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada"
                       @click="marcarPresente(est._id)"
+                      title="Marcar presente"
                     >
-                      {{ (asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza') ? '✓ Marcado' : '+ Presente' }}
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     </button>
 
                     <!-- Botón Excusa Táctil -->
@@ -1678,8 +1658,9 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
                       :disabled="jornadaInhabilitada"
                       @click="toggleExcusa(est._id)"
+                      title="Registrar excusa"
                     >
-                      {{ asistenciaDia[est._id]?.excusa ? 'Excusa ✓' : 'Excusa' }}
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </button>
                   </div>
                 </div>
@@ -1691,13 +1672,11 @@ function descargarExcel(data, nombreArchivo) {
           </div>
 
           <div class="action-bar" v-if="estudiantesFicha.length > 0">
-            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar lista del día a Excel">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-              Exportar Excel
+            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
-            <button class="btn-export" @click="descargarSQLite" title="Descargar archivo SQLite único para el servidor institucional">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><rect x="8" y="4" width="7" height="5"/><rect x="7" y="13" width="10" height="7"/></svg>
-              Descargar SQLite (.sqlite)
+            <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <div v-if="jornadaInhabilitada" style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
@@ -1708,8 +1687,9 @@ function descargarExcel(data, nombreArchivo) {
               class="btn btn-primary btn-guardar"
               @click="guardarAsistenciaDia"
               :disabled="guardandoAsistencia"
+              title="Guardar"
             >
-              {{ guardandoAsistencia ? 'Finalizando Jornada...' : 'Finalizar Jornada y Guardar' }}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             </button>
           </div>
         </div>
@@ -1724,13 +1704,11 @@ function descargarExcel(data, nombreArchivo) {
               <p class="section-desc">Registros de asistencia de esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn-export" @click="descargarSQLite" title="Descargar archivo SQLite acumulativo institucional">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><rect x="8" y="4" width="7" height="5"/><rect x="7" y="13" width="10" height="7"/></svg>
-                Descargar SQLite (.sqlite)
+              <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
-              <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-                Exportar Historial Excel
+              <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0" title="Exportar historial a Excel">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
             </div>
           </div>
@@ -1777,9 +1755,8 @@ function descargarExcel(data, nombreArchivo) {
                 </h4>
                 <p class="section-desc">Información y edición de los aprendices de la Ficha {{ fichaSeleccionada.codigoFicha }}:</p>
               </div>
-              <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-                Exportar Lista Excel
+              <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0" title="Exportar lista a Excel">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
             </div>
 
@@ -1806,9 +1783,8 @@ function descargarExcel(data, nombreArchivo) {
                     </span>
                   </td>
                   <td>
-                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
-                      Editar
+                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)" title="Editar estudiante">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                     </button>
                     <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder</span>
                   </td>
@@ -1964,9 +1940,11 @@ function descargarExcel(data, nombreArchivo) {
           </div>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-outline" @click="showEditEstudianteModal = false">Cancelar</button>
-          <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante">
-            {{ guardandoEstudiante ? 'Guardando...' : 'Guardar Cambios' }}
+          <button class="btn btn-outline" @click="showEditEstudianteModal = false" title="Cancelar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante" title="Guardar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           </button>
         </div>
       </div>
@@ -2018,16 +1996,17 @@ function descargarExcel(data, nombreArchivo) {
         </div>
 
         <div class="modal-actions" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-          <button class="btn btn-outline" @click="showInhabilitarModal = false" :disabled="inhabilitando">
-            Cancelar
+          <button class="btn btn-outline" @click="showInhabilitarModal = false" :disabled="inhabilitando" title="Cancelar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
           <button
             class="btn btn-danger-solid"
             @click="confirmarInhabilitarJornada"
             :disabled="inhabilitando"
+            title="Inhabilitar día"
             style="background: #e11d48; color: #ffffff; border: none; font-weight: 700; padding: 9px 16px; border-radius: 8px; cursor: pointer;"
           >
-            {{ inhabilitando ? 'Inhabilitando...' : 'Inhabilitar Sesión' }}
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
           </button>
         </div>
       </div>
@@ -2812,7 +2791,7 @@ function descargarExcel(data, nombreArchivo) {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* CENTRO DE CONTROL REMOTO Y MODO KIOSCO */
+/* CENTRO DE CONTROL REMOTO */
 .remote-control-panel {
   --rc-bg-1: #0a130f;
   --rc-bg-2: #15241c;
@@ -2963,22 +2942,6 @@ function descargarExcel(data, nombreArchivo) {
   background: var(--rc-danger-dim);
 }
 
-.btn-open-kiosk {
-  background: #0284c7;
-  color: white;
-  border: none;
-  font-weight: 700;
-  font-size: 13px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-open-kiosk:hover {
-  background: #0369a1;
-}
-
 .remote-live-feed {
   margin-top: 16px;
   padding-top: 14px;
@@ -3126,8 +3089,7 @@ function descargarExcel(data, nombreArchivo) {
   }
 
   .btn-remote-start,
-  .btn-remote-stop,
-  .btn-open-kiosk {
+  .btn-remote-stop {
     width: 100%;
     justify-content: center;
     padding: 12px 16px;

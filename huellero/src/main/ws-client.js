@@ -29,6 +29,7 @@ let ultimoRechazo = null // { code, message, at } del último HELLO_RECHAZADO
 const activateHandlers = []
 const deactivateHandlers = []
 const connectionChangeHandlers = []
+const deviceNotFoundHandlers = []
 
 // ---------------------------------------------------------------------------
 // Reintento manual tras "io server disconnect"
@@ -210,6 +211,18 @@ export function connect(config) {
     }
     log('HELLO rechazado:', ultimoRechazo.code, '-', ultimoRechazo.message)
     setConnected(false)
+
+    // El backend no reconoce este deviceId (p.ej. su BD fue restaurada/restablecida).
+    // Avisamos a los suscriptores para que re-registren el dispositivo desde cero.
+    if (data?.code === 'DEVICE_NOT_FOUND') {
+      deviceNotFoundHandlers.forEach((fn) => {
+        try {
+          fn()
+        } catch (err) {
+          logError('Error en onDeviceNotFound:', err.message)
+        }
+      })
+    }
   })
 
   socket.on('ACTIVATE', (payload) => {
@@ -282,6 +295,14 @@ export function onConnectionChange(fn) {
   }
 }
 
+export function onDeviceNotFound(fn) {
+  if (typeof fn === 'function') deviceNotFoundHandlers.push(fn)
+  return () => {
+    const i = deviceNotFoundHandlers.indexOf(fn)
+    if (i >= 0) deviceNotFoundHandlers.splice(i, 1)
+  }
+}
+
 /**
  * Envía un mensaje saliente al backend (para mensajes futuros: acks, etc.).
  * @param {string} type nombre del evento
@@ -307,6 +328,7 @@ const wsClient = {
   onActivate,
   onDeactivate,
   onConnectionChange,
+  onDeviceNotFound,
   send,
 }
 

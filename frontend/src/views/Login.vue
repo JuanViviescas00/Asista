@@ -4,7 +4,7 @@ import { enviarCodigoRecuperacion } from '../services/index.js'
 import api from '../services/index.js'
 import '../styles/login.css'
 
-const emit = defineEmits(['login-success', 'abrir-kiosco'])
+const emit = defineEmits(['login-success'])
 
 const tipoAcceso = ref('personal') // 'personal' (Instructores/Admin) o 'aprendiz' (Consulta por documento)
 
@@ -236,15 +236,17 @@ async function restablecerPassword() {
             class="login-access-tab"
             :class="{ 'is-active': tipoAcceso === 'personal' }"
             @click="cambiarTipoAcceso('personal')"
+            title="Instructores / Personal SENA"
           >
-            🔒 Instructores / Personal SENA
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </button>
           <button
             class="login-access-tab"
             :class="{ 'is-active': tipoAcceso === 'aprendiz' }"
             @click="cambiarTipoAcceso('aprendiz')"
+            title="Consulta Aprendiz"
           >
-            🔍 Consulta Aprendiz
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </button>
         </div>
 
@@ -272,21 +274,15 @@ async function restablecerPassword() {
                 placeholder="········"
                 @keyup.enter="iniciarSesionPersonal"
               />
-              <button type="button" class="login-password-toggle" @click="showPassword = !showPassword">
-                <svg v-if="!showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
+              <button type="button" class="login-password-toggle" @click="showPassword = !showPassword" :title="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+                <svg v-if="!showPassword" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
               </button>
             </div>
           </div>
 
-          <button class="login-button login-button-primary login-button-full" @click="iniciarSesionPersonal" :disabled="loading">
-            {{ loading ? 'Iniciando sesión...' : '🔒 Ingresar al Sistema' }}
+          <button class="login-button login-button-primary login-button-full" @click="iniciarSesionPersonal" :disabled="loading" title="Ingresar al Sistema">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </button>
 
           <p class="login-recovery-link">
@@ -311,26 +307,8 @@ async function restablecerPassword() {
             />
           </div>
 
-          <button class="login-button login-button-primary login-button-full login-button-student" @click="consultarAprendiz" :disabled="loading">
-            {{ loading ? 'Consultando...' : '🔍 Consultar Mi Asistencia' }}
-          </button>
-        </div>
-
-        <!-- ACCESO DIRECTO MODO KIOSCO DE AULA (SIN CREDENCIALES) -->
-        <div class="login-kiosk-box">
-          <div class="login-kiosk-divider">
-            <span>O para computadores del aula</span>
-          </div>
-          <button
-            type="button"
-            class="btn-kiosk-access"
-            @click="$emit('abrir-kiosco')"
-          >
-            <span class="btn-kiosk-icon">🖥️</span>
-            <div class="btn-kiosk-text">
-              <strong>Modo Kiosco de Aula</strong>
-              <small>Esperar activación remota del docente (Sin contraseña)</small>
-            </div>
+          <button class="login-button login-button-primary login-button-full login-button-student" @click="consultarAprendiz" :disabled="loading" title="Consultar Mi Asistencia">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </button>
         </div>
       </template>
@@ -359,8 +337,9 @@ async function restablecerPassword() {
           class="login-button login-button-primary login-button-full"
           :disabled="enviando"
           @click="enviarCodigo"
+          title="Enviar código de verificación"
         >
-          {{ enviando ? 'Enviando...' : 'Enviar Código de Verificación' }}
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </button>
 
         <template v-if="codigoEnviado">
@@ -397,8 +376,8 @@ async function restablecerPassword() {
             />
           </div>
 
-          <button class="login-button login-button-primary login-button-full" @click="restablecerPassword">
-            Restablecer Contraseña
+          <button class="login-button login-button-primary login-button-full" @click="restablecerPassword" title="Restablecer Contraseña">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </button>
         </template>
 

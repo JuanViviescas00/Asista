@@ -250,10 +250,6 @@ export function cerrarAsistenciaRemota(fichaId) {
   socket.emit('docente:cerrar_asistencia', { fichaId: String(fichaId) })
 }
 
-export function notificarMarcacionKiosco(datos) {
-  socket.emit('kiosco:asistencia_marcada', datos)
-}
-
 // ------------------------------------------------------------
 // 3. CORREO (enviar código de recuperación)
 // ------------------------------------------------------------

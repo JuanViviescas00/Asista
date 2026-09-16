@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/importarUsuarios.css'
+import * as XLSX from 'xlsx'
 
 const toast = ref({ show: false, message: '', type: '' })
 const tipoImportacion = ref('estudiantes') // 'estudiantes', 'instructores', 'fichas'
@@ -72,36 +73,9 @@ function showToastFn(message, type = 'success') {
   setTimeout(() => { toast.value.show = false }, 3000)
 }
 
-function parsearCSV(texto) {
-  const lineas = texto.split(/\r?\n/).filter(l => l.trim())
-  if (lineas.length < 2) {
-    showToastFn('El archivo debe tener al menos una línea de cabecera y datos', 'error')
-    return { headers: [], rows: [] }
-  }
-  const headers = parsearLineaCSV(lineas[0]).map(h => h.trim())
-  const rows = []
-  for (let i = 1; i < lineas.length; i++) {
-    const valores = parsearLineaCSV(lineas[i])
-    if (valores.length === 0) continue
-    const row = {}
-    headers.forEach((h, idx) => { row[h] = (valores[idx] || '').trim() })
-    rows.push({ ...row, _linea: i + 1 })
-  }
-  return { headers, rows }
-}
-
-function parsearLineaCSV(linea) {
-  const resultado = []
-  let actual = ''
-  let dentroDeComillas = false
-  for (let i = 0; i < linea.length; i++) {
-    const char = linea[i]
-    if (char === '"') { dentroDeComillas = !dentroDeComillas }
-    else if ((char === ',' || char === ';') && !dentroDeComillas) { resultado.push(actual); actual = '' }
-    else { actual += char }
-  }
-  resultado.push(actual)
-  return resultado
+function celdaAString(v) {
+  if (v === null || v === undefined) return ''
+  return String(v).trim()
 }
 
 function validarHeaders(headers) {
@@ -193,8 +167,29 @@ function procesarArchivo(event) {
 
   const reader = new FileReader()
   reader.onload = (e) => {
-    const texto = e.target.result
-    const { headers, rows } = parsearCSV(texto)
+    let headers = []
+    let rows = []
+    try {
+      const data = new Uint8Array(e.target.result)
+      const workbook = XLSX.read(data, { type: 'array' })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' })
+      if (json.length === 0) {
+        showToastFn('El archivo está vacío o no se pudo leer', 'error')
+        return
+      }
+      headers = Object.keys(json[0]).map(h => String(h).trim())
+      rows = json.map((r, idx) => {
+        const row = {}
+        headers.forEach(h => { row[h] = celdaAString(r[h]) })
+        row._linea = idx + 2
+        return row
+      })
+    } catch (err) {
+      showToastFn('No se pudo leer el archivo. Sube un archivo .xlsx válido.', 'error')
+      return
+    }
+
     if (headers.length === 0 || rows.length === 0) {
       showToastFn('El archivo está vacío o no se pudo leer', 'error')
       return
@@ -273,7 +268,7 @@ function procesarArchivo(event) {
     errores.value = tempErrores
     advertencias.value = tempAdvertencias
   }
-  reader.readAsText(file, 'UTF-8')
+  reader.readAsArrayBuffer(file)
 }
 
 async function ejecutarImportacion() {
@@ -354,37 +349,40 @@ async function ejecutarImportacion() {
 }
 
 function descargarPlantilla() {
-  let contenido = ''
+  let filas = []
   let nombreArchivo = ''
 
   if (tipoImportacion.value === 'fichas') {
-    nombreArchivo = 'carga_masiva_fichas.csv'
-    contenido = `Codigo_Ficha,Nombre_Programa,Jornada,Aula_Asignada,Fecha_Inicio,Fecha_Fin
-2670123,Análisis y Desarrollo de Software (ADSO),Mañana,Aula 302 Bloque A,2026-02-01,2026-11-30
-2891234,Gestión de Redes de Datos,Tarde,Laboratorio 105 Bloque B,2026-02-01,2026-11-30
-2901122,Diseño Gráfico Digital,Noche,Taller de Diseño Bloque C,2026-02-15,2026-12-15`
+    nombreArchivo = 'carga_masiva_fichas.xlsx'
+    filas = [
+      ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Aula_Asignada', 'Fecha_Inicio', 'Fecha_Fin'],
+      ['2670123', 'Análisis y Desarrollo de Software (ADSO)', 'Mañana', 'Aula 302 Bloque A', '2026-02-01', '2026-11-30'],
+      ['2891234', 'Gestión de Redes de Datos', 'Tarde', 'Laboratorio 105 Bloque B', '2026-02-01', '2026-11-30'],
+      ['2901122', 'Diseño Gráfico Digital', 'Noche', 'Taller de Diseño Bloque C', '2026-02-15', '2026-12-15'],
+    ]
   } else if (tipoImportacion.value === 'instructores') {
-    nombreArchivo = 'carga_masiva_instructores.csv'
-    contenido = `Tipo_Doc,Num_Doc,Nombres,Apellidos,Genero,Correo,Telefono,Ficha,Es_Lider,Jornada
-CC,1055443301,Carlos Alberto,Mendoza Pérez,Masculino,carlos.mendoza@sena.edu.co,3104567890,"2670123, 2891234",SI,Mañana
-CC,1055443302,Patricia Elena,Jaramillo Morales,Femenino,patricia.jaramillo@sena.edu.co,3156789012,2891234,SI,Tarde
-CC,1055443303,Roberto Antonio,Gómez Restrepo,Masculino,roberto.gomez@sena.edu.co,3123456789,"2901122 / 2670123",NO,Noche
-CC,1055443304,María Fernanda,Suárez Castro,Femenino,maria.suarez@sena.edu.co,3189012345,2670123,NO,Mañana`
+    nombreArchivo = 'carga_masiva_instructores.xlsx'
+    filas = [
+      ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider', 'Jornada'],
+      ['CC', '1055443301', 'Carlos Alberto', 'Mendoza Pérez', 'Masculino', 'carlos.mendoza@sena.edu.co', '3104567890', '2670123, 2891234', 'SI', 'Mañana'],
+      ['CC', '1055443302', 'Patricia Elena', 'Jaramillo Morales', 'Femenino', 'patricia.jaramillo@sena.edu.co', '3156789012', '2891234', 'SI', 'Tarde'],
+      ['CC', '1055443303', 'Roberto Antonio', 'Gómez Restrepo', 'Masculino', 'roberto.gomez@sena.edu.co', '3123456789', '2901122 / 2670123', 'NO', 'Noche'],
+      ['CC', '1055443304', 'María Fernanda', 'Suárez Castro', 'Femenino', 'maria.suarez@sena.edu.co', '3189012345', '2670123', 'NO', 'Mañana'],
+    ]
   } else {
-    nombreArchivo = 'carga_masiva_estudiantes.csv'
-    contenido = `Tipo_Doc,Num_Doc,Nombres,Apellidos,Genero,Correo,Telefono,Ficha,Jornada
-CC,1098765432,Alejandro,Morales Ríos,Masculino,alejandro.morales@misena.edu.co,3112345678,2670123,Mañana
-CC,1098765433,Valentina,Ospina Gutiérrez,Femenino,valentina.ospina@misena.edu.co,3123456789,2670123,Mañana
-CC,1098765434,Santiago,Cardona Henao,Masculino,santiago.cardona@misena.edu.co,3134567890,2670123,Mañana`
+    nombreArchivo = 'carga_masiva_estudiantes.xlsx'
+    filas = [
+      ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Jornada'],
+      ['CC', '1098765432', 'Alejandro', 'Morales Ríos', 'Masculino', 'alejandro.morales@misena.edu.co', '3112345678', '2670123', 'Mañana'],
+      ['CC', '1098765433', 'Valentina', 'Ospina Gutiérrez', 'Femenino', 'valentina.ospina@misena.edu.co', '3123456789', '2670123', 'Mañana'],
+      ['CC', '1098765434', 'Santiago', 'Cardona Henao', 'Masculino', 'santiago.cardona@misena.edu.co', '3134567890', '2670123', 'Mañana'],
+    ]
   }
 
-  const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.setAttribute('download', nombreArchivo)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  const ws = XLSX.utils.aoa_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
+  XLSX.writeFile(wb, nombreArchivo)
 }
 
 function limpiarTodo() {
@@ -401,13 +399,13 @@ function limpiarTodo() {
 <template>
   <div class="import-users-page-header">
     <h1>Carga Masiva de Archivos Planos</h1>
-    <p>Importación masiva mediante archivos CSV</p>
+    <p>Importación masiva mediante archivos Excel (XLSX)</p>
   </div>
 
   <!-- SI NO TIENE PERMISO (SI ES DOCENTE COMÚN) -->
   <div v-if="!permisoCarga" class="import-users-card import-users-restricted-card">
     <div class="import-users-restricted-message">
-      🔒 <strong>Acceso Restringido:</strong> La carga masiva mediante archivos planos (CSV) está reservada para el <strong>Administrador</strong> o <strong>Instructores Líderes de Ficha</strong>.
+      🔒 <strong>Acceso Restringido:</strong> La carga masiva mediante archivos planos (XLSX) está reservada para el <strong>Administrador</strong> o <strong>Instructores Líderes de Ficha</strong>.
     </div>
   </div>
 
@@ -417,8 +415,8 @@ function limpiarTodo() {
       <div class="import-users-card-header">
         <h3>Configuración de Importación</h3>
         <div class="import-users-header-actions">
-          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla">
-            📄 Descargar Plantilla de Ejemplo (.csv)
+          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla" title="Descargar Plantilla">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
           <span v-if="usuario.rol === 'Instructor'" class="import-users-badge import-users-badge-success">
             👑 Docente Líder Autorizado
@@ -435,16 +433,16 @@ function limpiarTodo() {
           </select>
         </div>
         <div class="import-users-form-group">
-          <label>Archivo CSV</label>
+          <label>Archivo Excel (XLSX)</label>
           <div class="import-users-file-upload">
-            <input id="archivo-input" type="file" accept=".csv" @change="procesarArchivo" class="import-users-file-input" />
-            <label for="archivo-input" class="import-users-file-label">{{ archivoNombre || 'Seleccionar archivo .csv' }}</label>
+            <input id="archivo-input" type="file" accept=".xlsx,.xls" @change="procesarArchivo" class="import-users-file-input" />
+            <label for="archivo-input" class="import-users-file-label">{{ archivoNombre || 'Seleccionar archivo .xlsx' }}</label>
           </div>
         </div>
       </div>
 
       <div class="import-users-info">
-        <h4>Formato requerido del archivo CSV ({{ tipoImportacion.toUpperCase() }}):</h4>
+        <h4>Formato requerido del archivo Excel ({{ tipoImportacion.toUpperCase() }}):</h4>
         <p>Cabeceras obligatorias requeridas:</p>
         <code>{{ headersEsperados.join(',') }}</code>
         
@@ -581,10 +579,10 @@ function limpiarTodo() {
         </p>
       </div>
       <div class="import-users-actions">
-        <button class="import-users-button import-users-button-primary" @click="ejecutarImportacion" :disabled="loading">
-          {{ loading ? 'Importando...' : '📥 Importar ' + registros.length + ' ' + tipoImportacion.toUpperCase() }}
+        <button class="import-users-button import-users-button-primary" @click="ejecutarImportacion" :disabled="loading" title="Importar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button class="import-users-button import-users-button-outline" @click="limpiarTodo">Cancelar</button>
+        <button class="import-users-button import-users-button-outline" @click="limpiarTodo" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
 
@@ -603,7 +601,7 @@ function limpiarTodo() {
           <span>Con errores (omitidos)</span>
         </div>
       </div>
-      <button class="import-users-button import-users-button-primary import-users-new-action" @click="limpiarTodo">Nueva Importación</button>
+      <button class="import-users-button import-users-button-primary import-users-new-action" @click="limpiarTodo" title="Nueva Importación"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
   </template>
 

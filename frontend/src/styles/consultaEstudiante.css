@@ -38,14 +38,21 @@
 .student-consult-field-label { display: block; font-size: 11px; color: #64748b; margin-bottom: 2px; }
 .student-consult-name-value { font-size: 16px; color: #1e293b; }
 .student-consult-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.student-consult-stat { background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; text-align: center; border-left: 4px solid transparent; }
-.student-consult-stat-present { border-left-color: #28a745; }
-.student-consult-stat-late { border-left-color: #f59e0b; }
-.student-consult-stat-absent { border-left-color: #dc3545; }
-.student-consult-stat-index { background: #eff6ff; border: 1px solid #bfdbfe; border-left-width: 4px; border-left-color: #1d4ed8; }
+.student-consult-stat { background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; text-align: center; }
+.student-consult-stat-present { background: #28a745; }
+.student-consult-stat-late { background: #f59e0b; }
+.student-consult-stat-absent { background: #dc3545; }
+.student-consult-stat-index { background: #1d4ed8; }
 .student-consult-stat-number { display: block; font-size: 32px; font-weight: 700; color: #1e293b; line-height: 1; }
-.student-consult-stat-index .student-consult-stat-number { color: #1d4ed8; }
 .student-consult-stat-label { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; display: block; }
+.student-consult-stat-present .student-consult-stat-number,
+.student-consult-stat-late .student-consult-stat-number,
+.student-consult-stat-absent .student-consult-stat-number,
+.student-consult-stat-index .student-consult-stat-number { color: #ffffff; }
+.student-consult-stat-present .student-consult-stat-label,
+.student-consult-stat-late .student-consult-stat-label,
+.student-consult-stat-absent .student-consult-stat-label,
+.student-consult-stat-index .student-consult-stat-label { color: rgba(255, 255, 255, .92); }
 .student-consult-report-table-section { margin-top: 24px; }
 .student-consult-data-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
 .student-consult-data-table th, .student-consult-data-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }

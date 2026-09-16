@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { getConfig, iniciarRegistroDispositivo, tieneIdentidad } from './config.js'
+import { getConfig, iniciarRegistroDispositivo, tieneIdentidad, reiniciarIdentidadYRegistrar } from './config.js'
 import * as store from './store.js'
 import wsClient from './ws-client.js'
 import { capturarHuella, inicializarCaptura } from './capture.js'
@@ -72,6 +72,17 @@ export async function init() {
     store.setClaseActiva(null)
     detenerReintentoPlantillas()
     notificarEstado()
+  })
+  wsClient.onDeviceNotFound(async () => {
+    // El backend ya no reconoce este deviceId (BD restaurada/restablecida).
+    // Se limpia la identidad local y se re-registra desde cero para que el
+    // Admin pueda volver a aprobarlo en el panel.
+    const resultado = await reiniciarIdentidadYRegistrar()
+    if (resultado?.ok) {
+      store.setClaseActiva(null)
+      wsClient.connect(getConfig())
+      notificarEstado()
+    }
   })
   wsClient.connect(getConfig())
   sincronizar()
