@@ -78,33 +78,65 @@ export async function importarInstructores(req, res) {
       return res.status(400).json({ error: 'Se requiere un array de instructores' })
     }
 
-    let insertados = 0
+    let creados = 0
+    let actualizados = 0
     let errores = 0
 
     for (const inst of instructores) {
       try {
+        const { fichaId, fichas, esLider, password, ...rest } = inst
+        if (!rest.rol) rest.rol = 'Instructor'
+
         const existe = await Instructor.findOne({
           $or: [
-            { numeroDocumento: inst.numeroDocumento },
-            { correo: inst.correo }
+            { numeroDocumento: String(rest.numeroDocumento).trim() },
+            { correo: rest.correo }
           ]
         })
 
+        let instructor
         if (!existe) {
-          const clavePlana = inst.password || 'sena2026'
+          const clavePlana = password || 'sena2026'
           const passwordHash = await hashPassword(clavePlana)
-          await Instructor.create({
-            ...inst,
+          instructor = await Instructor.create({
+            ...rest,
             password: passwordHash
           })
-          insertados++
+          creados++
+        } else {
+          const datos = { ...rest }
+          if (password) {
+            datos.password = await hashPassword(password)
+          }
+          instructor = await Instructor.findByIdAndUpdate(existe._id, datos, { new: true })
+          actualizados++
+        }
+
+        // Normalizar lista de fichas
+        let listaFichas = []
+        if (Array.isArray(fichas) && fichas.length > 0) {
+          listaFichas = fichas
+        } else if (fichaId) {
+          listaFichas = [{ fichaId, esLider: !!esLider }]
+        }
+
+        for (const item of listaFichas) {
+          const targetFichaId = item.fichaId || item
+          const esLiderFicha = item.esLider !== undefined ? item.esLider : esLider
+          if (targetFichaId) {
+            if (esLiderFicha) {
+              await Ficha.findByIdAndUpdate(targetFichaId, { instructorLiderId: instructor._id })
+            } else {
+              await Ficha.findByIdAndUpdate(targetFichaId, { $addToSet: { instructores: instructor._id } })
+            }
+          }
         }
       } catch (err) {
         errores++
       }
     }
 
-    res.json({ ok: true, insertados, errores })
+    res.status(201).json({ ok: true, creados, actualizados, errores })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

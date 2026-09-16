@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { socket, unirseASalaFicha, salirDeSalaFicha, notificarMarcacionKiosco } from '../services/socket.js'
-import api from '../services/api.js'
+import { socket, unirseASalaFicha, salirDeSalaFicha, notificarMarcacionKiosco } from '../services/index.js'
+import api from '../services/index.js'
+import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 
 const props = defineProps({
   ficha: {
@@ -28,6 +29,7 @@ const emit = defineEmits(['salir-kiosco', 'asistencia-marcada'])
 const sesionActiva = ref(false)
 const sesionData = ref(null)
 const fichaDinamica = ref(props.ficha || null)
+const sesionInicioMs = ref(null)
 
 const fichaActual = computed(() => {
   if (fichaDinamica.value) return fichaDinamica.value
@@ -105,7 +107,7 @@ async function cargarEstudiantesYAsistencias(targetFichaId) {
   if (!idParaCargar) return
   try {
     const [estRes, asisRes] = await Promise.all([
-      api.estudiantes.getAll({ fichaId: idParaCargar }),
+      api.estudiantes.getAll({ fichaId: idParaCargar, estado: 'Activo' }),
       api.asistencias.getAll({ fichaId: idParaCargar, fecha: props.fecha }),
     ])
 
@@ -155,6 +157,7 @@ function iniciarSocketKiosco() {
     sesionActiva.value = activa
     sesionData.value = sesion
     if (activa && sesion?.fichaId) {
+      sesionInicioMs.value = Date.now()
       fichaDinamica.value = {
         _id: sesion.fichaId,
         codigoFicha: sesion.fichaCodigo,
@@ -164,6 +167,7 @@ function iniciarSocketKiosco() {
       cargarEstudiantesYAsistencias(sesion.fichaId)
       iniciarCapturaBiometrica()
     } else if (!activa) {
+      sesionInicioMs.value = null
       detenerCapturaBiometrica()
     }
   })
@@ -173,6 +177,7 @@ function iniciarSocketKiosco() {
     console.log('[Kiosco] 📡 Recibida orden remota: ACTIVAR ASISTENCIA para ficha', sesion.fichaCodigo)
     sesionActiva.value = true
     sesionData.value = sesion
+    sesionInicioMs.value = Date.now()
     fichaDinamica.value = {
       _id: sesion.fichaId,
       codigoFicha: sesion.fichaCodigo,
@@ -190,6 +195,7 @@ function iniciarSocketKiosco() {
   const onDesactivar = () => {
     console.log('[Kiosco] 📡 Recibida orden remota: DESACTIVAR ASISTENCIA')
     sesionActiva.value = false
+    sesionInicioMs.value = null
     detenerCapturaBiometrica()
     if (props.standalone) {
       fichaDinamica.value = null
@@ -306,10 +312,11 @@ async function procesarHuellaKiosco(imageBase64) {
       const nombreCompleto = `${result.nombres} ${result.apellidos}`
       const registroPrevio = asistenciasDia.value[estId]
 
-      // Determinar si es presente o tardanza
-      const jornada = fichaActual.value?.jornada || 'Mañana'
-      const esTardanza = calcularTardanza(jornada, ahora)
-      const estadoMarcado = esTardanza ? 'Tardanza' : 'Presente'
+      // Determinar si es presente, tardanza o falta según el tiempo desde el inicio de la sesión
+      const ahoraMs = ahora.getTime()
+      const minutos = calcularMinutosTranscurridos(sesionInicioMs.value || ahoraMs, ahoraMs)
+      const resultadoTiempo = calcularEstadoPorTiempo(minutos)
+      const estadoMarcado = resultadoTiempo.estado
 
       if (registroPrevio && (registroPrevio.estado === 'Presente' || registroPrevio.estado === 'Tardanza')) {
         // Ya había registrado asistencia previamente
@@ -325,6 +332,8 @@ async function procesarHuellaKiosco(imageBase64) {
           fecha: props.fecha,
           estado: estadoMarcado,
           hora: horaStr,
+          horasTardanza: resultadoTiempo.horasTardanza,
+          tiempoTardanza: resultadoTiempo.tiempoTardanza,
           instructorId: props.instructor?.id || null,
         })
 
@@ -363,21 +372,6 @@ async function procesarHuellaKiosco(imageBase64) {
   } finally {
     procesandoHuella.value = false
   }
-}
-
-function calcularTardanza(jornada, ahora) {
-  const horas = ahora.getHours()
-  const minutos = ahora.getMinutes()
-  const totalMinutos = horas * 60 + minutos
-
-  // Jornadas estándar SENA (Tolerancia 15 minutos):
-  // Mañana: 06:00 -> Límite 06:15 (375 min)
-  // Tarde: 12:00 -> Límite 12:15 (735 min)
-  // Noche: 18:00 -> Límite 18:15 (1095 min)
-  if (jornada === 'Mañana' && totalMinutos > 6 * 60 + 15) return true
-  if (jornada === 'Tarde' && totalMinutos > 12 * 60 + 15) return true
-  if (jornada === 'Noche' && totalMinutos > 18 * 60 + 15) return true
-  return false
 }
 
 function mostrarResultadoMarcacion(resultado) {

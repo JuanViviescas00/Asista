@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import api from '../services/api.js'
-import './panelEstudiante.css'
+import api from '../services/index.js'
+import '../styles/panelEstudiante.css'
 
 const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : { id: '', nombre: 'Estudiante', rol: 'Estudiante' })

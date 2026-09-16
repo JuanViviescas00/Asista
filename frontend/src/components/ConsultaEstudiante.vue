@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import api from '../services/api.js'
-import './consultaEstudiante.css'
+import api from '../services/index.js'
+import '../styles/consultaEstudiante.css'
 
 const busqueda = ref('')
 const estudianteSeleccionado = ref(null)

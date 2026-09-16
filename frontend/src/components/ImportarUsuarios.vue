@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import * as XLSX from 'xlsx'
 import api from '../services/api.js'
 import './importarUsuarios.css'
 
@@ -84,10 +85,51 @@ function parsearCSV(texto) {
     const valores = parsearLineaCSV(lineas[i])
     if (valores.length === 0) continue
     const row = {}
-    headers.forEach((h, idx) => { row[h] = (valores[idx] || '').trim() })
+    headers.forEach((h, idx) => { row[h] = (valores[idx] !== undefined && valores[idx] !== null ? String(valores[idx]) : '').trim() })
     rows.push({ ...row, _linea: i + 1 })
   }
   return { headers, rows }
+}
+
+function parsearXLSX(dataBuffer) {
+  try {
+    const workbook = XLSX.read(dataBuffer, { type: 'array' })
+    const primerHojaNombre = workbook.SheetNames[0]
+    if (!primerHojaNombre) {
+      showToastFn('El archivo Excel no contiene hojas de cálculo', 'error')
+      return { headers: [], rows: [] }
+    }
+    const hoja = workbook.Sheets[primerHojaNombre]
+    const dataMatriz = XLSX.utils.sheet_to_json(hoja, { header: 1, defval: '' })
+    if (!dataMatriz || dataMatriz.length < 2) {
+      showToastFn('El archivo debe tener al menos una fila de cabecera y datos', 'error')
+      return { headers: [], rows: [] }
+    }
+
+    // Cabeceras en la primera fila
+    const headersCrudos = dataMatriz[0].map(h => String(h || '').trim())
+    const rows = []
+
+    for (let i = 1; i < dataMatriz.length; i++) {
+      const fila = dataMatriz[i]
+      // Si la fila está completamente vacía, ignorarla
+      if (!fila || fila.every(v => v === '' || v === null || v === undefined)) continue
+
+      const row = {}
+      headersCrudos.forEach((h, idx) => {
+        if (!h) return
+        const val = fila[idx]
+        row[h] = val !== undefined && val !== null ? String(val).trim() : ''
+      })
+      rows.push({ ...row, _linea: i + 1 })
+    }
+
+    return { headers: headersCrudos, rows }
+  } catch (err) {
+    console.error('Error procesando XLSX:', err)
+    showToastFn('Error al leer el archivo Excel: ' + err.message, 'error')
+    return { headers: [], rows: [] }
+  }
 }
 
 function parsearLineaCSV(linea) {
@@ -103,6 +145,7 @@ function parsearLineaCSV(linea) {
   resultado.push(actual)
   return resultado
 }
+
 
 function validarHeaders(headers) {
   return headersEsperados.value.every(h => headers.includes(h))
@@ -191,12 +234,12 @@ function procesarArchivo(event) {
   advertencias.value = []
   importado.value = false
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    const texto = e.target.result
-    const { headers, rows } = parsearCSV(texto)
-    if (headers.length === 0 || rows.length === 0) {
-      showToastFn('El archivo está vacío o no se pudo leer', 'error')
+  const extension = file.name.split('.').pop().toLowerCase()
+  const esExcel = extension === 'xlsx' || extension === 'xls'
+
+  const procesarFilasYHeaders = (headers, rows) => {
+    if (!headers || headers.length === 0 || !rows || rows.length === 0) {
+      showToastFn('El archivo está vacío o no contiene filas de datos', 'error')
       return
     }
     if (!validarHeaders(headers)) {
@@ -207,11 +250,11 @@ function procesarArchivo(event) {
     const tempRegistros = []
     const tempErrores = []
     const tempAdvertencias = []
-
     const documentosEnArchivo = new Map()
 
     rows.forEach((row) => {
       const errs = validarFila(row)
+
 
       // VERIFICACIÓN ANTI-DUPLICADOS DE DOCUMENTO/CÓDIGO
       if (tipoImportacion.value === 'estudiantes') {
@@ -273,8 +316,25 @@ function procesarArchivo(event) {
     errores.value = tempErrores
     advertencias.value = tempAdvertencias
   }
-  reader.readAsText(file, 'UTF-8')
+
+  const reader = new FileReader()
+  if (esExcel) {
+    reader.onload = (e) => {
+      const buffer = e.target.result
+      const { headers, rows } = parsearXLSX(buffer)
+      procesarFilasYHeaders(headers, rows)
+    }
+    reader.readAsArrayBuffer(file)
+  } else {
+    reader.onload = (e) => {
+      const texto = e.target.result
+      const { headers, rows } = parsearCSV(texto)
+      procesarFilasYHeaders(headers, rows)
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
 }
+
 
 async function ejecutarImportacion() {
   if (registros.value.length === 0) {
@@ -353,38 +413,62 @@ async function ejecutarImportacion() {
   }
 }
 
-function descargarPlantilla() {
-  let contenido = ''
-  let nombreArchivo = ''
+function descargarPlantilla(formato = 'csv') {
+  let headers = []
+  let datosEjemplo = []
+  let nombreBase = ''
 
   if (tipoImportacion.value === 'fichas') {
-    nombreArchivo = 'carga_masiva_fichas.csv'
-    contenido = `Codigo_Ficha,Nombre_Programa,Jornada,Aula_Asignada,Fecha_Inicio,Fecha_Fin
-2670123,Análisis y Desarrollo de Software (ADSO),Mañana,Aula 302 Bloque A,2026-02-01,2026-11-30
-2891234,Gestión de Redes de Datos,Tarde,Laboratorio 105 Bloque B,2026-02-01,2026-11-30
-2901122,Diseño Gráfico Digital,Noche,Taller de Diseño Bloque C,2026-02-15,2026-12-15`
+    nombreBase = 'carga_masiva_fichas'
+    headers = HEADERS_FICHAS
+    datosEjemplo = [
+      ['2670123', 'Análisis y Desarrollo de Software (ADSO)', 'Mañana', 'Aula 302 Bloque A', '2026-02-01', '2026-11-30'],
+      ['2891234', 'Gestión de Redes de Datos', 'Tarde', 'Laboratorio 105 Bloque B', '2026-02-01', '2026-11-30'],
+      ['2901122', 'Diseño Gráfico Digital', 'Noche', 'Taller de Diseño Bloque C', '2026-02-15', '2026-12-15']
+    ]
   } else if (tipoImportacion.value === 'instructores') {
-    nombreArchivo = 'carga_masiva_instructores.csv'
-    contenido = `Tipo_Doc,Num_Doc,Nombres,Apellidos,Genero,Correo,Telefono,Ficha,Es_Lider,Jornada
-CC,1055443301,Carlos Alberto,Mendoza Pérez,Masculino,carlos.mendoza@sena.edu.co,3104567890,"2670123, 2891234",SI,Mañana
-CC,1055443302,Patricia Elena,Jaramillo Morales,Femenino,patricia.jaramillo@sena.edu.co,3156789012,2891234,SI,Tarde
-CC,1055443303,Roberto Antonio,Gómez Restrepo,Masculino,roberto.gomez@sena.edu.co,3123456789,"2901122 / 2670123",NO,Noche
-CC,1055443304,María Fernanda,Suárez Castro,Femenino,maria.suarez@sena.edu.co,3189012345,2670123,NO,Mañana`
+    nombreBase = 'carga_masiva_instructores'
+    headers = HEADERS_INSTRUCTORES
+    datosEjemplo = [
+      ['CC', '1055443301', 'Carlos Alberto', 'Mendoza Pérez', 'Masculino', 'carlos.mendoza@sena.edu.co', '3104567890', '2670123, 2891234', 'SI', 'Mañana'],
+      ['CC', '1055443302', 'Patricia Elena', 'Jaramillo Morales', 'Femenino', 'patricia.jaramillo@sena.edu.co', '3156789012', '2891234', 'SI', 'Tarde'],
+      ['CC', '1055443303', 'Roberto Antonio', 'Gómez Restrepo', 'Masculino', 'roberto.gomez@sena.edu.co', '3123456789', '2901122 / 2670123', 'NO', 'Noche'],
+      ['CC', '1055443304', 'María Fernanda', 'Suárez Castro', 'Femenino', 'maria.suarez@sena.edu.co', '3189012345', '2670123', 'NO', 'Mañana']
+    ]
   } else {
-    nombreArchivo = 'carga_masiva_estudiantes.csv'
-    contenido = `Tipo_Doc,Num_Doc,Nombres,Apellidos,Genero,Correo,Telefono,Ficha,Jornada
-CC,1098765432,Alejandro,Morales Ríos,Masculino,alejandro.morales@misena.edu.co,3112345678,2670123,Mañana
-CC,1098765433,Valentina,Ospina Gutiérrez,Femenino,valentina.ospina@misena.edu.co,3123456789,2670123,Mañana
-CC,1098765434,Santiago,Cardona Henao,Masculino,santiago.cardona@misena.edu.co,3134567890,2670123,Mañana`
+    nombreBase = 'carga_masiva_estudiantes'
+    headers = HEADERS_ESTUDIANTES
+    datosEjemplo = [
+      ['CC', '1098765432', 'Alejandro', 'Morales Ríos', 'Masculino', 'alejandro.morales@misena.edu.co', '3112345678', '2670123', 'Mañana'],
+      ['CC', '1098765433', 'Valentina', 'Ospina Gutiérrez', 'Femenino', 'valentina.ospina@misena.edu.co', '3123456789', '2670123', 'Mañana'],
+      ['CC', '1098765434', 'Santiago', 'Cardona Henao', 'Masculino', 'santiago.cardona@misena.edu.co', '3134567890', '2670123', 'Mañana']
+    ]
   }
 
-  const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.setAttribute('download', nombreArchivo)
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
+  if (formato === 'xlsx') {
+    // Solo la plantilla con sus encabezados de columna, sin filas de datos de ejemplo
+    const matriz = [headers]
+    const ws = XLSX.utils.aoa_to_sheet(matriz)
+    ws['!cols'] = headers.map(h => ({ wch: Math.max(String(h).length + 4, 18) }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
+    XLSX.writeFile(wb, `${nombreBase}.xlsx`)
+    showToastFn(`Plantilla ${nombreBase}.xlsx descargada`)
+  } else {
+    const lineas = [
+      headers.join(','),
+      ...datosEjemplo.map(fila => fila.map(v => (String(v).includes(',') || String(v).includes(';') ? `"${v}"` : v)).join(','))
+    ]
+    const contenido = lineas.join('\n')
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.setAttribute('download', `${nombreBase}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showToastFn(`Plantilla ${nombreBase}.csv descargada`)
+  }
 }
 
 function limpiarTodo() {
@@ -400,14 +484,14 @@ function limpiarTodo() {
 
 <template>
   <div class="import-users-page-header">
-    <h1>Carga Masiva de Archivos Planos</h1>
-    <p>Importación masiva mediante archivos CSV</p>
+    <h1>Carga Masiva de Archivos</h1>
+    <p>Importación masiva mediante archivos planos CSV o libros de Excel (.xlsx / .xls)</p>
   </div>
 
   <!-- SI NO TIENE PERMISO (SI ES DOCENTE COMÚN) -->
   <div v-if="!permisoCarga" class="import-users-card import-users-restricted-card">
     <div class="import-users-restricted-message">
-      🔒 <strong>Acceso Restringido:</strong> La carga masiva mediante archivos planos (CSV) está reservada para el <strong>Administrador</strong> o <strong>Instructores Líderes de Ficha</strong>.
+      🔒 <strong>Acceso Restringido:</strong> La carga masiva mediante archivos planos o Excel está reservada para el <strong>Administrador</strong> o <strong>Instructores Líderes de Ficha</strong>.
     </div>
   </div>
 
@@ -417,8 +501,11 @@ function limpiarTodo() {
       <div class="import-users-card-header">
         <h3>Configuración de Importación</h3>
         <div class="import-users-header-actions">
-          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla">
-            📄 Descargar Plantilla de Ejemplo (.csv)
+          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla('xlsx')">
+            📊 Plantilla (.xlsx)
+          </button>
+          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla('csv')">
+            📄 Plantilla (.csv)
           </button>
           <span v-if="usuario.rol === 'Instructor'" class="import-users-badge import-users-badge-success">
             👑 Docente Líder Autorizado
@@ -435,18 +522,19 @@ function limpiarTodo() {
           </select>
         </div>
         <div class="import-users-form-group">
-          <label>Archivo CSV</label>
+          <label>Archivo Excel o CSV (.xlsx, .xls, .csv)</label>
           <div class="import-users-file-upload">
-            <input id="archivo-input" type="file" accept=".csv" @change="procesarArchivo" class="import-users-file-input" />
-            <label for="archivo-input" class="import-users-file-label">{{ archivoNombre || 'Seleccionar archivo .csv' }}</label>
+            <input id="archivo-input" type="file" accept=".xlsx,.xls,.csv" @change="procesarArchivo" class="import-users-file-input" />
+            <label for="archivo-input" class="import-users-file-label">{{ archivoNombre || 'Seleccionar archivo .xlsx o .csv' }}</label>
           </div>
         </div>
       </div>
 
       <div class="import-users-info">
-        <h4>Formato requerido del archivo CSV ({{ tipoImportacion.toUpperCase() }}):</h4>
-        <p>Cabeceras obligatorias requeridas:</p>
+        <h4>Formato requerido del archivo ({{ tipoImportacion.toUpperCase() }}):</h4>
+        <p>Cabeceras obligatorias requeridas (en la fila 1 de Excel o CSV):</p>
         <code>{{ headersEsperados.join(',') }}</code>
+
         
         <ul v-if="tipoImportacion === 'instructores'" class="import-users-info-list">
           <li><strong>Tipo_Doc:</strong> CC, CE o PEP</li>

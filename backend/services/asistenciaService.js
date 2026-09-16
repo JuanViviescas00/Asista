@@ -37,22 +37,39 @@ export async function getFichaIdList(fichaId) {
   return ids
 }
 
+// Umbrales de tardanza medidos en MINUTOS desde la hora de inicio de la clase.
+// Regla del negocio:
+//   0 a 5 min  -> Presente (a tiempo)
+//   5 a 65 min -> Tardanza de 1 hora
+//   65 a 125 min -> Tardanza de 2 horas
+//   más de 125 min -> Falta (asistencia fallida)
+export const TOLERANCIA_MINUTOS = 5
+export const LIMITE_TARDANZA_1_HORA = 65
+export const LIMITE_TARDANZA_2_HORAS = 125
+
 /**
- * Calcula si una marcación corresponde a Tardanza o Presente según la jornada SENA
+ * Calcula el estado de una marcación (Presente / Tardanza / Falta) según los
+ * minutos transcurridos desde la hora de inicio de la clase (`inicioClase`).
+ *
+ * Devuelve un objeto con:
+ *   - estado: 'Presente' | 'Tardanza' | 'Falta'
+ *   - horasTardanza: número de horas de retraso (0 si no aplica)
+ *   - tiempoTardanza: texto legible del retraso ('0 horas', '1 hora', '2 horas')
  */
-export function calcularEstadoAsistencia(jornada, fechaHora = new Date()) {
-  const horas = fechaHora.getHours()
-  const minutos = fechaHora.getMinutes()
-  const totalMinutos = horas * 60 + minutos
+export function calcularEstadoAsistencia(inicioClase, fechaHora = new Date()) {
+  const inicioMs = inicioClase ? new Date(inicioClase).getTime() : Date.now()
+  const marcacionMs = fechaHora ? new Date(fechaHora).getTime() : Date.now()
 
-  // Tolerancia de 15 minutos en jornadas estándar SENA:
-  // Mañana: 06:00 -> Límite 06:15 (375 min)
-  // Tarde:  12:00 -> Límite 12:15 (735 min)
-  // Noche:  18:00 -> Límite 18:15 (1095 min)
-  let limiteMinutos = 375 // Mañana por defecto
-  if (jornada === 'Tarde') limiteMinutos = 735
-  if (jornada === 'Noche') limiteMinutos = 1095
+  const minutos = Math.floor((marcacionMs - inicioMs) / 60000)
 
-  const esTardanza = totalMinutos > limiteMinutos
-  return esTardanza ? 'Tardanza' : 'Presente'
+  if (minutos < 0 || minutos <= TOLERANCIA_MINUTOS) {
+    return { estado: 'Presente', horasTardanza: 0, tiempoTardanza: '0 horas' }
+  }
+  if (minutos <= LIMITE_TARDANZA_1_HORA) {
+    return { estado: 'Tardanza', horasTardanza: 1, tiempoTardanza: '1 hora' }
+  }
+  if (minutos <= LIMITE_TARDANZA_2_HORAS) {
+    return { estado: 'Tardanza', horasTardanza: 2, tiempoTardanza: '2 horas' }
+  }
+  return { estado: 'Falta', horasTardanza: 0, tiempoTardanza: '0 horas' }
 }

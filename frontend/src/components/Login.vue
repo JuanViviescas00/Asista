@@ -6,7 +6,7 @@ import instructorIcon from '../assets/instructor-icon.png'
 import senaLogo from '../assets/sena-logo.png'
 import './login.css'
 
-const emit = defineEmits(['login-success', 'abrir-kiosco'])
+const emit = defineEmits(['login-success'])
 
 const tipoAcceso = ref('personal') // 'personal' (Instructores/Admin) o 'aprendiz' (Consulta por documento)
 
@@ -327,24 +327,6 @@ async function restablecerPassword() {
 
           <button class="login-button login-button-primary login-button-full login-button-student" @click="consultarAprendiz" :disabled="loading">
             {{ loading ? 'Consultando...' : '🔍 Consultar Mi Asistencia' }}
-          </button>
-        </div>
-
-        <!-- ACCESO DIRECTO MODO KIOSCO DE AULA (SIN CREDENCIALES) -->
-        <div class="login-kiosk-box">
-          <div class="login-kiosk-divider">
-            <span>O para computadores del aula</span>
-          </div>
-          <button
-            type="button"
-            class="btn-kiosk-access"
-            @click="$emit('abrir-kiosco')"
-          >
-            <span class="btn-kiosk-icon">🖥️</span>
-            <div class="btn-kiosk-text">
-              <strong>Modo Kiosco de Aula</strong>
-              <small>Esperar activación remota del docente (Sin contraseña)</small>
-            </div>
           </button>
         </div>
       </template>

@@ -13,6 +13,19 @@ export function generarToken(payload) {
 }
 
 /**
+ * Verifica un token JWT y devuelve el payload decodificado, o null si es
+ * inválido/expirado. Reutilizado por el WebSocket (unirse_sala) para no
+ * duplicar la lógica de verificación del middleware Express.
+ */
+export function verificarTokenJWT(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET)
+  } catch (_) {
+    return null
+  }
+}
+
+/**
  * Middleware de autenticación obligatoria mediante JWT
  * Extrae y valida la cabecera 'Authorization: Bearer <token>'
  */

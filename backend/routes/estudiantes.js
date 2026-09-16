@@ -19,7 +19,7 @@ router.post('/',
 
 router.put('/:id',
   autenticarJWT,
-  verificarRol(['Administrador']),
+  verificarRol(['Administrador', 'Instructor']),
   estudianteController.updateEstudiante
 )
 

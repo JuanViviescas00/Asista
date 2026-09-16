@@ -1,4 +1,8 @@
 import Ficha from '../models/Ficha.js'
+import Estudiante from '../models/Estudiante.js'
+import Dispositivo from '../models/Dispositivo.js'
+import mongoose from 'mongoose'
+import bcryptjs from 'bcryptjs'
 
 export async function getFichas(req, res) {
   try {
@@ -43,6 +47,71 @@ export async function getMisFichas(req, res) {
     })
 
     res.json(resultado)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function getPlantillasFicha(req, res) {
+  try {
+    const { id } = req.params
+    const deviceId = req.headers['x-device-id']
+    const token = req.headers['x-device-token']
+
+    // Autenticación del dispositivo (mismo patrón que POST /api/asistencias/sync
+    // y el HELLO del WebSocket): deviceId + token contra tokenHash con bcryptjs.
+    // No usa JWT de usuario porque quien llama es la app local del huellero.
+    if (!deviceId || !token) {
+      return res.status(401).json({ error: 'deviceId y token son requeridos' })
+    }
+    const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
+    if (!dispositivo) {
+      return res.status(401).json({ error: 'Dispositivo no registrado' })
+    }
+    if (dispositivo.activo !== true) {
+      return res.status(403).json({ error: 'Dispositivo inactivo' })
+    }
+    const tokenValido = await bcryptjs.compare(String(token), dispositivo.tokenHash)
+    if (!tokenValido) {
+      return res.status(401).json({ error: 'Token de dispositivo inválido' })
+    }
+
+    // Resuelve el id (ObjectId o codigoFicha) a los posibles valores de fichaId
+    // que puede tener un Estudiante (campo Mixed), igual que el resto del backend.
+    const idsBuscar = [id]
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      idsBuscar.push(new mongoose.Types.ObjectId(id))
+    }
+    try {
+      const queryFicha = []
+      if (mongoose.Types.ObjectId.isValid(id)) queryFicha.push({ _id: id })
+      queryFicha.push({ codigoFicha: String(id).trim() })
+      const fichaDoc = await Ficha.findOne({ $or: queryFicha })
+      if (fichaDoc) {
+        idsBuscar.push(fichaDoc._id)
+        if (fichaDoc.codigoFicha) idsBuscar.push(fichaDoc.codigoFicha)
+      }
+    } catch (_) {
+      // ignorar: seguimos con el id tal cual llegó
+    }
+
+    const estudiantes = await Estudiante.find({
+      fichaId: { $in: idsBuscar },
+      estado: 'Activo',
+      huellaEnrolada: true,
+      huellaTemplate: { $ne: '' },
+    }).select('nombres apellidos huellaTemplate')
+
+    // Formato mínimo que consume el huellero (verify.js → toEngineRecord):
+    // { estudianteId, nombres, apellidos, template }
+    const plantillas = estudiantes.map((e) => ({
+      estudianteId: String(e._id),
+      nombres: e.nombres,
+      apellidos: e.apellidos,
+      template: e.huellaTemplate,
+    }))
+
+    res.json(plantillas)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

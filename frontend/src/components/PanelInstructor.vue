@@ -1,9 +1,8 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/api.js'
 import * as XLSX from 'xlsx'
-import KioscoAsistencia from './KioscoAsistencia.vue'
-import { socket, unirseASalaFicha, salirDeSalaFicha, iniciarAsistenciaRemota, cerrarAsistenciaRemota } from '../services/socket.js'
+import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/socket.js'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -17,9 +16,9 @@ const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
 
-// Modo Kiosco y Control Remoto en Vivo
-const modoKioscoActivo = ref(false)
+// Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
+const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
 
 const emit = defineEmits(['cerrar-sesion'])
@@ -41,7 +40,7 @@ function cerrarSesion() {
 
 onMounted(async () => {
   await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
-  setTimeout(() => initFingerprintSDK(), 500)
+  await restaurarEstadoClase()
   iniciarSocketDocente()
 })
 
@@ -52,11 +51,7 @@ onUnmounted(() => {
 })
 
 function iniciarSocketDocente() {
-  socket.on('estado_sesion', ({ activa }) => {
-    sesionRemotaActiva.value = activa
-  })
-
-  socket.on('docente:nueva_marcacion', (data) => {
+  socket.on('ATTENDANCE_REGISTERED', (data) => {
     if (!data || !data.estudianteId) return
     if (asistenciaDia.value[data.estudianteId]) {
       asistenciaDia.value[data.estudianteId].estado = data.estado
@@ -71,35 +66,83 @@ function iniciarSocketDocente() {
     if (feedEnVivoDocente.value.length > 8) {
       feedEnVivoDocente.value.pop()
     }
-    showToast(`🖐️ ${data.nombres} ${data.apellidos} marcó ${data.estado} (${data.hora})`, data.estado === 'Tardanza' ? 'warning' : 'success')
+    showToast(`${data.nombres} ${data.apellidos} marcó ${data.estado} (${data.hora})`, data.estado === 'Tardanza' ? 'warning' : 'success')
+  })
+
+  socket.on('CLASS_ACTIVATED', (data) => {
+    if (!data || !data.fichaId) return
+    if (fichaSeleccionada.value && String(fichaSeleccionada.value._id) === String(data.fichaId)) {
+      sesionRemotaActiva.value = true
+    }
+  })
+
+  socket.on('CLASS_DEACTIVATED', (data) => {
+    if (!data || !data.fichaId) return
+    if (fichaSeleccionada.value && String(fichaSeleccionada.value._id) === String(data.fichaId)) {
+      sesionRemotaActiva.value = false
+    }
+  })
+
+  socket.on('error_autenticacion', (data) => {
+    console.warn('[WS] error_autenticacion:', data)
+    showToast(data?.error || 'No autorizado para unirse a la sala de la ficha.', 'error')
+  })
+
+  socket.on('DEVICE_STATUS', (data) => {
+    dispositivoOnline.value = !!data?.online
+  })
+
+  socket.on('DEVICE_CONNECTED', () => {
+    dispositivoOnline.value = true
+  })
+
+  socket.on('DEVICE_DISCONNECTED', () => {
+    dispositivoOnline.value = false
   })
 }
 
-function iniciarSesionRemotaDocente() {
-  if (!fichaSeleccionada.value) return
-  sesionRemotaActiva.value = true
-  iniciarAsistenciaRemota({
-    fichaId: fichaSeleccionada.value._id,
-    fichaCodigo: fichaSeleccionada.value.codigoFicha,
-    nombrePrograma: fichaSeleccionada.value.nombrePrograma,
-    jornada: fichaSeleccionada.value.jornada,
-    fecha: fechaAsistencia.value,
-    instructorNombre: usuario.value.nombre || 'Instructor',
-  })
-  showToast('▶ Sesión remota iniciada: El Kiosco del aula está recibiendo huellas.', 'success')
+async function restaurarEstadoClase() {
+  try {
+    const estado = await api.clases.estado()
+    if (estado?.activa && estado.ficha) {
+      const fichaActiva = misFichas.value.find(f => String(f._id) === String(estado.ficha._id))
+      if (fichaActiva) {
+        await seleccionarFicha(fichaActiva)
+      }
+      sesionRemotaActiva.value = true
+    } else {
+      sesionRemotaActiva.value = false
+    }
+  } catch (e) {
+    console.error('Error al restaurar el estado de la clase:', e)
+  }
 }
 
-function detenerSesionRemotaDocente() {
+async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
-  sesionRemotaActiva.value = false
-  cerrarAsistenciaRemota(fichaSeleccionada.value._id)
-  showToast('⏹️ Sesión remota finalizada: El Kiosco del aula se ha detenido.', 'info')
+  try {
+    await api.clases.activar({
+      fichaId: fichaSeleccionada.value._id,
+      instructorId: usuario.value.id,
+    })
+    sesionRemotaActiva.value = true
+    showToast('Clase activada: el lector del aula está listo para tomar asistencia.', 'success')
+  } catch (e) {
+    showToast(e.message || 'No se pudo activar la clase', 'error')
+  }
 }
 
-function onKioscoAsistenciaMarcada(data) {
-  if (data?.estudianteId && asistenciaDia.value[data.estudianteId]) {
-    asistenciaDia.value[data.estudianteId].estado = data.estado
-    asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
+async function detenerSesionRemotaDocente() {
+  if (!fichaSeleccionada.value) return
+  try {
+    await api.clases.finalizar({
+      fichaId: fichaSeleccionada.value._id,
+      instructorId: usuario.value.id,
+    })
+    sesionRemotaActiva.value = false
+    showToast('Clase finalizada.', 'info')
+  } catch (e) {
+    showToast(e.message || 'No se pudo finalizar la clase', 'error')
   }
 }
 
@@ -145,27 +188,11 @@ async function seleccionarFicha(ficha) {
   await cargarDatosFicha(ficha._id)
 }
 
-// Auto-activar lectura biométrica al entrar en la vista de asistencia
-watch(vistaFicha, (nuevaVista, viejaVista) => {
-  if (nuevaVista === 'asistencia' && lectorConectado.value && fpSdk) {
-    // Activar modo asistencia
-    modoCaptura = 'asistencia'
-    verificandoHuella.value = true
-    ultimaVerificacion.value = null
-    if (!capturing) {
-      setTimeout(() => iniciarCapturaSDK(), 300)
-    }
-  } else if (viejaVista === 'asistencia' && nuevaVista !== 'asistencia') {
-    // Saliendo de asistencia: detener
-    detenerVerificacionHuella()
-  }
-})
-
 const memoriaBiometricaRAM = ref([])
 
 async function cargarDatosFicha(fichaId) {
   try {
-    const estRes = await api.estudiantes.getAll({ fichaId }).catch(e => { console.error('Error est:', e); return [] })
+    const estRes = await api.estudiantes.getAll({ fichaId, estado: 'Activo' }).catch(e => { console.error('Error est:', e); return [] })
     const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => { console.error('Error asis:', e); return [] })
     const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
 
@@ -320,7 +347,7 @@ async function confirmarInhabilitarJornada() {
     inicializarAsistenciaDia()
 
     await cargarDatosFicha(fichaSeleccionada.value._id)
-    showToast(`🚫 Sesión del ${fecha} inhabilitada correctamente.`, 'info')
+    showToast(`Sesión del ${fecha} inhabilitada correctamente.`, 'info')
   } catch (err) {
     showToast('Error al inhabilitar jornada: ' + err.message, 'error')
     await cargarDatosFicha(fichaSeleccionada.value._id)
@@ -343,7 +370,7 @@ async function reactivarJornada() {
     inicializarAsistenciaDia()
 
     await cargarDatosFicha(fichaSeleccionada.value._id)
-    showToast(`🟢 Sesión del ${fecha} reactivada exitosamente.`, 'success')
+    showToast(`Sesión del ${fecha} reactivada exitosamente.`, 'success')
   } catch (err) {
     showToast('Error al reactivar jornada: ' + err.message, 'error')
   } finally {
@@ -547,9 +574,9 @@ async function guardarAsistenciaDia() {
   guardandoAsistencia.value = false
 
   if (errores === 0) {
-    showToast(`✅ Jornada finalizada. Asistencias guardadas exitosamente.`)
+    showToast(`Jornada finalizada. Asistencias guardadas exitosamente.`)
   } else {
-    showToast(`⚠️ ${exitosos} guardados, ${errores} con error`, 'warning')
+    showToast(`${exitosos} guardados, ${errores} con error`, 'warning')
   }
 }
 
@@ -786,7 +813,7 @@ function iniciarVerificacionHuella() {
   verificandoHuella.value = true
   ultimaVerificacion.value = null
   modoCaptura = 'asistencia'
-  showToast('🖐️ Coloque el dedo en el lector para registrar asistencia...', 'info')
+  showToast('Coloque el dedo en el lector para registrar asistencia...', 'info')
   iniciarCapturaSDK()
 }
 
@@ -818,7 +845,7 @@ async function procesarVerificacionAsistencia(imageBase64) {
             estado: reg.estado,
             hora: reg.horaMarcacion,
           }
-          showToast(`ℹ️ ${nombre} ya estaba marcado como ${reg.estado}.`, 'info')
+          showToast(`${nombre} ya estaba marcado como ${reg.estado}.`, 'info')
         } else {
           // Marcar como presente
           marcarPresente(estId)
@@ -828,7 +855,7 @@ async function procesarVerificacionAsistencia(imageBase64) {
             estado: asistenciaDia.value[estId]?.estado || 'Presente',
             hora: asistenciaDia.value[estId]?.horaMarcacion || '',
           }
-          showToast(`✅ ${nombre} - ${asistenciaDia.value[estId]?.estado} (${asistenciaDia.value[estId]?.horaMarcacion})`, 'success')
+          showToast(`${nombre} - ${asistenciaDia.value[estId]?.estado} (${asistenciaDia.value[estId]?.horaMarcacion})`, 'success')
         }
       } else {
         ultimaVerificacion.value = {
@@ -836,7 +863,7 @@ async function procesarVerificacionAsistencia(imageBase64) {
           nombre: nombre,
           mensaje: 'Estudiante identificado pero no pertenece a esta ficha.',
         }
-        showToast(`⚠️ ${nombre} no pertenece a esta ficha.`, 'warning')
+        showToast(`${nombre} no pertenece a esta ficha.`, 'warning')
       }
     } else {
       ultimaVerificacion.value = {
@@ -844,7 +871,7 @@ async function procesarVerificacionAsistencia(imageBase64) {
         nombre: null,
         mensaje: 'Huella no reconocida. El estudiante puede no estar enrolado.',
       }
-      showToast('❌ Huella no reconocida. Intente de nuevo.', 'error')
+      showToast('Huella no reconocida. Intente de nuevo.', 'error')
     }
   } catch (err) {
     console.error('[Verificacion] Error:', err)
@@ -859,7 +886,7 @@ async function procesarVerificacionAsistencia(imageBase64) {
   // Si el modo asistencia sigue activo, reactivar captura para el siguiente estudiante
   if (verificandoHuella.value) {
     setTimeout(() => {
-      showToast('🖐️ Lector listo para el siguiente estudiante...', 'info')
+      showToast('Lector listo para el siguiente estudiante...', 'info')
       iniciarCapturaSDK()
     }, 1500)
   }
@@ -931,7 +958,7 @@ async function iniciarEnrolamientoReal() {
     }
 
     enrollmentSessionId.value = res.sessionId
-    showToast('🖐️ Coloque el dedo en el lector para la primera muestra...', 'info')
+    showToast('Coloque el dedo en el lector para la primera muestra...', 'info')
     iniciarCapturaSDK()
   } catch (err) {
     enrolando.value = false
@@ -967,7 +994,7 @@ async function enviarCapturaAlBackend(imageBase64) {
         const compRes = await api.estudiantes.fingerprint.enrollComplete(enrollmentSessionId.value)
         if (compRes.success) {
           pasoEnrolamiento.value = 3
-          showToast(`✅ ¡Huella enrolada exitosamente para ${estudianteTarget.value.nombres}!`, 'success')
+          showToast(`¡Huella enrolada exitosamente para ${estudianteTarget.value.nombres}!`, 'success')
           await cargarDatosFicha(fichaSeleccionada.value._id)
         } else {
           throw new Error(compRes.error || 'Error al guardar plantilla biométrica')
@@ -978,7 +1005,7 @@ async function enviarCapturaAlBackend(imageBase64) {
         showToast(compErr.message, 'error')
       }
     } else {
-      showToast(`🖐️ Muestra ${numMuestras} de 4 registrada. Levante y coloque el dedo nuevamente...`, 'info')
+      showToast(`Muestra ${numMuestras} de 4 registrada. Levante y coloque el dedo nuevamente...`, 'info')
       setTimeout(() => {
         if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
           iniciarCapturaSDK()
@@ -987,7 +1014,7 @@ async function enviarCapturaAlBackend(imageBase64) {
     }
   } catch (err) {
     console.error('Error al procesar muestra:', err)
-    showToast('⚠️ Muestra no válida: ' + err.message + '. Intente de nuevo.', 'warning')
+    showToast('Muestra no válida: ' + err.message + '. Intente de nuevo.', 'warning')
     setTimeout(() => {
       if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
         iniciarCapturaSDK()
@@ -1141,7 +1168,7 @@ function descargarSQLite() {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    showToast('💾 Descargando base de datos SQLite institucional...', 'success')
+    showToast('Descargando base de datos SQLite institucional...', 'success')
   } catch (err) {
     console.error('Error al descargar SQLite:', err)
     showToast('Error al descargar SQLite: ' + err.message, 'error')
@@ -1169,22 +1196,12 @@ function descargarExcel(data, nombreArchivo) {
   ws['!cols'] = keys.map(key => ({ wch: Math.min(maxWidths[key] + 2, 40) }))
 
   XLSX.writeFile(wb, `${nombreArchivo}.xlsx`)
-  showToast(`📥 Archivo "${nombreArchivo}.xlsx" descargado`)
+  showToast(`Archivo "${nombreArchivo}.xlsx" descargado`)
 }
 </script>
 
 <template>
-  <!-- MODO KIOSCO DE PANTALLA COMPLETA / AULA -->
-  <KioscoAsistencia
-    v-if="modoKioscoActivo && fichaSeleccionada"
-    :ficha="fichaSeleccionada"
-    :instructor="usuario"
-    :fecha="fechaAsistencia"
-    @salir-kiosco="modoKioscoActivo = false"
-    @asistencia-marcada="onKioscoAsistenciaMarcada"
-  />
-
-  <div v-else class="panel-instructor">
+  <div class="panel-instructor">
     <!-- Toast Notification -->
     <Transition name="toast-fade">
       <div v-if="toast.show" class="toast-notification" :class="'toast-' + toast.type">
@@ -1238,10 +1255,12 @@ function descargarExcel(data, nombreArchivo) {
             <span class="ficha-code">Ficha {{ ficha.codigoFicha }}</span>
             <!-- Badge de Liderazgo -->
             <span v-if="ficha.esLider" class="badge badge-lider" title="Docente Líder de esta Ficha">
-              👑 Líder
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
+              Líder
             </span>
             <span v-else class="badge badge-comun" title="Docente Común en esta Ficha">
-              👤 Común
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
+              Común
             </span>
           </div>
           <div class="ficha-title">{{ ficha.nombrePrograma }}</div>
@@ -1255,10 +1274,12 @@ function descargarExcel(data, nombreArchivo) {
           <div class="banner-title">
             <h3>{{ fichaSeleccionada.nombrePrograma }} ({{ fichaSeleccionada.codigoFicha }})</h3>
             <span v-if="fichaSeleccionada.esLider" class="badge-banner badge-lider">
-              👑 Docente Líder de la Ficha
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
+              Docente Líder de la Ficha
             </span>
             <span v-else class="badge-banner badge-comun">
-              👤 Docente Común
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
+              Docente Común
             </span>
           </div>
           <div class="banner-actions">
@@ -1267,14 +1288,16 @@ function descargarExcel(data, nombreArchivo) {
               :class="{ active: vistaFicha === 'asistencia' }"
               @click="vistaFicha = 'asistencia'"
             >
-              📋 Tomar Asistencia
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              Tomar Asistencia
             </button>
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'editar_asistencia' }"
               @click="vistaFicha = 'editar_asistencia'"
             >
-              ✏️ Historial
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
+              Historial
             </button>
             <!-- BOTÓN GESTIONAR ESTUDIANTES -->
             <button
@@ -1282,22 +1305,16 @@ function descargarExcel(data, nombreArchivo) {
               :class="{ active: vistaFicha === 'gestionar_estudiantes' }"
               @click="vistaFicha = 'gestionar_estudiantes'"
             >
-              📝 Gestionar Estudiantes
-            </button>
-            <!-- BOTÓN DE ENROLAMIENTO -->
-            <button
-              class="tab-btn"
-              :class="{ active: vistaFicha === 'enrolar_huella' }"
-              @click="vistaFicha = 'enrolar_huella'"
-            >
-              ☝️ Enrolar Huellas
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
+              Gestionar Estudiantes
             </button>
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'docentes' }"
               @click="vistaFicha = 'docentes'"
             >
-              👥 Equipo Docente
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3.3"/><path d="M2.5 19c1.2-3.4 3.8-5.2 6.5-5.2s5.3 1.8 6.5 5.2z"/><circle cx="17" cy="8.5" r="2.6" opacity="0.75"/><path d="M15 13.6c2.2.4 4 2 5 5H18" opacity="0.75"/></svg>
+              Equipo Docente
             </button>
           </div>
         </div>
@@ -1314,9 +1331,13 @@ function descargarExcel(data, nombreArchivo) {
                   <span class="live-dot" :class="{ 'live-dot-pulsing': sesionRemotaActiva }"></span>
                   <span>{{ sesionRemotaActiva ? 'CLASE EN VIVO (PASE DE LISTA REMOTO ACTIVO)' : 'PASE DE LISTA REMOTO EN ESPERA' }}</span>
                 </div>
+                <div class="remote-device-status" :class="dispositivoOnline ? 'device-online' : 'device-offline'">
+                  <span class="device-dot"></span>
+                  {{ dispositivoOnline ? 'Lector del aula conectado' : 'Lector del aula desconectado' }}
+                </div>
                 <p class="remote-desc">
                   {{ sesionRemotaActiva 
-                    ? 'El Kiosco del aula está recibiendo huellas de los aprendices. Las marcaciones se sincronizan aquí en tiempo real.' 
+                    ? 'El lector de huellas del aula está recibiendo marcas biométricas de los aprendices. Las asistencias se reflejan aquí en tiempo real.' 
                     : 'Inicia el pase de lista desde este dispositivo móvil/web para activar automáticamente el lector en el computador del aula.' 
                   }}
                 </p>
@@ -1332,7 +1353,8 @@ function descargarExcel(data, nombreArchivo) {
                   :disabled="jornadaInhabilitada"
                   title="Iniciar pase de lista remoto para el aula"
                 >
-                  ▶ Iniciar Pase de Lista Remoto
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5-13-7.5z"/></svg>
+                  Iniciar Pase de Lista Remoto
                 </button>
                 <button
                   v-else
@@ -1341,25 +1363,18 @@ function descargarExcel(data, nombreArchivo) {
                   @click="detenerSesionRemotaDocente"
                   title="Finalizar pase de lista remoto"
                 >
-                  ⏹️ Finalizar Pase de Lista
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  Finalizar Pase de Lista
                 </button>
 
-                <!-- Botón Abrir Kiosco en este PC -->
-                <button
-                  type="button"
-                  class="btn-open-kiosk"
-                  @click="modoKioscoActivo = true"
-                  title="Abrir vista de Kiosco a pantalla completa en este PC"
-                >
-                  🖥️ Abrir Pantalla Kiosco
-                </button>
               </div>
             </div>
 
             <!-- Feed en Vivo si la sesión remota está activa o hay marcaciones recientes -->
             <div v-if="feedEnVivoDocente.length > 0" class="remote-live-feed">
               <div class="live-feed-title">
-                <span>📡 Marcaciones Recientes en Tiempo Real:</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M8 9a6 6 0 0 1 8 0"/><path d="M5 6a10.5 10.5 0 0 1 14 0"/></svg>
+                <span>Marcaciones Recientes en Tiempo Real</span>
               </div>
               <div class="live-feed-chips">
                 <div
@@ -1384,27 +1399,6 @@ function descargarExcel(data, nombreArchivo) {
             
             <!-- Controles de Navegación por Días e Inhabilitación -->
             <div class="section-header-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-              <!-- Botón Biometría Huella -->
-              <button
-                v-if="!verificandoHuella"
-                type="button"
-                class="btn-biometric"
-                @click="iniciarVerificacionHuella"
-                :disabled="jornadaInhabilitada"
-                :title="jornadaInhabilitada ? 'La sesión está inhabilitada. Reactívela para usar el lector.' : 'Iniciar toma de asistencia con lector biométrico'"
-              >
-                ☝️ Iniciar Biometría
-              </button>
-              <button
-                v-else
-                type="button"
-                class="btn-biometric-stop"
-                @click="detenerVerificacionHuella"
-                title="Detener lector biométrico"
-              >
-                ⏹️ Detener Biometría
-              </button>
-
               <!-- Barra de Navegación por Días -->
               <div class="day-nav-bar" :class="{ 'nav-day-inhabilitada': jornadaInhabilitada }" style="display: inline-flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 3px 6px;">
                 <button
@@ -1425,8 +1419,9 @@ function descargarExcel(data, nombreArchivo) {
                   title="Seleccionar fecha (Solo hoy o días anteriores)"
                   style="border: none; background: transparent; font-weight: 600; font-size: 13px; color: #1e293b; padding: 4px 6px; outline: none; cursor: pointer;"
                 />
-                <span v-if="jornadaInhabilitada" style="font-size: 11px; background: #ea580c; color: white; padding: 2px 6px; border-radius: 6px; font-weight: 700; margin-right: 4px;">
-                  🚫 Inhabilitada
+                <span v-if="jornadaInhabilitada" style="font-size: 11px; background: #ea580c; color: white; padding: 2px 6px; border-radius: 6px; font-weight: 700; margin-right: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+                  Inhabilitada
                 </span>
                 <button
                   type="button"
@@ -1479,7 +1474,8 @@ function descargarExcel(data, nombreArchivo) {
                 title="Inhabilitar la toma de asistencia para esta jornada"
                 style="background: #fff1f2; border: 1.5px solid #fecdd3; color: #e11d48; font-weight: 600; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
-                🚫 Inhabilitar Sesión
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+                Inhabilitar Sesión
               </button>
               <button
                 v-else
@@ -1490,24 +1486,26 @@ function descargarExcel(data, nombreArchivo) {
                 title="Reactivar la jornada para tomar asistencia"
                 style="background: #f0fdf4; border: 1.5px solid #bbf7d0; color: #16a34a; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
-                🟢 {{ inhabilitando ? '⏳ Reactivando...' : '🟢 Reactivar Sesión' }}
+                {{ inhabilitando ? 'Reactivando...' : 'Reactivar Sesión' }}
               </button>
             </div>
           </div>
 
           <!-- HUD Card de Día Inhabilitado -->
           <div v-if="jornadaInhabilitada" class="hud-inhabilitado-card">
-            <div class="hud-inhabilitado-icon">🚫</div>
+            <div class="hud-inhabilitado-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+            </div>
             <div class="hud-inhabilitado-content">
               <div class="hud-inhabilitado-title">
                 <span>JORNADA INHABILITADA</span>
                 <span class="hud-inhabilitado-fecha">{{ fechaAsistencia }}</span>
               </div>
               <div class="hud-inhabilitado-motivo">
-                📌 <strong>Motivo registrado:</strong> {{ motivoInhabilitacionDia }}
+                <strong>Motivo registrado:</strong> {{ motivoInhabilitacionDia }}
               </div>
               <div class="hud-inhabilitado-desc">
-                ℹ️ La toma de asistencia para este día se encuentra suspendida. Los aprendices no acumulan fallas injustificadas ni penalizaciones.
+                La toma de asistencia para este día se encuentra suspendida. Los aprendices no acumulan fallas injustificadas ni penalizaciones.
               </div>
             </div>
             <button
@@ -1515,48 +1513,51 @@ function descargarExcel(data, nombreArchivo) {
               @click="reactivarJornada"
               :disabled="inhabilitando"
             >
-              🟢 {{ inhabilitando ? '⏳ Reactivando...' : 'Reactivar Jornada' }}
+              {{ inhabilitando ? 'Reactivando...' : 'Reactivar Jornada' }}
             </button>
           </div>
 
           <!-- Panel de verificación biométrica activa (Solo si la sesión no está inhabilitada) -->
           <div v-if="verificandoHuella && !jornadaInhabilitada" class="biometric-panel">
-            <div class="biometric-pulse-icon">☝️</div>
+            <div class="biometric-pulse-icon"></div>
             <div class="biometric-panel-text">
               <strong>Lector biométrico activo</strong>
               <span>Esperando que los estudiantes coloquen su dedo en el sensor...</span>
             </div>
             <div v-if="ultimaVerificacion" class="biometric-last-result" :class="{ 'result-ok': ultimaVerificacion.exito, 'result-fail': !ultimaVerificacion.exito }">
               <span v-if="ultimaVerificacion.exito">
-                ✅ {{ ultimaVerificacion.nombre }} — {{ ultimaVerificacion.estado }} ({{ ultimaVerificacion.hora }})
+                {{ ultimaVerificacion.nombre }} — {{ ultimaVerificacion.estado }} ({{ ultimaVerificacion.hora }})
               </span>
               <span v-else>
-                ❌ {{ ultimaVerificacion.mensaje }}
+                {{ ultimaVerificacion.mensaje }}
               </span>
             </div>
           </div>
 
           <!-- Contadores rápidos -->
           <div class="conteo-row">
-            <div v-if="jornadaInhabilitada" class="conteo-chip" style="background: #ffedd5; color: #9a3412; border: 1.5px solid #fdba74; font-weight: 700;">
-              🚫 Sesión Inhabilitada ({{ conteoAsistencia.Inhabilitada }} aprendices protegidos sin falta)
+            <div v-if="jornadaInhabilitada" class="conteo-chip" style="background: #ffedd5; color: #9a3412; border: 1.5px solid #fdba74; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+              Sesión Inhabilitada ({{ conteoAsistencia.Inhabilitada }} aprendices protegidos sin falta)
             </div>
             <template v-else>
-              <div class="conteo-chip conteo-presente">✅ Presentes: {{ conteoAsistencia.Presente }}</div>
-              <div class="conteo-chip conteo-tardanza">⏰ Tardanza: {{ conteoAsistencia.Tardanza }}</div>
-              <div class="conteo-chip conteo-falta">❌ Falta: {{ conteoAsistencia.Falta }}</div>
-              <div class="conteo-chip conteo-excusada">📋 Excusada: {{ conteoAsistencia.Excusada }}</div>
+              <div class="conteo-chip conteo-presente"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg> Presentes: {{ conteoAsistencia.Presente }}</div>
+              <div class="conteo-chip conteo-tardanza"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg> Tardanza: {{ conteoAsistencia.Tardanza }}</div>
+              <div class="conteo-chip conteo-falta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg> Falta: {{ conteoAsistencia.Falta }}</div>
+              <div class="conteo-chip conteo-excusada"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg> Excusada: {{ conteoAsistencia.Excusada }}</div>
             </template>
           </div>
 
-          <div v-if="!jornadaInhabilitada" class="info-alert-bar" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;">
-            ⏰ <strong>Cálculo Automático de Tardanza:</strong> Al marcar a un aprendiz como <strong>Presente</strong>, se captura la hora exacta. Si supera los 15 minutos de inicio de jornada ({{ fichaSeleccionada.jornada }}), se asignará automáticamente como <strong>Tardanza</strong>. Quienes queden sin marcar se registrarán como <strong>Falta</strong> al finalizar la jornada.
+          <div v-if="!jornadaInhabilitada" class="info-alert-bar" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
+            <span><strong>Cálculo Automático de Tardanza:</strong> Al marcar a un aprendiz como <strong>Presente</strong>, se captura la hora exacta. Si supera los 15 minutos de inicio de jornada ({{ fichaSeleccionada.jornada }}), se asignará automáticamente como <strong>Tardanza</strong>. Quienes queden sin marcar se registrarán como <strong>Falta</strong> al finalizar la jornada.</span>
           </div>
 
           <!-- Contenedor de la Tabla con estilo Disabled/Overlay si la jornada está inhabilitada -->
           <div :class="{ 'table-inhabilitada-overlay': jornadaInhabilitada }">
-            <div v-if="jornadaInhabilitada" class="watermark-inhabilitada-bar">
-              🔒 SESIÓN INHABILITADA — Los controles de marcado se encuentran pausados para este día
+            <div v-if="jornadaInhabilitada" class="watermark-inhabilitada-bar" style="display: flex; align-items: center; gap: 8px; justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>
+              SESIÓN INHABILITADA — Los controles de marcado se encuentran pausados para este día
             </div>
 
             <table class="data-table">
@@ -1601,20 +1602,25 @@ function descargarExcel(data, nombreArchivo) {
                     {{ jornadaInhabilitada ? '—' : (asistenciaDia[est._id]?.horaMarcacion || '—') }}
                   </td>
                   <td>
-                    <span v-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316;">
-                      🚫 Inhabilitada
+                    <span v-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+                      Inhabilitada
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge badge-warning">
-                      📋 Excusada
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                      Excusada
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge badge-success">
-                      ✅ Presente (A tiempo)
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
+                      Presente (A tiempo)
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge badge-warning">
-                      ⏰ Tardanza ({{ asistenciaDia[est._id]?.tiempoTardanza || '1 hora' }})
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
+                      Tardanza ({{ asistenciaDia[est._id]?.tiempoTardanza || '1 hora' }})
                     </span>
                     <span v-else class="badge badge-danger">
-                      ❌ Falta (Automática)
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                      Falta (Automática)
                     </span>
                   </td>
                 </tr>
@@ -1693,13 +1699,16 @@ function descargarExcel(data, nombreArchivo) {
 
           <div class="action-bar" v-if="estudiantesFicha.length > 0">
             <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar lista del día a Excel">
-              📥 Exportar Excel
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+              Exportar Excel
             </button>
             <button class="btn-export" @click="descargarSQLite" title="Descargar archivo SQLite único para el servidor institucional">
-              💾 Descargar SQLite (.sqlite)
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><rect x="8" y="4" width="7" height="5"/><rect x="7" y="13" width="10" height="7"/></svg>
+              Descargar SQLite (.sqlite)
             </button>
             <div v-if="jornadaInhabilitada" style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
-              🚫 Sesión Inhabilitada — Guardada en MongoDB y SQLite
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+              Sesión Inhabilitada — Guardada en MongoDB y SQLite
             </div>
             <button
               v-else
@@ -1707,7 +1716,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="guardarAsistenciaDia"
               :disabled="guardandoAsistencia"
             >
-              {{ guardandoAsistencia ? '⏳ Finalizando Jornada...' : '🔒 Finalizar Jornada y Guardar' }}
+              {{ guardandoAsistencia ? 'Finalizando Jornada...' : 'Finalizar Jornada y Guardar' }}
             </button>
           </div>
         </div>
@@ -1723,10 +1732,12 @@ function descargarExcel(data, nombreArchivo) {
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button class="btn-export" @click="descargarSQLite" title="Descargar archivo SQLite acumulativo institucional">
-                💾 Descargar SQLite (.sqlite)
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><rect x="8" y="4" width="7" height="5"/><rect x="7" y="13" width="10" height="7"/></svg>
+                Descargar SQLite (.sqlite)
               </button>
               <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0">
-                📥 Exportar Historial Excel
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+                Exportar Historial Excel
               </button>
             </div>
           </div>
@@ -1767,11 +1778,15 @@ function descargarExcel(data, nombreArchivo) {
           <div>
             <div class="section-header-row">
               <div>
-                <h4>📝 Gestionar Datos de Aprendices</h4>
+                <h4 style="display: flex; align-items: center; gap: 8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
+                  Gestionar Datos de Aprendices
+                </h4>
                 <p class="section-desc">Información y edición de los aprendices de la Ficha {{ fichaSeleccionada.codigoFicha }}:</p>
               </div>
               <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0">
-                📥 Exportar Lista Excel
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
+                Exportar Lista Excel
               </button>
             </div>
 
@@ -1798,75 +1813,11 @@ function descargarExcel(data, nombreArchivo) {
                     </span>
                   </td>
                   <td>
-                    <button class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)">
-                      ✏️ Editar
+                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
+                      Editar
                     </button>
-                  </td>
-                </tr>
-                <tr v-if="estudiantesFicha.length === 0">
-                  <td colspan="6" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- ========================================= -->
-        <!-- VISTA 5: ENROLAMIENTO DE HUELLAS          -->
-        <!-- ========================================= -->
-        <div v-if="vistaFicha === 'enrolar_huella'" class="section-body">
-          <div>
-            <h4>☝️ Panel de Enrolamiento Biométrico de Huellas</h4>
-            <p class="section-desc">Gestiona el registro de plantillas de huellas dactilares para los aprendices de la Ficha {{ fichaSeleccionada.codigoFicha }}:</p>
-
-            <div class="stats-mini-row">
-              <div class="stat-box stat-total">
-                <span class="stat-label">Total Aprendices</span>
-                <div class="stat-value">{{ estudiantesFicha.length }}</div>
-              </div>
-              <div class="stat-box stat-enrolada">
-                <span class="stat-label">Huellas Enroladas</span>
-                <div class="stat-value">
-                  {{ estudiantesFicha.filter(e => e.huellaEnrolada).length }}
-                </div>
-              </div>
-              <div class="stat-box stat-pendiente">
-                <span class="stat-label">Pendientes</span>
-                <div class="stat-value">
-                  {{ estudiantesFicha.filter(e => !e.huellaEnrolada).length }}
-                </div>
-              </div>
-            </div>
-
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Aprendiz</th>
-                  <th>Documento</th>
-                  <th>Estado Huella</th>
-                  <th>Dedo</th>
-                  <th>Fecha Enrolamiento</th>
-                  <th>Acción Biométrica</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="est in estudiantesFicha" :key="est._id">
-                  <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
-                  <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
-                  <td>
-                    <span v-if="est.huellaEnrolada" class="badge badge-lider">
-                      🟢 Enrolada
-                    </span>
-                    <span v-else class="badge badge-pendiente">
-                      🟡 Pendiente
-                    </span>
-                  </td>
-                  <td>{{ DEDOS.find(d => d.value === est.dedoEnrolado)?.label || '—' }}</td>
-                  <td>{{ est.fechaEnrolamiento || 'Sin registro' }}</td>
-                  <td>
-                    <button class="btn-sm btn-success" @click="abrirModalEnrolamiento(est)">
-                      ☝️ {{ est.huellaEnrolada ? 'Re-enrolar' : 'Enrolar' }}
-                    </button>
+                    <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder</span>
                   </td>
                 </tr>
                 <tr v-if="estudiantesFicha.length === 0">
@@ -1892,20 +1843,26 @@ function descargarExcel(data, nombreArchivo) {
             <!-- DOCENTE LÍDER -->
             <div class="docente-card" style="background: #f0fdf4; border: 2px solid #86efac; border-radius: 12px; padding: 18px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <span class="badge badge-success" style="font-weight: 700;">👑 Docente Líder</span>
+                <span class="badge badge-success" style="font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
+                  Docente Líder
+                </span>
                 <span v-if="String(fichaSeleccionada.instructorLiderId?._id || fichaSeleccionada.instructorLiderId) === String(usuario.id)" class="badge badge-lider" style="font-size: 11px;">(Tú)</span>
               </div>
               <h4 style="font-size: 16px; font-weight: 700; margin-bottom: 6px; color: #166534;">
                 {{ fichaSeleccionada.instructorLiderId?.nombres || 'No asignado' }} {{ fichaSeleccionada.instructorLiderId?.apellidos || '' }}
               </h4>
-              <p style="font-size: 13px; color: #374151; margin-bottom: 4px;">
-                ✉️ {{ fichaSeleccionada.instructorLiderId?.correo || 'Sin correo' }}
+              <p style="font-size: 13px; color: #374151; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+                {{ fichaSeleccionada.instructorLiderId?.correo || 'Sin correo' }}
               </p>
-              <p style="font-size: 13px; color: #374151; margin-bottom: 4px;" v-if="fichaSeleccionada.instructorLiderId?.telefono">
-                📞 {{ fichaSeleccionada.instructorLiderId?.telefono }}
+              <p style="font-size: 13px; color: #374151; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;" v-if="fichaSeleccionada.instructorLiderId?.telefono">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l1.5 4.5-2 1.5a12 12 0 0 0 5.5 5.5l1.5-2L20 15v4a2 2 0 0 1-2 2C10.8 21 3 13.2 3 6a2 2 0 0 1 2-2z"/></svg>
+                {{ fichaSeleccionada.instructorLiderId?.telefono }}
               </p>
-              <p style="font-size: 12px; color: #15803d; font-weight: 600; margin-top: 8px;" v-if="fichaSeleccionada.instructorLiderId?.especialidad">
-                💼 {{ fichaSeleccionada.instructorLiderId?.especialidad }}
+              <p style="font-size: 12px; color: #15803d; font-weight: 600; margin-top: 8px; display: flex; align-items: center; gap: 6px;" v-if="fichaSeleccionada.instructorLiderId?.especialidad">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="3" y1="13" x2="21" y2="13"/></svg>
+                {{ fichaSeleccionada.instructorLiderId?.especialidad }}
               </p>
             </div>
 
@@ -1917,95 +1874,35 @@ function descargarExcel(data, nombreArchivo) {
               style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 18px;"
             >
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <span class="badge badge-neutral" style="font-weight: 600;">👤 Docente Común</span>
+                <span class="badge badge-neutral" style="font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
+                  Docente Común
+                </span>
                 <span v-if="String(doc._id || doc) === String(usuario.id)" class="badge badge-comun" style="font-size: 11px;">(Tú)</span>
               </div>
               <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #1e293b;">
                 {{ doc.nombres || 'Docente' }} {{ doc.apellidos || '' }}
               </h4>
-              <p style="font-size: 13px; color: #64748b; margin-bottom: 4px;">
-                ✉️ {{ doc.correo || 'Sin correo' }}
+              <p style="font-size: 13px; color: #64748b; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+                {{ doc.correo || 'Sin correo' }}
               </p>
-              <p style="font-size: 13px; color: #64748b; margin-bottom: 4px;" v-if="doc.telefono">
-                📞 {{ doc.telefono }}
+              <p style="font-size: 13px; color: #64748b; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;" v-if="doc.telefono">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l1.5 4.5-2 1.5a12 12 0 0 0 5.5 5.5l1.5-2L20 15v4a2 2 0 0 1-2 2C10.8 21 3 13.2 3 6a2 2 0 0 1 2-2z"/></svg>
+                {{ doc.telefono }}
               </p>
-              <p style="font-size: 12px; color: #2563eb; font-weight: 600; margin-top: 8px;" v-if="doc.especialidad">
-                💼 {{ doc.especialidad }}
+              <p style="font-size: 12px; color: #2563eb; font-weight: 600; margin-top: 8px; display: flex; align-items: center; gap: 6px;" v-if="doc.especialidad">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="3" y1="13" x2="21" y2="13"/></svg>
+                {{ doc.especialidad }}
               </p>
             </div>
           </div>
-          <div v-if="(!fichaSeleccionada.instructores || fichaSeleccionada.instructores.length === 0)" style="padding: 16px; background: #f8fafc; border-radius: 8px; font-size: 13px; color: #64748b; margin-top: 12px;">
-            ℹ️ Esta ficha actualmente no tiene otros docentes comunes asignados.
+          <div v-if="(!fichaSeleccionada.instructores || fichaSeleccionada.instructores.length === 0)" style="padding: 16px; background: #f8fafc; border-radius: 8px; font-size: 13px; color: #64748b; margin-top: 12px; display: flex; align-items: center; gap: 8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+            Esta ficha actualmente no tiene otros docentes comunes asignados.
           </div>
         </div>
 
-      </div>
-    </div>
-
-    <!-- ========================================= -->
-    <!-- MODAL DE ENROLAMIENTO BIOMÉTRICO          -->
-    <!-- ========================================= -->
-    <div v-if="showEnrolarModal" class="modal-overlay" @click.self="cancelarEnrolamiento">
-      <div class="modal" style="max-width: 480px; text-align: center; padding: 28px;">
-        <h3>☝️ Enrolamiento Biométrico de Huella</h3>
-        <p style="color: #64748b; font-size: 14px; margin-bottom: 12px;">
-          Aprendiz: <strong>{{ estudianteTarget?.nombres }} {{ estudianteTarget?.apellidos }}</strong><br>
-          <small>Documento: {{ estudianteTarget?.tipoDocumento }} {{ estudianteTarget?.numeroDocumento }}</small>
-        </p>
-
-        <div v-if="pasoEnrolamiento === 1" style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 13px; color: #475569; margin-bottom: 4px; text-align: left;">
-            🖐️ Dedo a enrolar:
-          </label>
-          <select v-model="dedoSeleccionado" class="form-input" style="width: 100%; padding: 8px 12px; font-size: 13px;">
-            <option v-for="d in DEDOS" :key="d.value" :value="d.value">{{ d.label }}</option>
-          </select>
-        </div>
-
-        <div class="sensor-box">
-          <div class="fingerprint-icon">
-            <span v-if="pasoEnrolamiento === 1">🖐️</span>
-            <span v-else-if="pasoEnrolamiento === 2" style="animation: pulse 1s infinite;">☝️</span>
-            <span v-else>✅</span>
-          </div>
-
-          <div v-if="!sdkDisponible" style="margin-top: 10px;">
-            <p style="color: #ef4444; font-size: 13px;">⚠️ {{ estadoLector }}</p>
-            <p style="color: #64748b; font-size: 11px;">Conecte el lector U.are.U 4500 y asegúrese de que el DigitalPersona Agent esté corriendo (puerto 9001).</p>
-          </div>
-
-          <div v-if="pasoEnrolamiento === 1 && sdkDisponible">
-            <h4 style="color: #1e293b; margin-bottom: 6px;">{{ estadoLector }}</h4>
-            <p style="color: #64748b; font-size: 13px;">
-              Dedo seleccionado: <strong>{{ DEDOS.find(d => d.value === dedoSeleccionado)?.label || dedoSeleccionado }}</strong>
-            </p>
-            <p style="color: #64748b; font-size: 13px;">Haz clic en "Iniciar Captura" y coloca el dedo del aprendiz en el lector.</p>
-          </div>
-
-          <div v-if="pasoEnrolamiento === 2">
-            <h4 style="color: #2563eb; margin-bottom: 6px;">Capturando huella...</h4>
-            <p style="color: #64748b; font-size: 13px;">Coloque y levante el dedo del sensor varias veces</p>
-            <div style="font-size: 16px; font-weight: 700; color: #2563eb; margin-top: 10px;">
-              Muestra {{ capturasCompletadas }} completada(s)
-            </div>
-          </div>
-
-          <div v-if="pasoEnrolamiento === 3">
-            <h4 style="color: #16a34a; margin-bottom: 6px;">¡Huella Enrolada Exitosamente!</h4>
-            <p style="color: #15803d; font-size: 13px;">
-              {{ DEDOS.find(d => d.value === dedoSeleccionado)?.label || dedoSeleccionado }} - Plantilla biométrica guardada.
-            </p>
-          </div>
-        </div>
-
-        <div style="display: flex; gap: 12px; justify-content: center;">
-          <button class="btn btn-outline" @click="cancelarEnrolamiento">
-            {{ pasoEnrolamiento === 3 ? 'Cerrar' : 'Cancelar' }}
-          </button>
-          <button v-if="pasoEnrolamiento === 1" class="btn btn-primary" @click="iniciarEnrolamientoReal" :disabled="!sdkDisponible || enrolando">
-            ☝️ Iniciar Captura (USB)
-          </button>
-        </div>
       </div>
     </div>
 
@@ -2014,7 +1911,10 @@ function descargarExcel(data, nombreArchivo) {
     <!-- ========================================= -->
     <div v-if="showEditEstudianteModal" class="modal-overlay" @click.self="showEditEstudianteModal = false">
       <div class="modal modal-edit">
-        <h3>✏️ Editar Datos del Aprendiz</h3>
+        <h3 style="display: flex; align-items: center; gap: 9px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
+          Editar Datos del Aprendiz
+        </h3>
         <div class="modal-form">
           <div class="form-row">
             <div class="form-group">
@@ -2073,7 +1973,7 @@ function descargarExcel(data, nombreArchivo) {
         <div class="modal-actions">
           <button class="btn btn-outline" @click="showEditEstudianteModal = false">Cancelar</button>
           <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante">
-            {{ guardandoEstudiante ? '⏳ Guardando...' : '💾 Guardar Cambios' }}
+            {{ guardandoEstudiante ? 'Guardando...' : 'Guardar Cambios' }}
           </button>
         </div>
       </div>
@@ -2084,15 +1984,17 @@ function descargarExcel(data, nombreArchivo) {
     <div v-if="showInhabilitarModal" class="modal-overlay" @click.self="showInhabilitarModal = false">
       <div class="modal" style="max-width: 480px; text-align: left;">
         <h3 style="display: flex; align-items: center; gap: 8px; color: #9a3412;">
-          🚫 Inhabilitar Sesión del Día
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
+          Inhabilitar Sesión del Día
         </h3>
         <p style="color: #64748b; font-size: 13px; margin-bottom: 14px;">
           Ficha: <strong>{{ fichaSeleccionada.codigoFicha }}</strong> — {{ fichaSeleccionada.nombrePrograma }}<br>
           Fecha: <strong>{{ fechaAsistencia }}</strong> | Jornada: <strong>{{ fichaSeleccionada.jornada }}</strong>
         </p>
 
-        <div style="background: #fff7ed; border: 1px solid #fed7aa; padding: 12px; border-radius: 8px; font-size: 12.5px; color: #c2410c; margin-bottom: 16px;">
-          ℹ️ Al inhabilitar la jornada, la sesión se guardará como suspendida y los aprendices <strong>no recibirán fallas injustificadas</strong> en esta fecha.
+        <div style="background: #fff7ed; border: 1px solid #fed7aa; padding: 12px; border-radius: 8px; font-size: 12.5px; color: #c2410c; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+          <span>Al inhabilitar la jornada, la sesión se guardará como suspendida y los aprendices <strong>no recibirán fallas injustificadas</strong> en esta fecha.</span>
         </div>
 
         <div class="form-group" style="margin-bottom: 14px;">
@@ -2132,7 +2034,7 @@ function descargarExcel(data, nombreArchivo) {
             :disabled="inhabilitando"
             style="background: #e11d48; color: #ffffff; border: none; font-weight: 700; padding: 9px 16px; border-radius: 8px; cursor: pointer;"
           >
-            {{ inhabilitando ? '⏳ Inhabilitando...' : '🚫 Inhabilitar Sesión' }}
+            {{ inhabilitando ? 'Inhabilitando...' : 'Inhabilitar Sesión' }}
           </button>
         </div>
       </div>
@@ -2939,13 +2841,22 @@ function descargarExcel(data, nombreArchivo) {
 
 /* CENTRO DE CONTROL REMOTO Y MODO KIOSCO */
 .remote-control-panel {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  border: 1.5px solid #334155;
-  border-radius: 14px;
-  padding: 18px 20px;
+  --rc-bg-1: #0a130f;
+  --rc-bg-2: #15241c;
+  --rc-line: #26392e;
+  --rc-accent: #46d67c;
+  --rc-accent-dim: rgba(70, 214, 124, 0.16);
+  --rc-danger: #ff6f6f;
+  --rc-danger-dim: rgba(255, 111, 111, 0.16);
+  --rc-warn: #f2c94c;
+  --rc-muted: #85a294;
+  background: linear-gradient(150deg, var(--rc-bg-1) 0%, var(--rc-bg-2) 100%);
+  border: 1px solid var(--rc-line);
+  border-radius: 16px;
+  padding: 24px 26px;
   margin-bottom: 20px;
-  color: #f8fafc;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  color: #eaf3ed;
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.45);
 }
 
 .remote-control-header {
@@ -2953,57 +2864,83 @@ function descargarExcel(data, nombreArchivo) {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 22px;
 }
 
 .remote-status-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px;
+  padding: 5px 13px;
   border-radius: 20px;
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  margin-bottom: 6px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+  margin-right: 14px;
 }
 
 .badge-live {
-  background: rgba(34, 197, 94, 0.2);
-  border: 1px solid #22c55e;
-  color: #86efac;
+  background: var(--rc-accent-dim);
+  border: 1px solid rgba(70, 214, 124, 0.4);
+  color: var(--rc-accent);
 }
 
 .badge-idle {
-  background: rgba(148, 163, 184, 0.15);
-  border: 1px solid #64748b;
-  color: #cbd5e1;
+  background: rgba(133, 162, 148, 0.12);
+  border: 1px solid var(--rc-line);
+  color: var(--rc-muted);
+}
+
+.remote-device-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.device-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.device-online {
+  color: var(--rc-accent);
+}
+
+.device-offline {
+  color: var(--rc-danger);
 }
 
 .live-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #94a3b8;
+  background: var(--rc-muted);
 }
 
 .live-dot-pulsing {
-  background: #22c55e;
-  box-shadow: 0 0 10px #22c55e;
-  animation: pulseLive 1.5s infinite;
+  background: var(--rc-accent);
+  box-shadow: 0 0 10px var(--rc-accent);
+  animation: pulseLive 1.6s ease-in-out infinite;
 }
 
 @keyframes pulseLive {
-  0% { transform: scale(0.9); opacity: 0.8; }
+  0%, 100% { transform: scale(0.9); opacity: 0.8; }
   50% { transform: scale(1.3); opacity: 1; }
-  100% { transform: scale(0.9); opacity: 0.8; }
 }
 
 .remote-desc {
   font-size: 13px;
-  color: #94a3b8;
-  margin: 0;
+  color: var(--rc-muted);
+  margin: 4px 0 0;
   max-width: 580px;
+  line-height: 1.55;
 }
 
 .remote-control-actions {
@@ -3012,38 +2949,45 @@ function descargarExcel(data, nombreArchivo) {
   flex-wrap: wrap;
 }
 
-.btn-remote-start {
-  background: #39a900;
-  color: white;
+.btn-remote-start,
+.btn-remote-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: none;
   font-weight: 700;
   font-size: 13px;
-  padding: 10px 18px;
-  border-radius: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(57, 169, 0, 0.3);
-  transition: all 0.2s;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.btn-remote-start {
+  background: var(--rc-accent);
+  color: #052e16;
+  box-shadow: 0 6px 18px -6px rgba(70, 214, 124, 0.55);
 }
 
 .btn-remote-start:hover {
-  background: #2e8b00;
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.btn-remote-start:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
 }
 
 .btn-remote-stop {
-  background: #dc2626;
-  color: white;
-  border: none;
-  font-weight: 700;
-  font-size: 13px;
-  padding: 10px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
-  animation: pulseLive 2s infinite;
+  background: transparent;
+  color: var(--rc-danger);
+  border: 1px solid var(--rc-danger);
 }
 
 .btn-remote-stop:hover {
-  background: #b91c1c;
+  background: var(--rc-danger-dim);
 }
 
 .btn-open-kiosk {
@@ -3063,17 +3007,21 @@ function descargarExcel(data, nombreArchivo) {
 }
 
 .remote-live-feed {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(71, 85, 105, 0.5);
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rc-line);
 }
 
 .live-feed-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 11px;
   font-weight: 700;
-  color: #94a3b8;
-  margin-bottom: 8px;
+  color: var(--rc-muted);
+  margin-bottom: 10px;
   text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .live-feed-chips {
@@ -3086,21 +3034,27 @@ function descargarExcel(data, nombreArchivo) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
   font-size: 12px;
+  animation: chipIn 0.2s ease-out;
+}
+
+@keyframes chipIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .feed-presente {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-  color: #86efac;
+  background: var(--rc-accent-dim);
+  border: 1px solid rgba(70, 214, 124, 0.35);
+  color: var(--rc-accent);
 }
 
 .feed-tardanza {
-  background: rgba(234, 179, 8, 0.15);
-  border: 1px solid rgba(234, 179, 8, 0.4);
-  color: #fde047;
+  background: rgba(242, 201, 76, 0.14);
+  border: 1px solid rgba(242, 201, 76, 0.35);
+  color: var(--rc-warn);
 }
 
 .feed-dot {
@@ -3112,7 +3066,7 @@ function descargarExcel(data, nombreArchivo) {
 
 .feed-time {
   font-size: 11px;
-  opacity: 0.8;
+  opacity: 0.75;
 }
 
 /* RESPONSIVE MOBILE REFINEMENTS */
