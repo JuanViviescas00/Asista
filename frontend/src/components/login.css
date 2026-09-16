@@ -72,6 +72,7 @@
   padding: 42px 40px 34px;
   background: var(--blanco);
   border-radius: var(--radio-lg);
+  border-top: 4px solid var(--verde);
   box-shadow: var(--sombra-card);
 }
 
@@ -87,12 +88,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  background: var(--verde);
-  color: var(--blanco);
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  background: var(--verde-tenue);
+  border: 1px solid var(--verde-suave);
   margin-bottom: 14px;
+  padding: 12px;
+}
+
+.login-brand-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .login-brand-header h2 {
@@ -110,39 +118,99 @@
 }
 
 /* ============================================================
-   PESTAÑAS DE ACCESO
+   SELECTOR DE ACCESO · TARJETAS TIPO CARNET
    ============================================================ */
-.login-access-tabs {
+.login-carnet-selector {
   display: flex;
-  gap: 6px;
-  margin-bottom: 22px;
-  background: var(--verde-tenue);
-  padding: 4px;
-  border-radius: var(--radio-pill);
+  gap: 14px;
+  margin-bottom: 24px;
 }
 
-.login-access-tab {
+.login-carnet {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   font-family: inherit;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  border-radius: var(--radio-pill);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--texto-suave);
+  padding: 0;
+  background: var(--blanco);
+  border: 1.5px solid var(--borde);
+  border-radius: var(--radio-md);
+  overflow: hidden;
   cursor: pointer;
-  transition: all .18s var(--ease);
+  transition: border-color .18s var(--ease), box-shadow .18s var(--ease), transform .12s var(--ease);
 }
 
-.login-access-tab:hover {
+.login-carnet:hover {
+  border-color: #B9C7B2;
+  transform: translateY(-1px);
+}
+
+.login-carnet.is-active {
+  border-color: var(--verde);
+  box-shadow: 0 8px 20px rgba(57, 169, 0, .16);
+}
+
+.login-carnet-label {
+  width: 100%;
+  padding: 12px 10px 10px;
+  background: var(--hueso);
+  color: var(--texto-suave);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  line-height: 1.4;
+  text-align: center;
+  transition: background .18s var(--ease), color .18s var(--ease);
+}
+
+.login-carnet.is-active .login-carnet-label {
+  background: var(--verde-tenue);
   color: var(--verde-oscuro);
 }
 
-.login-access-tab.is-active {
-  background: var(--verde);
+.login-carnet-avatar {
+  width: 60px;
+  height: 60px;
+  margin: 16px 0;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--verde-tenue);
+  color: var(--verde-oscuro);
+  flex-shrink: 0;
+}
+
+.login-carnet-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.login-carnet-avatar-aprendiz {
+  background: #EDEAF6;
+  color: #4B3F72;
+}
+
+.login-carnet-footer {
+  width: 100%;
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+  background: var(--hueso);
+  border-top: 1px solid var(--borde);
+  transition: background .18s var(--ease), color .18s var(--ease);
+}
+
+.login-carnet.is-active .login-carnet-footer {
+  background: var(--verde-oscuro);
   color: var(--blanco);
-  box-shadow: 0 4px 12px rgba(57, 169, 0, .24);
 }
 
 /* ============================================================
@@ -455,5 +523,25 @@
   .login-button {
     padding: 13px 16px;
     font-size: 15px;
+  }
+
+  .login-carnet-selector {
+    gap: 10px;
+  }
+
+  .login-carnet-label {
+    font-size: 10px;
+    padding: 10px 6px 8px;
+  }
+
+  .login-carnet-avatar {
+    width: 50px;
+    height: 50px;
+    margin: 12px 0;
+  }
+
+  .login-carnet-footer {
+    font-size: 11px;
+    padding: 8px 6px;
   }
 }
