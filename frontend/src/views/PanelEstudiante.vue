@@ -1,6 +1,4 @@
 <script setup>
-// DEPRECATED: superseded by views/*.vue (router nuevo). Se conserva
-// solo como referencia histórica.
 import { ref, onMounted, computed } from 'vue'
 import api from '../services/index.js'
 import '../styles/panelEstudiante.css'
@@ -22,14 +20,6 @@ const nuevaExcusa = ref({
   fechaInasistencia: new Date().toISOString().split('T')[0],
   motivo: ''
 })
-
-const emit = defineEmits(['cerrar-sesion'])
-
-function cerrarSesion() {
-  sessionStorage.removeItem('admin_auth')
-  sessionStorage.removeItem('user_data')
-  emit('cerrar-sesion')
-}
 
 onMounted(async () => {
   await cargarDatosEstudiante()
@@ -60,6 +50,12 @@ async function cargarDatosEstudiante() {
   }
 }
 
+const horasPorJornada = computed(() => {
+  const j = (ficha.value?.jornada || '').toLowerCase()
+  if (j.includes('noche') || j.includes('nocturna')) return 4
+  return 6
+})
+
 const textoHuella = computed(() => {
   const e = estudiante.value
   if (!e) return ''
@@ -69,12 +65,6 @@ const textoHuella = computed(() => {
   if (n === 0) return '🟡 Sin huella'
   if (n === 1) return `🟢 1/2 · ${d1 || 'Sin dedo'}`
   return `🟢 2/2 · ${d1 || 'Sin dedo'} + ${d2 || 'Sin dedo'}`
-})
-
-const horasPorJornada = computed(() => {
-  const j = (ficha.value?.jornada || '').toLowerCase()
-  if (j.includes('noche') || j.includes('nocturna')) return 4
-  return 6
 })
 
 const resumen = computed(() => {
@@ -153,9 +143,6 @@ async function radicarExcusa() {
       </div>
       <div style="display: flex; gap: 12px; align-items: center;">
         <span class="student-portal-role">Aprendiz</span>
-        <button class="student-portal-logout" @click="cerrarSesion">
-          🚪 Cerrar Sesión
-        </button>
       </div>
     </div>
 

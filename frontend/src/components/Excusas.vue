@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import api from '../services/api.js'
+import api from '../services/index.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)

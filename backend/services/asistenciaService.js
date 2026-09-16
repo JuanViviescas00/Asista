@@ -38,6 +38,43 @@ export async function getFichaIdList(fichaId) {
   return ids
 }
 
+// Umbrales de tardanza medidos en MINUTOS desde la hora de inicio de la clase.
+// Regla del negocio:
+//   0 a 5 min  -> Presente (a tiempo)
+//   5 a 65 min -> Tardanza de 1 hora
+//   65 a 125 min -> Tardanza de 2 horas
+//   más de 125 min -> Falta (asistencia fallida)
+export const TOLERANCIA_MINUTOS = 5
+export const LIMITE_TARDANZA_1_HORA = 65
+export const LIMITE_TARDANZA_2_HORAS = 125
+
+/**
+ * Calcula el estado de una marcación (Presente / Tardanza / Falta) según los
+ * minutos transcurridos desde la hora de inicio de la clase (`inicioClase`).
+ *
+ * Devuelve un objeto con:
+ *   - estado: 'Presente' | 'Tardanza' | 'Falta'
+ *   - horasTardanza: número de horas de retraso (0 si no aplica)
+ *   - tiempoTardanza: texto legible del retraso ('0 horas', '1 hora', '2 horas')
+ */
+export function calcularEstadoAsistencia(inicioClase, fechaHora = new Date()) {
+  const inicioMs = inicioClase ? new Date(inicioClase).getTime() : Date.now()
+  const marcacionMs = fechaHora ? new Date(fechaHora).getTime() : Date.now()
+
+  const minutos = Math.floor((marcacionMs - inicioMs) / 60000)
+
+  if (minutos < 0 || minutos <= TOLERANCIA_MINUTOS) {
+    return { estado: 'Presente', horasTardanza: 0, tiempoTardanza: '0 horas' }
+  }
+  if (minutos <= LIMITE_TARDANZA_1_HORA) {
+    return { estado: 'Tardanza', horasTardanza: 1, tiempoTardanza: '1 hora' }
+  }
+  if (minutos <= LIMITE_TARDANZA_2_HORAS) {
+    return { estado: 'Tardanza', horasTardanza: 2, tiempoTardanza: '2 horas' }
+  }
+  return { estado: 'Falta', horasTardanza: 0, tiempoTardanza: '0 horas' }
+}
+
 /**
  * Horarios de inicio de jornada (minutos desde medianoche) — fuente de verdad única.
  * Mañana: 06:00 · Tarde: 12:00 · Noche: 18:00
@@ -48,29 +85,17 @@ export const HORARIOS_JORNADA = {
   'Noche': 1080,
 }
 
-// Tolerancia de 5 minutos antes de considerar tardanza.
-const TOLERANCIA_MIN = 5
-
-/**
- * Escala escalonada de penalización por tardanza (helper compartido).
- * Devuelve { estado, horas } a partir de los minutos de tardanza:
- *   hasta 5 min  → Presente  (0h)
- *   5 min - 1h   → Tardanza (1h)
- *   1h - 2h      → Tardanza (2h)
- *   más de 2h    → Falta    (6h = día completo)
- *
- * La "horas" de una Falta (6) representa el día completo de falla; NO se
- * persiste en `horasTardanza` (que es solo tardanza), para que el banco de
- * horas no cuente doble.
- */
+// Escala escalonada de penalización por tardanza (helper compartido del fallback).
+// Usa los MISMOS umbrales que calcularEstadoAsistencia (5 / 65 / 125) para no
+// generar resultados distintos según la fuente del inicio.
 function escalaDesdeMinutos(minutosTardanza) {
-  if (minutosTardanza <= TOLERANCIA_MIN) {
+  if (minutosTardanza <= TOLERANCIA_MINUTOS) {
     return { estado: 'Presente', horas: 0 }
   }
-  if (minutosTardanza <= 60) {
+  if (minutosTardanza <= LIMITE_TARDANZA_1_HORA) {
     return { estado: 'Tardanza', horas: 1 }
   }
-  if (minutosTardanza <= 120) {
+  if (minutosTardanza <= LIMITE_TARDANZA_2_HORAS) {
     return { estado: 'Tardanza', horas: 2 }
   }
   return { estado: 'Falta', horas: 6 }
@@ -78,35 +103,14 @@ function escalaDesdeMinutos(minutosTardanza) {
 
 /**
  * Escala escalonada contra el horario FIJO de jornada (HORARIOS_JORNADA).
- * Devuelve { estado, horas, minutosTardanza }.
+ * Se usa SOLO como fallback cuando no hay una Clase localizable para la marcación
+ * (ficha sin clase nunca activada). Devuelve { estado, horas, minutosTardanza }.
  */
 export function calcularTardanzaEscalonada(jornada, fechaHora = new Date()) {
   const inicio = HORARIOS_JORNADA[jornada] ?? HORARIOS_JORNADA['Mañana']
   const minutosMarcacion = fechaHora.getHours() * 60 + fechaHora.getMinutes()
   const minutosTardanza = minutosMarcacion - inicio
   return { ...escalaDesdeMinutos(minutosTardanza), minutosTardanza }
-}
-
-/**
- * Escala escalonada contra la hora REAL de inicio de clase (horaInicioClase),
- * con FALLBACK al horario fijo de jornada si horaInicioClase es null/inválida
- * (payload viejo o huellero desactualizado durante un despliegue).
- * Devuelve { estado, horas, minutosTardanza }.
- */
-export function calcularTardanzaDesdeInicioClase(horaInicioClase, jornada, fechaHora = new Date()) {
-  const inicio = horaInicioClase ? new Date(horaInicioClase) : null
-  if (inicio && !Number.isNaN(inicio.getTime())) {
-    const minutosTardanza = Math.round((fechaHora.getTime() - inicio.getTime()) / 60000)
-    return { ...escalaDesdeMinutos(minutosTardanza), minutosTardanza }
-  }
-  return calcularTardanzaEscalonada(jornada, fechaHora)
-}
-
-/**
- * Retrocompatible: devuelve solo el estado de la marcación.
- */
-export function calcularEstadoAsistencia(jornada, fechaHora = new Date()) {
-  return calcularTardanzaEscalonada(jornada, fechaHora).estado
 }
 
 /**

@@ -100,7 +100,7 @@ const fechasUnicas = computed(() => {
 
 // Helper para extraer nombre del instructor de un registro
 function getNombreInstructor(reg) {
-  if (!reg || !reg.instructorId) return 'Sin asignar'
+  if (!reg || !reg.instructorId) return 'Sin asignar / Registro Kiosco'
   if (typeof reg.instructorId === 'object') {
     return `${reg.instructorId.nombres || ''} ${reg.instructorId.apellidos || ''}`.trim() || reg.instructorId.nombre || 'Instructor'
   }

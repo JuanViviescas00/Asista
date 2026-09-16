@@ -2,9 +2,10 @@ import Asistencia from '../models/Asistencia.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import Dispositivo from '../models/Dispositivo.js'
+import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
-import { getFichaIdList, getHoyString, calcularTardanzaDesdeInicioClase } from '../services/asistenciaService.js'
+import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada } from '../services/asistenciaService.js'
 import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 import {
   upsertAsistenciaSQLite,
@@ -120,7 +121,7 @@ export async function createAsistencia(req, res) {
 // { uuid, estado: 'guardada'|'duplicada'|'error', error? } sin lanzar excepciones,
 // para que un fallo individual no tumbe el resto del batch.
 async function procesarAsistencia(item) {
-  const { uuid, estudianteId, fichaId, instructorId, timestamp, metodo, horaInicioClase, claseId } = item || {}
+  const { uuid, estudianteId, fichaId, instructorId, timestamp, metodo } = item || {}
 
   if (!uuid) {
     return { uuid: uuid || null, estado: 'error', error: 'uuid es requerido' }
@@ -161,23 +162,40 @@ async function procesarAsistencia(item) {
   const fecha = new Date(dateObj.getTime() - offsetMs).toISOString().split('T')[0]
   const hora = dateObj.toTimeString().slice(0, 8)
 
-  // Hora real de inicio de clase (opcional). Si no llega o es inválida,
-  // calcularTardanzaDesdeInicioClase cae al horario fijo de jornada (fallback).
-  const horaInicioClaseDate = horaInicioClase ? new Date(horaInicioClase) : null
-  const horaInicioClaseValida = (horaInicioClaseDate && !Number.isNaN(horaInicioClaseDate.getTime()))
-    ? horaInicioClaseDate
-    : null
+  // Fuente PRIMARIA: la clase en curso al momento de la marcación (iniciadaAt).
+  // Se consulta el modelo Clase con el _id de ficha YA RESUELTO (no el fichaId
+  // crudo del payload), sin depender de que el huellero envíe horaInicioClase.
+  let claseDoc = null
+  try {
+    const queryClase = { fichaId: ficha._id, iniciadaAt: { $lte: dateObj } }
+    if (instructorId) queryClase.instructorId = instructorId
+    claseDoc = await Clase.findOne(queryClase).sort({ iniciadaAt: -1 })
+  } catch (_) {
+    // Sin clase localizable: se cae al fallback de horario fijo (jornada).
+  }
 
-  const resultado = calcularTardanzaDesdeInicioClase(horaInicioClaseValida, ficha.jornada, dateObj)
-  const estado = resultado.estado
-  // Falta = día completo de falla (6h), no horas de tardanza: se guarda 0 en
-  // horasTardanza para que el banco de horas no cuente doble (ya cuenta como Falta).
-  const horasTardanza = estado === 'Falta' ? 0 : resultado.horas
-  const tiempoTardanza = `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
+  let estado
+  let horasTardanza
+  let tiempoTardanza
+  let horaInicioClaseValida = null
+  let claseIdObj = null
 
-  const claseIdObj = claseId && mongoose.Types.ObjectId.isValid(String(claseId))
-    ? new mongoose.Types.ObjectId(String(claseId))
-    : null
+  if (claseDoc?.iniciadaAt) {
+    const resultado = calcularEstadoAsistencia(claseDoc.iniciadaAt, dateObj)
+    estado = resultado.estado
+    horasTardanza = resultado.horasTardanza
+    tiempoTardanza = resultado.tiempoTardanza
+    horaInicioClaseValida = claseDoc.iniciadaAt
+    claseIdObj = claseDoc._id
+  } else {
+    // Fallback: horario fijo de jornada (ficha sin Clase nunca activada).
+    // Falta = día completo de falla: se guarda 0 en horasTardanza para que el
+    // banco de horas no cuente doble (ya cuenta como Falta).
+    const resultado = calcularTardanzaEscalonada(ficha.jornada, dateObj)
+    estado = resultado.estado
+    horasTardanza = estado === 'Falta' ? 0 : resultado.horas
+    tiempoTardanza = `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
+  }
 
   try {
     // Un solo registro por estudiante/ficha/día (regla de negocio): upsert atómico

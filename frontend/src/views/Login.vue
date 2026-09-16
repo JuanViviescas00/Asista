@@ -1,12 +1,10 @@
 <script setup>
 import { ref, reactive } from 'vue'
-import { enviarCodigoRecuperacion } from '../services/emailService.js'
-import api from '../services/api.js'
-import instructorIcon from '../assets/instructor-icon.png'
-import senaLogo from '../assets/sena-logo.png'
-import './login.css'
+import { enviarCodigoRecuperacion } from '../services/index.js'
+import api from '../services/index.js'
+import '../styles/login.css'
 
-const emit = defineEmits(['login-success'])
+const emit = defineEmits(['login-success', 'abrir-kiosco'])
 
 const tipoAcceso = ref('personal') // 'personal' (Instructores/Admin) o 'aprendiz' (Consulta por documento)
 
@@ -223,42 +221,30 @@ async function restablecerPassword() {
       <!-- Encabezado con Logo SENA -->
       <div class="login-brand-header">
         <div class="login-brand-icon">
-          <img :src="senaLogo" alt="Logo SENA" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+          </svg>
         </div>
         <h2>Sistema Huellero SENA</h2>
         <p>Control y Gestión de Asistencias</p>
       </div>
 
       <template v-if="pantalla === 'login'">
-        <!-- Selección de Acceso tipo Carnet -->
-        <div class="login-carnet-selector">
+        <!-- Pestañas de Selección de Acceso -->
+        <div class="login-access-tabs">
           <button
-            type="button"
-            class="login-carnet"
+            class="login-access-tab"
             :class="{ 'is-active': tipoAcceso === 'personal' }"
             @click="cambiarTipoAcceso('personal')"
           >
-            <span class="login-carnet-label">Instructores /<br />Personal SENA</span>
-            <span class="login-carnet-avatar login-carnet-avatar-instructor">
-              <img :src="instructorIcon" alt="Instructor" />
-            </span>
-            <span class="login-carnet-footer">Instructor</span>
+            🔒 Instructores / Personal SENA
           </button>
-
           <button
-            type="button"
-            class="login-carnet"
+            class="login-access-tab"
             :class="{ 'is-active': tipoAcceso === 'aprendiz' }"
             @click="cambiarTipoAcceso('aprendiz')"
           >
-            <span class="login-carnet-label">Consulta<br />Aprendiz</span>
-            <span class="login-carnet-avatar login-carnet-avatar-aprendiz">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="30" height="30">
-                <path d="M12 3 1 8.5l11 5.5 9-4.5V17h2V8.5L12 3zm0 8.19L4.24 8.5 12 4.81l7.76 3.69L12 11.19z"/>
-                <path d="M6 12.68v3.98c0 1.1 2.69 2.84 6 2.84s6-1.74 6-2.84v-3.98l-6 3-6-3z"/>
-              </svg>
-            </span>
-            <span class="login-carnet-footer">Aprendiz</span>
+            🔍 Consulta Aprendiz
           </button>
         </div>
 
@@ -327,6 +313,24 @@ async function restablecerPassword() {
 
           <button class="login-button login-button-primary login-button-full login-button-student" @click="consultarAprendiz" :disabled="loading">
             {{ loading ? 'Consultando...' : '🔍 Consultar Mi Asistencia' }}
+          </button>
+        </div>
+
+        <!-- ACCESO DIRECTO MODO KIOSCO DE AULA (SIN CREDENCIALES) -->
+        <div class="login-kiosk-box">
+          <div class="login-kiosk-divider">
+            <span>O para computadores del aula</span>
+          </div>
+          <button
+            type="button"
+            class="btn-kiosk-access"
+            @click="$emit('abrir-kiosco')"
+          >
+            <span class="btn-kiosk-icon">🖥️</span>
+            <div class="btn-kiosk-text">
+              <strong>Modo Kiosco de Aula</strong>
+              <small>Esperar activación remota del docente (Sin contraseña)</small>
+            </div>
           </button>
         </div>
       </template>
@@ -405,4 +409,3 @@ async function restablecerPassword() {
     </div>
   </div>
 </template>
-
