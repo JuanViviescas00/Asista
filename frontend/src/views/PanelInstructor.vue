@@ -25,8 +25,6 @@ const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
 const claseIniciadaAt = ref(null)
 
-const emit = defineEmits(['cerrar-sesion'])
-
 // Toast notifications
 const toast = reactive({ show: false, message: '', type: 'success' })
 function showToast(message, type = 'success') {
@@ -34,12 +32,6 @@ function showToast(message, type = 'success') {
   toast.message = message
   toast.type = type
   setTimeout(() => { toast.show = false }, 3000)
-}
-
-function cerrarSesion() {
-  sessionStorage.removeItem('admin_auth')
-  sessionStorage.removeItem('user_data')
-  emit('cerrar-sesion')
 }
 
 onMounted(async () => {
@@ -1227,14 +1219,6 @@ function descargarExcel(data, nombreArchivo) {
 
       <div class="user-badge" style="display: flex; gap: 12px; align-items: center;">
         <span class="role-pill">Docente</span>
-        <button class="btn-logout-panel" @click="cerrarSesion">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-          Cerrar Sesión
-        </button>
       </div>
     </div>
 
@@ -2598,26 +2582,6 @@ function descargarExcel(data, nombreArchivo) {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid #e2e8f0;
-}
-
-/* Logout */
-.btn-logout-panel {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #ef4444;
-  color: #ffffff;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.btn-logout-panel:hover {
-  background: #dc2626;
 }
 
 @keyframes pulse {

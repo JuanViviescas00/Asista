@@ -409,4 +409,3 @@ async function restablecerPassword() {
     </div>
   </div>
 </template>
-

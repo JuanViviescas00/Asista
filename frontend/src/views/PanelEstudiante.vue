@@ -21,14 +21,6 @@ const nuevaExcusa = ref({
   motivo: ''
 })
 
-const emit = defineEmits(['cerrar-sesion'])
-
-function cerrarSesion() {
-  sessionStorage.removeItem('admin_auth')
-  sessionStorage.removeItem('user_data')
-  emit('cerrar-sesion')
-}
-
 onMounted(async () => {
   await cargarDatosEstudiante()
 })
@@ -140,9 +132,6 @@ async function radicarExcusa() {
       </div>
       <div style="display: flex; gap: 12px; align-items: center;">
         <span class="student-portal-role">Aprendiz</span>
-        <button class="student-portal-logout" @click="cerrarSesion">
-          🚪 Cerrar Sesión
-        </button>
       </div>
     </div>
 

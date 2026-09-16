@@ -2,6 +2,7 @@ import Asistencia from '../models/Asistencia.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import Dispositivo from '../models/Dispositivo.js'
+import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
 import { getFichaIdList, getHoyString, calcularEstadoAsistencia } from '../services/asistenciaService.js'
@@ -160,7 +161,20 @@ async function procesarAsistencia(item) {
   const offsetMs = dateObj.getTimezoneOffset() * 60000
   const fecha = new Date(dateObj.getTime() - offsetMs).toISOString().split('T')[0]
   const hora = dateObj.toTimeString().slice(0, 8)
-  const estado = calcularEstadoAsistencia(ficha.jornada, dateObj)
+
+  // Determina la clase en curso al momento de la marcación para medir la tardanza
+  // desde su hora de inicio (iniciadaAt) y no desde la jornada fija.
+  let inicioClase = null
+  try {
+    const queryClase = { fichaId: ficha._id, iniciadaAt: { $lte: dateObj } }
+    if (instructorId) queryClase.instructorId = instructorId
+    const clase = await Clase.findOne(queryClase).sort({ iniciadaAt: -1 })
+    if (clase?.iniciadaAt) inicioClase = clase.iniciadaAt
+  } catch (_) {
+    // Sin clase localizable: se mide desde el propio instante de la marcación
+    // (equivale a "a tiempo"), comportamiento conservador.
+  }
+  const { estado, horasTardanza, tiempoTardanza } = calcularEstadoAsistencia(inicioClase, dateObj)
 
   try {
     // Un solo registro por estudiante/ficha/día (regla de negocio): upsert atómico
@@ -177,6 +191,8 @@ async function procesarAsistencia(item) {
           fecha,
           estado,
           hora,
+          horasTardanza,
+          tiempoTardanza,
           instructorId: instructorId || null,
           metodo: metodo === 'MANUAL' ? 'MANUAL' : 'HUELLA',
         },
