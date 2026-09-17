@@ -41,6 +41,15 @@ export async function activar(req, res) {
     }
     const deviceId = String(dispositivo.deviceId)
 
+    // [LOG TEMPORAL - DIAGNÓSTICO] Auditoría de cada POST /clases/activar
+    console.log('[clases/activar]', JSON.stringify({
+      ts: new Date().toISOString(),
+      ip: req.ip,
+      deviceId,
+      fichaId,
+      instructorId,
+    }))
+
     // Operación atómica: upsert sobre la clase Activa de ese deviceId.
     // Evita la ventana de carrera de findOne + save/create (que podía crear
     // dos documentos Activa para el mismo dispositivo bajo concurrencia).

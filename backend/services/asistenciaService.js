@@ -109,7 +109,13 @@ function escalaDesdeMinutos(minutosTardanza) {
 export function calcularTardanzaEscalonada(jornada, fechaHora = new Date()) {
   const inicio = HORARIOS_JORNADA[jornada] ?? HORARIOS_JORNADA['Mañana']
   const minutosMarcacion = fechaHora.getHours() * 60 + fechaHora.getMinutes()
-  const minutosTardanza = minutosMarcacion - inicio
+  let minutosTardanza = minutosMarcacion - inicio
+  // Solo jornada Noche: un negativo es casi seguro un cruce de medianoche
+  // (marcación de madrugada tras un inicio a las 18:00), no una llegada
+  // anticipada real. Se "envuelve" sumando 24h antes de evaluar la escala.
+  if (jornada === 'Noche' && minutosTardanza < 0) {
+    minutosTardanza += 1440
+  }
   return { ...escalaDesdeMinutos(minutosTardanza), minutosTardanza }
 }
 
