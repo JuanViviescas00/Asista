@@ -693,3 +693,15 @@ Consolidado honesto de lo que falta, verificado contra `git log` y `git status` 
 - **Rotación de `MONGODB_URI` y `GMAIL_PASS`** — pendiente de coordinar con el otro colaborador. (`backend/.env` ya fuera del tracking desde 2026-09-10, commit `bcb0376`.)
 - **Prueba del instalador `.exe` en un PC/VM realmente limpio** — sin hacerse. Es la única prueba de todo el proyecto que sigue sin ejecutarse (confirmada 2026-09-11).
 - **Nota residual `Instructor.esLider`** — puede quedar obsoleto en `true` si un instructor deja de liderar todas sus fichas (nada lo resetea a `false`); mitigado por el cálculo en vivo de `getInstructores()`. Sin prioridad urgente, no corregido.
+
+# Merge con origin/main — 2026-09-17
+
+`[DECIDIDO]` — Merge de `origin/main` cerrado (commit `c783708`). Decisiones de arquitectura resultantes:
+
+- **Biometría centralizada en `huellero/` (Electron).** El backend **ya no** tiene `backend/services/fingerprint.js`, ni las DLLs de DigitalPersona (`backend/dll/`), ni las rutas HTTP de enrolamiento/verificación (`/estudiantes/enroll-start`, `enroll-capture`, `enroll-complete`, `enroll-cancel`, `verify`, `fingerprint-status`). Motivo: Iván dockerizó backend y frontend, y las DLLs nativas de Windows (koffi + dpfj.dll) no corren en un contenedor Linux.
+- **Eliminado el flujo de enrolamiento y verificación de huella vía navegador web** (Web SDK de DigitalPersona, `Fingerprint.WebApi`). Ya estaba decomisionado desde 2026-09-11 pero se había dejado como código de referencia; ahora se borró del todo porque el backend que lo sostenía ya no existe.
+- **El enrolamiento real de huellas sigue ocurriendo únicamente vía `huellero/src`** (`EnrolarHuellaModal.vue` + `fingerprint.js` del huellero), que ya soporta 2 huellas por estudiante.
+- **Conservada la lógica de 2 huellas** (`huellaTemplate`/`huellaTemplate2`) en `enrolamientoController.js`, que `main` no tenía.
+- **`useSistemaEstado.js`**: el indicador `estadoWebSocket` ahora usa `socket.connected` en vez de un endpoint de `fingerprint-status` que ya no existe.
+
+**Pendiente de baja prioridad (no resuelto):** `estadoLectorUSB` en el mismo composable `useSistemaEstado.js` sigue dependiendo de `Fingerprint.WebApi` (también decomisionado), por lo que el "ojito" del panel puede mostrar "Huellero desconectado" de forma incorrecta. Cosmético, no bloqueante.
