@@ -148,6 +148,7 @@ function elegirSlot(n) {
 }
 
 function cancelar() {
+  window.huellero.cancelarCaptura()
   window.huellero.cancelarEnrolamiento()
 }
 

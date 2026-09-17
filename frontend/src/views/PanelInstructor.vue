@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
-import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
+import { calcularMinutosTranscurridos, calcularEstadoPorTiempo, calcularEstadoAsistenciaFrontend } from '../utils/asistenciaTiempo.js'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -380,53 +380,6 @@ async function reactivarJornada() {
   }
 }
 
-function calcularHorasTardanza(horaMarcacionStr, jornada) {
-  if (!horaMarcacionStr) return { horas: 0, texto: '0 horas' }
-
-  // Horarios de inicio oficial:
-  // Mañana: 6:00 AM (360 min) -> Tolerancia hasta 6:15 AM (375 min)
-  // Tarde: 12:30 PM (750 min) -> Tolerancia hasta 12:45 PM (765 min)
-  // Noche: 6:30 PM / 18:30 (1110 min) -> Tolerancia hasta 6:45 PM (1125 min)
-  let inicioMin = 360 // 6:00 AM por defecto
-  let limiteTolerancia = 375 // 6:15 AM
-
-  if (jornada === 'Tarde') {
-    inicioMin = 750 // 12:30 PM
-    limiteTolerancia = 765 // 12:45 PM
-  } else if (jornada === 'Noche') {
-    inicioMin = 1110 // 6:30 PM (18:30)
-    limiteTolerancia = 1125 // 6:45 PM
-  }
-
-  let minutosMarcacion = 0
-  if (horaMarcacionStr instanceof Date) {
-    minutosMarcacion = horaMarcacionStr.getHours() * 60 + horaMarcacionStr.getMinutes()
-  } else if (typeof horaMarcacionStr === 'string') {
-    const esPM = /p\.?\s*m\.?/i.test(horaMarcacionStr)
-    const esAM = /a\.?\s*m\.?/i.test(horaMarcacionStr)
-    const match = horaMarcacionStr.match(/(\d{1,2}):(\d{1,2})/)
-    if (match) {
-      let h = parseInt(match[1], 10)
-      const m = parseInt(match[2], 10)
-      if (esPM && h < 12) h += 12
-      if (esAM && h === 12) h = 0
-      minutosMarcacion = h * 60 + m
-    }
-  }
-
-  if (minutosMarcacion <= limiteTolerancia) {
-    return { horas: 0, texto: '0 horas' }
-  }
-
-  const minutosPasadosInicio = minutosMarcacion - inicioMin
-  const horasTardanza = Math.max(1, Math.ceil(minutosPasadosInicio / 60))
-
-  return {
-    horas: horasTardanza,
-    texto: `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
-  }
-}
-
 function inicializarAsistenciaDia() {
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
@@ -438,7 +391,7 @@ function inicializarAsistenciaDia() {
     const estado = existente ? existente.estado : 'Ninguno'
     const hora = existente ? (existente.hora || '') : ''
     const tardanzaInfo = estado === 'Tardanza'
-      ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
+      ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularEstadoAsistenciaFrontend(hora, existente.horaInicioClase || claseIniciadaAt.value, jornadaFicha))
       : { horas: 0, texto: '0 horas' }
 
     registros[est._id] = {
@@ -447,6 +400,7 @@ function inicializarAsistenciaDia() {
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
+      horaInicioClase: existente?.horaInicioClase || null,
     }
   }
   asistenciaDia.value = registros
@@ -531,7 +485,7 @@ async function guardarAsistenciaDia() {
         estadoFinal = reg.estado
         horaMarcada = reg.horaMarcacion || horaActual
         if (estadoFinal === 'Tardanza') {
-          const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
+          const calc = calcularEstadoAsistenciaFrontend(horaMarcada, claseIniciadaAt.value, jornadaFicha)
           hTardanza = reg.horasTardanza || calc.horas
           tTardanza = reg.tiempoTardanza || calc.texto
         }
@@ -654,7 +608,7 @@ function exportarAsistenciaDia() {
     const estadoStr = jornadaInhabilitada.value ? 'Inhabilitada' : (reg ? (reg.excusa ? 'Excusada' : reg.estado) : 'Sin registro')
     let tardanzaStr = '0 horas'
     if (estadoStr === 'Tardanza') {
-      tardanzaStr = reg?.tiempoTardanza || calcularHorasTardanza(reg?.horaMarcacion, jornadaFicha).texto
+      tardanzaStr = reg?.tiempoTardanza || calcularEstadoAsistenciaFrontend(reg?.horaMarcacion, reg?.horaInicioClase, jornadaFicha).texto
     }
     return {
       'Aprendiz': `${est.nombres} ${est.apellidos}`,
@@ -679,7 +633,7 @@ function exportarHistorial() {
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
     let tardanzaStr = '0 horas'
     if (asis.estado === 'Tardanza') {
-      tardanzaStr = asis.tiempoTardanza || calcularHorasTardanza(asis.hora, jornadaFicha).texto
+      tardanzaStr = asis.tiempoTardanza || calcularEstadoAsistenciaFrontend(asis.hora, asis.horaInicioClase, jornadaFicha).texto
     }
     return {
       'Fecha': asis.fecha,

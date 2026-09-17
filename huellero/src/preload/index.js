@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('huellero', {
   getEstudiantesFicha: (fichaId) => ipcRenderer.invoke('huellero:getEstudiantesFicha', fichaId),
   enrolarEstudiante: (payload) => ipcRenderer.invoke('huellero:enrolar', payload),
   cancelarEnrolamiento: () => ipcRenderer.invoke('huellero:cancelarEnrolar'),
+  cancelarCaptura: () => ipcRenderer.invoke('huellero:cancelarCaptura'),
   onEnrolarProgreso: (callback) => {
     const listener = (_event, progreso) => callback(progreso)
     ipcRenderer.on('huellero:enrolar-progreso', listener)

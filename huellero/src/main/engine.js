@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { getConfig, iniciarRegistroDispositivo, tieneIdentidad, reiniciarIdentidadYRegistrar } from './config.js'
 import * as store from './store.js'
 import wsClient from './ws-client.js'
-import { capturarHuella, inicializarCaptura } from './capture.js'
+import { capturarHuella, inicializarCaptura, cancelarCapturaActual, getDevActual } from './capture.js'
 import { notificarPendienteNuevo, sincronizar } from './scheduler.js'
 import { identificarEstudiante } from '../verify.js'
 import * as fingerprint from '../fingerprint.js'
@@ -32,6 +32,14 @@ export function setOnEnrolarProgreso(cb) {
 
 export function cancelarEnrolamiento() {
   enrolamientoCancelado = true
+}
+
+export function cancelarCapturaEnCurso() {
+  const dev = getDevActual()
+  if (!dev) {
+    return { ok: false, error: 'No hay captura en curso' }
+  }
+  return cancelarCapturaActual(dev)
 }
 
 function notificarEstado() {
