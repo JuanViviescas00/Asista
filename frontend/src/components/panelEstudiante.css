@@ -1,0 +1,43 @@
+.student-portal-page { padding: 24px; }
+.student-portal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.student-portal-subtitle { color: #64748b; font-size: 14px; }
+.student-portal-role { background: rgba(59,130,246,0.15); color: #2563eb; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 13px; }
+.student-portal-logout { background: #ef4444; color: #ffffff; border: none; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+.student-portal-logout:hover { background: #dc2626; }
+.student-portal-loading { padding: 24px; text-align: center; color: #64748b; }
+.student-portal-error { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; margin-bottom: 16px; max-width: 600px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.student-portal-grid { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
+.student-portal-profile-card, .student-portal-card { background: #ffffff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.student-portal-profile-card { text-align: center; }
+.student-portal-avatar { width: 72px; height: 72px; background: #2563eb; color: #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 700; margin: 0 auto 16px; }
+.student-portal-document { font-size: 13px; color: #64748b; margin-bottom: 20px; }
+.student-portal-info-list { text-align: left; display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.student-portal-info-item { display: flex; flex-direction: column; gap: 2px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; }
+.student-portal-info-item span { color: #64748b; font-size: 12px; }
+.student-portal-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.student-portal-stat { background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; text-align: center; border-left: 4px solid transparent; }
+.student-portal-stat-present { border-left-color: #28a745; }
+.student-portal-stat-late { border-left-color: #f59e0b; }
+.student-portal-stat-absent { border-left-color: #dc3545; }
+.student-portal-stat-number { display: block; font-size: 32px; font-weight: 700; color: #1e293b; line-height: 1; }
+.student-portal-stat-label { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; display: block; }
+.student-portal-card { margin-bottom: 24px; }
+.student-portal-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.student-portal-card-header h3 { font-size: 18px; font-weight: 600; }
+.student-portal-table-container { overflow-x: auto; }
+.student-portal-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.student-portal-table th, .student-portal-table td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+.student-portal-table th { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; background: #f8fafc; }
+.student-portal-table tbody tr:hover { background: #f8fafc; }
+.student-portal-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.student-portal-badge-success { background: #d4edda; color: #155724; }
+.student-portal-badge-warning { background: #fff3cd; color: #856404; }
+.student-portal-badge-danger { background: #f8d7da; color: #721c24; }
+.student-portal-empty-cell { text-align: center; padding: 48px 20px !important; color: #64748b; }
+@media (max-width: 860px) {
+  .student-portal-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .student-portal-page { padding: 20px 16px; }
+  .student-portal-header { align-items: flex-start; gap: 16px; flex-direction: column; }
+}

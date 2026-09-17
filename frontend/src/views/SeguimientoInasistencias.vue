@@ -8,6 +8,7 @@ import {
   LIMITE_DIAS_NO_CONSECUTIVOS,
 } from '../utils/inasistencias.js'
 import { apodoPrograma, formatearNumeroDocumento } from '../utils/textos.js'
+import StatCard from '../components/StatCard.vue'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', rol: 'Administrador' })
@@ -143,18 +144,9 @@ onMounted(async () => {
 
       <!-- Resumen -->
       <div class="stats-row" style="margin-top: 20px;">
-        <div class="stat-card stat-rojo">
-          <span class="stat-num">{{ consecutivos.length }}</span>
-          <span class="stat-label">Con {{ etiquetaConsecutivos }}</span>
-        </div>
-        <div class="stat-card stat-ambar">
-          <span class="stat-num">{{ noConsecutivos.length }}</span>
-          <span class="stat-label">Con {{ etiquetaNoConsecutivos }}</span>
-        </div>
-        <div class="stat-card stat-sinregistro">
-          <span class="stat-num">{{ estudiantesFiltrados.length }}</span>
-          <span class="stat-label">Aprendices evaluados</span>
-        </div>
+        <StatCard icon="alert-triangle" :label="`Con ${etiquetaConsecutivos}`" :value="consecutivos.length" variant="rojo" />
+        <StatCard icon="clock" :label="`Con ${etiquetaNoConsecutivos}`" :value="noConsecutivos.length" variant="ambar" />
+        <StatCard icon="users" label="Aprendices evaluados" :value="estudiantesFiltrados.length" variant="gris" />
       </div>
     </div>
 
