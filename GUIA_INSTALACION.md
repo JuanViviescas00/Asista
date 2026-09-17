@@ -1,101 +1,101 @@
-# 🚀 Guía de Instalación y Configuración del SDK de Huella (DigitalPersona U.are.U 4500)
+# 🚀 Guía de Instalación y Configuración del Sensor de Huella (DigitalPersona U.are.U 4500)
 
-Esta guía explica los pasos necesarios para desplegar y poner a funcionar el sistema de lectura de huella en **cualquier dispositivo o computadora nueva**.
+Esta guía explica los pasos necesarios para instalar los controladores de hardware y poner a funcionar el sistema de lectura de huella en **cualquier computadora nueva con Windows**.
 
 ---
 
-## 📁 Estructura del Proyecto
+## 🏛️ Arquitectura del Lector de Huellas
 
-El proyecto está organizado en dos módulos independientes:
+El hardware biométrico y sus librerías de enlace dinámico (`.dll`) operan **exclusivamente en la aplicación de escritorio (`huellero/`)**, manteniendo el backend y la plataforma web 100% libres de dependencias de drivers de Windows.
 
 ```text
-HuelleroActualizado/
-├── backend/                  # Servidor API Node.js, Express, MongoDB y motor biométrico C++
-│   ├── dll/                  # Librerías DLL nativas (dpfj.dll, dpfpdd.dll)
-│   ├── models/               # Modelos de base de datos
-│   ├── routes/               # Rutas API REST (/api/...)
-│   ├── services/             # Lógica biométrica y de correo
-│   └── package.json          # Dependencias del servidor
-│
-├── frontend/                 # Interfaz de usuario (Vue 3, Vite, Tailwind/CSS)
-│   ├── public/               # Scripts Web SDK DigitalPersona
-│   ├── src/                  # Componentes y vistas de usuario
-│   └── package.json          # Dependencias de la interfaz
-│
-├── package.json              # Scripts raíz para iniciar o instalar ambos
-├── setup_servicios_huella.bat# Configurador automático de servicios de huella
-└── setup_huellas.bat         # Instalador y verificador de dependencias
+       ┌──────────────────────────────┐
+       │ Lector Físico U.are.U 4500   │
+       └──────────────┬───────────────┘
+                      │ Conexión USB
+                      ▼
+       ┌──────────────────────────────┐
+       │ Driver RTE DigitalPersona    │ (Windows 10/11)
+       └──────────────┬───────────────┘
+                      │ FFI C++ (koffi)
+                      ▼
+       ┌──────────────────────────────┐
+       │ Kiosco Electron (huellero/)  │ Contiene huellero/dll/ (dpfj.dll, dpfpdd.dll)
+       └──────────────┬───────────────┘ Captura & Comparación local
+                      │
+                      │ Sincronización HTTP / WebSockets
+                      ▼
+       ┌──────────────────────────────┐
+       │ Backend API (Docker / Nube)  │ Node.js 22 + MongoDB Atlas
+       └──────────────────────────────┘
 ```
 
 ---
 
-## 📋 Requisitos Previos Generales
+## 📋 Requisitos Previos
 
-1. **Hardware:** Lector de Huella Biométrica **DigitalPersona U.are.U 4500 USB**.
+1. **Hardware:** Sensor biométrico **DigitalPersona U.are.U 4500 USB** (o compatible con SDK U.are.U).
 2. **Sistema Operativo:** Windows 10 o Windows 11 (64-bit).
-3. **Node.js:** Versión 18 o superior.
-4. **MongoDB:** Instancia de MongoDB local o URI de MongoDB Atlas en la nube.
+3. **Controladores del Fabricante:** Driver RTE (*Runtime Environment*) de DigitalPersona / Crossmatch / HID Global.
+4. **Node.js:** Versión 22 o superior.
 
 ---
 
-## 1. 🔌 Instalación en la Computadora Cliente (Donde se conecta el Lector USB)
+## 1. 🔌 Instalación de Controladores en la Computadora con el Lector
 
-Para que el navegador web pueda comunicarse con el sensor biométrico USB, la máquina cliente requiere instalar el servicio de fondo y los drivers de DigitalPersona:
-
-### Pasos:
-1. **Configuración Rápida Automática:**
-   - Haz clic derecho sobre **`setup_servicios_huella.bat`** en la raíz del proyecto y selecciona **"Ejecutar como Administrador"**.
-   - El script creará las carpetas del sistema, configurará el servicio `DpHost` e iniciará `DPAgent.exe`.
-
-2. **Instalación Manual (Si es una máquina nueva sin drivers):**
-   - Ejecuta el instalador **`DigitalPersona Web Components`** (o `DigitalPersona Lite Client / WebAgent`).
-   - Conecta el lector USB U.are.U 4500.
-   - Verifica en el Administrador de Dispositivos que aparezca bajo **Dispositivos biométricos** -> **DigitalPersona Fingerprint Reader**.
-
----
-
-## 2. 🖥️ Configuración del Servidor Backend (Node.js)
-
-El backend utiliza la librería nativa de extracción y comparación de minucias **`dpfj.dll`** a través de `koffi`.
+Para que Windows reconozca el sensor biométrico y la aplicación de escritorio pueda abrir el puerto USB:
 
 ### Pasos:
-1. **Iniciar el Servidor Backend:**
-   ```powershell
-   cd backend
-   npm install
-   npm run dev
-   ```
-2. **Verificación:**
-   - Debe mostrar:
+1. **Instalar el Driver RTE de DigitalPersona:**
+   * Ejecuta el instalador oficial de controladores: `DigitalPersona U.are.U SDK Runtime (x64)`.
+   * Sigue los pasos del asistente de instalación hasta finalizar.
+2. **Conectar el Sensor USB:**
+   * Conecta el lector U.are.U 4500 a un puerto USB 2.0 / 3.0 directo del equipo.
+3. **Verificación en el Administrador de Dispositivos:**
+   * Presiona `Win + X` y selecciona **Administrador de dispositivos**.
+   * Debe aparecer la categoría:
      ```text
-     [fingerprint] dpfj.dll cargado exitosamente desde: .../backend/dll/dpfj.dll
-     MongoDB Atlas conectado
-     Backend en http://localhost:3000
+     Dispositivos biométricos
+     └── DigitalPersona Fingerprint Reader (o U.are.U 4500 Fingerprint Reader)
      ```
+   * Si aparece con un triángulo amarillo, reinstala el controlador o reconecta el sensor en otro puerto USB.
 
 ---
 
-## 3. 🌐 Configuración del Frontend (Vue 3 / Vite)
+## 2. 🖐️ Puesta en Marcha del Kiosco de Escritorio (`huellero/`)
 
-Los scripts del SDK Web de DigitalPersona vienen pre-incluidos en la carpeta `frontend/public/scripts/`.
+La carpeta `huellero/dll/` ya incluye las librerías nativas necesarias (`dpfj.dll`, `dpfpdd.dll`, etc.):
 
-### Pasos:
-1. **Iniciar la Interfaz Frontend:**
+1. Abre una terminal de consola en la carpeta `huellero/`:
    ```powershell
-   cd frontend
+   cd huellero
    npm install
    npm run dev
    ```
-2. Abre en tu navegador: `http://localhost:5173`.
+2. La interfaz del Kiosco se abrirá en pantalla completa o ventana de aula.
+3. Al posicionar el dedo sobre el sensor, la luz roja del lector se activará y registrará la lectura biométrica automáticamente.
 
 ---
 
-## 🛠️ Resumen de Instalación para Nuevas Máquinas
+## 3. 🌐 Configuración del Servidor y Plataforma Web
 
-| Componente | ¿Qué instalar? | Ubicación / Archivo |
+Para iniciar el servidor y la interfaz web en la misma máquina o en red local:
+
+* **Con Docker (Recomendado):**
+  ```bash
+  docker compose -f docker-compose.dev.yml up -d
+  ```
+* **Con script automatizado:**
+  * Ejecuta haciendo doble clic en **`setup_huellas.bat`** para instalar todas las dependencias del monorepo y verificar los componentes nativos.
+
+---
+
+## 🛠️ Resumen de Componentes
+
+| Componente | Responsabilidad | Plataforma |
 | :--- | :--- | :--- |
-| **Cliente USB** | Driver + DigitalPersona WebAgent | `setup_servicios_huella.bat` o instalador `.exe` |
-| **Backend Node.js** | DLLs de Biometría | `backend/dll/dpfj.dll` |
-| **Frontend** | Scripts Web SDK | Pre-incluidos en `frontend/public/scripts/` |
+| **Driver DigitalPersona** | Comunicación USB con el sensor físico | Windows 10/11 |
+| **`huellero/` (Electron)** | Captura, comparación biométrica y modo offline | Windows (Equipo del aula) |
+| **`backend/` (Node.js 22)** | Base de datos Atlas, reglas de negocio, WebSocket | Docker / Linux / Windows / Nube |
+| **`frontend/` (Vue 3)** | Dashboard del Administrador e Instructores | Cualquier navegador web |
 
----

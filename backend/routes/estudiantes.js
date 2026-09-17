@@ -36,14 +36,6 @@ router.post('/importar',
 )
 
 // Enrolamiento biométrico de huellas (requiere Administrador o Instructor autenticado)
-router.post('/enroll-start', autenticarJWT, verificarRol(['Administrador', 'Instructor']), estudianteController.enrollStart)
-router.post('/enroll-capture', autenticarJWT, verificarRol(['Administrador', 'Instructor']), estudianteController.enrollCapture)
-router.post('/enroll-complete', autenticarJWT, verificarRol(['Administrador', 'Instructor']), estudianteController.enrollComplete)
-router.post('/enroll-cancel', autenticarJWT, verificarRol(['Administrador', 'Instructor']), estudianteController.enrollCancel)
 router.put('/:id/enrolar-huella', autenticarJWT, verificarRol(['Administrador', 'Instructor']), estudianteController.enrolarHuellaLegacy)
-
-// Verificación biométrica masiva de alta velocidad y estado de hardware (Acceso directo para Kiosco de Aula)
-router.post('/verify', estudianteController.verifyFingerprint)
-router.get('/fingerprint-status', estudianteController.getFingerprintStatus)
 
 export default router
