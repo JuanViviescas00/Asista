@@ -2,7 +2,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import * as XLSX from 'xlsx'
-import KioscoAsistencia from './KioscoAsistencia.vue'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 
@@ -18,8 +17,7 @@ const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
 
-// Modo Kiosco y Control Remoto en Vivo
-const modoKioscoActivo = ref(false)
+// Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
@@ -143,13 +141,6 @@ async function detenerSesionRemotaDocente() {
     showToast('Clase finalizada.', 'info')
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
-  }
-}
-
-function onKioscoAsistenciaMarcada(data) {
-  if (data?.estudianteId && asistenciaDia.value[data.estudianteId]) {
-    asistenciaDia.value[data.estudianteId].estado = data.estado
-    asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
   }
 }
 
@@ -596,442 +587,6 @@ const conteoAsistencia = computed(() => {
 
 
 // =============================================
-// SEMÁFORO DE ESTADO (WS SERVIDORES + LECTORES USB)
-// =============================================
-const wsConectado = ref(false)
-const sdkBackendActivo = ref(false)
-const lectorConectado = ref(false)
-const sdkCargando = ref(true)
-const estadoLector = ref('Verificando Lector USB...')
-
-let fpSdk = null
-let currentReaderUid = ''
-let capturing = false
-let sdkInitIntentos = 0
-let currentFormat = null
-let modoCaptura = 'enrolamiento' // 'enrolamiento' o 'asistencia'
-
-// Estado de verificación biométrica para asistencia
-const verificandoHuella = ref(false)
-const ultimaVerificacion = ref(null)
-
-async function verificarConexionServidor() {
-  try {
-    const res = await api.estudiantes.fingerprint.status()
-    wsConectado.value = true
-    sdkBackendActivo.value = !!(res && res.sdkAvailable)
-  } catch (err) {
-    wsConectado.value = false
-    sdkBackendActivo.value = false
-  }
-}
-
-function verificarEstadoLectorUSB() {
-  if (!fpSdk || capturing || enrolando.value) return // No consultar durante captura o enrolamiento para no interrumpir la transmisión de datos
-
-  fpSdk.enumerateDevices().then(function (readers) {
-    sdkCargando.value = false
-    if (readers && readers.length > 0) {
-      currentReaderUid = readers[0]
-      lectorConectado.value = true
-      estadoLector.value = `Lector USB Conectado (${readers.length} dispositivo detectado)`
-    } else {
-      currentReaderUid = ''
-      lectorConectado.value = false
-      estadoLector.value = 'Sin lector de huellas USB'
-    }
-  }, function (error) {
-    sdkCargando.value = false
-    lectorConectado.value = false
-    currentReaderUid = ''
-    estadoLector.value = 'Servicio local de huellas no responde'
-  })
-}
-
-function initFingerprintSDK() {
-  sdkInitIntentos++
-  console.log('[FP SDK] Intento', sdkInitIntentos, '- verificando Fingerprint global...')
-
-  if (typeof Fingerprint === 'undefined') {
-    console.warn('[FP SDK] Fingerprint global no definido aun.')
-    sdkCargando.value = true
-    estadoLector.value = 'SDK no cargado - scripts faltantes'
-    if (sdkInitIntentos < 10) {
-      setTimeout(initFingerprintSDK, 1000)
-    } else {
-      sdkCargando.value = false
-      lectorConectado.value = false
-      estadoLector.value = 'SDK no disponible tras varios intentos'
-    }
-    return
-  }
-
-  console.log('[FP SDK] Fingerprint global OK, creando WebApi...')
-  try {
-    fpSdk = new Fingerprint.WebApi()
-    console.log('[FP SDK] WebApi creado:', fpSdk)
-  } catch (e) {
-    console.error('[FP SDK] Error al crear WebApi:', e.message)
-    sdkCargando.value = false
-    lectorConectado.value = false
-    estadoLector.value = 'Error al inicializar SDK: ' + e.message
-    return
-  }
-
-  fpSdk.onDeviceConnected = function (e) {
-    console.log('[FP SDK] Dispositivo conectado:', e)
-    if (e && e.deviceUid) currentReaderUid = e.deviceUid
-    lectorConectado.value = true
-    sdkCargando.value = false
-    estadoLector.value = 'Lector conectado - U.are.U 4500'
-  }
-
-  fpSdk.onDeviceDisconnected = function (e) {
-    console.log('[FP SDK] Dispositivo desconectado:', e)
-    lectorConectado.value = false
-    currentReaderUid = ''
-    estadoLector.value = 'Lector desconectado'
-  }
-
-  fpSdk.onCommunicationFailed = function (e) {
-    console.error('[FP SDK] Error de comunicacion:', e)
-    estadoLector.value = 'Error de comunicacion con el lector'
-    lectorConectado.value = false
-    sdkCargando.value = false
-  }
-
-  fpSdk.onSamplesAcquired = function (s) {
-    console.log('[FP SDK] Muestra adquirida, modo:', modoCaptura)
-    detenerCapturaSDK()
-    try {
-      const samples = JSON.parse(s.samples)
-      if (!samples || samples.length === 0) {
-        console.warn('[FP SDK] No hay samples en la respuesta')
-        return
-      }
-      const imgSrc = 'data:image/png;base64,' + Fingerprint.b64UrlTo64(samples[0])
-      console.log('[FP SDK] PNG generado, size:', imgSrc.length)
-      if (modoCaptura === 'asistencia') {
-        procesarVerificacionAsistencia(imgSrc)
-      } else {
-        enviarCapturaAlBackend(imgSrc)
-      }
-    } catch (e) {
-      console.error('[FP SDK] Error procesando muestra:', e.message)
-    }
-  }
-
-  fpSdk.onQualityReported = function (e) {
-    console.log('[FP SDK] Calidad reportada:', e.quality)
-  }
-
-  console.log('[FP SDK] Enumerando dispositivos...')
-  fpSdk.enumerateDevices().then(function (readers) {
-    console.log('[FP SDK] Dispositivos encontrados:', readers)
-    sdkCargando.value = false
-    if (readers && readers.length > 0) {
-      currentReaderUid = readers[0]
-      lectorConectado.value = true
-      estadoLector.value = 'Lector U.are.U 4500 listo (' + readers.length + ' dispositivo(s))'
-    } else {
-      estadoLector.value = 'No se detecto lector de huellas. ¿DigitalPersona Agent corriendo?'
-      lectorConectado.value = false
-    }
-  }, function (error) {
-    console.error('[FP SDK] Error al enumerar:', error)
-    sdkCargando.value = false
-    estadoLector.value = 'Error al buscar dispositivos: ' + (error.message || error)
-    lectorConectado.value = false
-  })
-}
-
-function iniciarCapturaSDK() {
-  console.log('[FP SDK] iniciarCapturaSDK - capturing:', capturing, 'readerUid:', currentReaderUid)
-  if (capturing) {
-    console.warn('[FP SDK] Ya esta capturando')
-    return
-  }
-  if (!currentReaderUid) {
-    console.log('[FP SDK] No hay readerUid, re-enumerando...')
-    fpSdk.enumerateDevices().then(function (readers) {
-      if (readers && readers.length > 0) {
-        currentReaderUid = readers[0]
-        lectorConectado.value = true
-        estadoLector.value = 'Lector listo'
-        iniciarCapturaSDK()
-      } else {
-        showToast('Lector no detectado. Verifique la conexion USB y el DigitalPersona Agent.', 'error')
-      }
-    })
-    return
-  }
-
-  console.log('[FP SDK] Iniciando adquisicion en', currentReaderUid, 'formato: PngImage')
-  currentFormat = Fingerprint.SampleFormat.PngImage
-  fpSdk.startAcquisition(currentFormat, currentReaderUid).then(function () {
-    console.log('[FP SDK] Adquisicion iniciada OK')
-    capturing = true
-  }, function (error) {
-    console.error('[FP SDK] Error al iniciar adquisicion:', error)
-    showToast('Error al iniciar captura: ' + (error.message || error), 'error')
-  })
-}
-
-function detenerCapturaSDK() {
-  if (!capturing || !fpSdk) return
-  console.log('[FP SDK] Deteniendo captura...')
-  fpSdk.stopAcquisition().then(function () {
-    console.log('[FP SDK] Captura detenida')
-    capturing = false
-  }, function (e) {
-    console.warn('[FP SDK] Error al detener:', e)
-    capturing = false
-  })
-}
-
-// =============================================
-// VERIFICACIÓN BIOMÉTRICA PARA ASISTENCIA
-// =============================================
-function iniciarVerificacionHuella() {
-  if (!fpSdk || !lectorConectado.value) {
-    showToast('El lector de huellas no está conectado.', 'error')
-    return
-  }
-  if (!fichaSeleccionada.value) {
-    showToast('Selecciona una ficha primero.', 'error')
-    return
-  }
-  verificandoHuella.value = true
-  ultimaVerificacion.value = null
-  modoCaptura = 'asistencia'
-  showToast('Coloque el dedo en el lector para registrar asistencia...', 'info')
-  iniciarCapturaSDK()
-}
-
-function detenerVerificacionHuella() {
-  detenerCapturaSDK()
-  verificandoHuella.value = false
-  modoCaptura = 'enrolamiento'
-}
-
-async function procesarVerificacionAsistencia(imageBase64) {
-  try {
-    const fichaId = fichaSeleccionada.value._id
-    const result = await api.estudiantes.fingerprint.verify(imageBase64, fichaId)
-
-    if (result.match) {
-      // Encontró al estudiante: marcarlo como presente
-      const estId = result.studentId
-      const nombre = `${result.nombres} ${result.apellidos}`
-      
-      // Verificar que el estudiante pertenece a esta ficha
-      const estudianteEnFicha = estudiantesFicha.value.find(e => e._id === estId)
-      if (estudianteEnFicha) {
-        const reg = asistenciaDia.value[estId]
-        if (reg && (reg.estado === 'Presente' || reg.estado === 'Tardanza')) {
-          // Ya está marcado, no desmarcar
-          ultimaVerificacion.value = {
-            exito: true,
-            nombre: nombre,
-            estado: reg.estado,
-            hora: reg.horaMarcacion,
-          }
-          showToast(`${nombre} ya estaba marcado como ${reg.estado}.`, 'info')
-        } else {
-          // Marcar como presente
-          marcarPresente(estId)
-          ultimaVerificacion.value = {
-            exito: true,
-            nombre: nombre,
-            estado: asistenciaDia.value[estId]?.estado || 'Presente',
-            hora: asistenciaDia.value[estId]?.horaMarcacion || '',
-          }
-          showToast(`${nombre} - ${asistenciaDia.value[estId]?.estado} (${asistenciaDia.value[estId]?.horaMarcacion})`, 'success')
-        }
-      } else {
-        ultimaVerificacion.value = {
-          exito: false,
-          nombre: nombre,
-          mensaje: 'Estudiante identificado pero no pertenece a esta ficha.',
-        }
-        showToast(`${nombre} no pertenece a esta ficha.`, 'warning')
-      }
-    } else {
-      ultimaVerificacion.value = {
-        exito: false,
-        nombre: null,
-        mensaje: 'Huella no reconocida. El estudiante puede no estar enrolado.',
-      }
-      showToast('Huella no reconocida. Intente de nuevo.', 'error')
-    }
-  } catch (err) {
-    console.error('[Verificacion] Error:', err)
-    ultimaVerificacion.value = {
-      exito: false,
-      nombre: null,
-      mensaje: 'Error al verificar: ' + err.message,
-    }
-    showToast('Error al verificar huella: ' + err.message, 'error')
-  }
-
-  // Si el modo asistencia sigue activo, reactivar captura para el siguiente estudiante
-  if (verificandoHuella.value) {
-    setTimeout(() => {
-      showToast('Lector listo para el siguiente estudiante...', 'info')
-      iniciarCapturaSDK()
-    }, 1500)
-  }
-}
-
-// =============================================
-// ENROLAMIENTO DE HUELLAS - SDK REAL
-// =============================================
-const showEnrolarModal = ref(false)
-const estudianteTarget = ref(null)
-const pasoEnrolamiento = ref(1)
-const capturasCompletadas = ref(0)
-const enrolando = ref(false)
-const enrollmentSessionId = ref(null)
-const dedoSeleccionado = ref('indice_derecho')
-
-const sdkDisponible = computed(() => {
-  return !!(lectorConectado.value && !sdkCargando.value)
-})
-
-const DEDOS = [
-  { value: 'pulgar_derecho', label: 'Pulgar Derecho' },
-  { value: 'indice_derecho', label: 'Índice Derecho' },
-  { value: 'medio_derecho', label: 'Medio Derecho' },
-  { value: 'anular_derecho', label: 'Anular Derecho' },
-  { value: 'menique_derecho', label: 'Meñique Derecho' },
-  { value: 'pulgar_izquierdo', label: 'Pulgar Izquierdo' },
-  { value: 'indice_izquierdo', label: 'Índice Izquierdo' },
-  { value: 'medio_izquierdo', label: 'Medio Izquierdo' },
-  { value: 'anular_izquierdo', label: 'Anular Izquierdo' },
-  { value: 'menique_izquierdo', label: 'Meñique Izquierdo' },
-]
-
-function abrirModalEnrolamiento(estudiante) {
-  estudianteTarget.value = estudiante
-  pasoEnrolamiento.value = 1
-  capturasCompletadas.value = 0
-  enrolando.value = false
-  dedoSeleccionado.value = estudiante.dedoEnrolado || 'indice_derecho'
-  modoCaptura = 'enrolamiento'
-  showEnrolarModal.value = true
-  verificarEstadoLectorUSB()
-}
-
-async function iniciarEnrolamientoReal() {
-  if (!lectorConectado.value) {
-    showToast('El lector de huellas USB no está conectado.', 'error')
-    return
-  }
-  if (!estudianteTarget.value) return
-
-  enrolando.value = true
-  pasoEnrolamiento.value = 2
-  capturasCompletadas.value = 0
-  modoCaptura = 'enrolamiento'
-
-  try {
-    const nombre = `${estudianteTarget.value.nombres} ${estudianteTarget.value.apellidos}`
-    const doc = `${estudianteTarget.value.tipoDocumento} ${estudianteTarget.value.numeroDocumento}`
-    const res = await api.estudiantes.fingerprint.enrollStart(
-      estudianteTarget.value._id,
-      nombre,
-      doc,
-      dedoSeleccionado.value
-    )
-
-    if (!res.success && res.error) {
-      throw new Error(res.error)
-    }
-
-    enrollmentSessionId.value = res.sessionId
-    showToast('Coloque el dedo en el lector para la primera muestra...', 'info')
-    iniciarCapturaSDK()
-  } catch (err) {
-    enrolando.value = false
-    pasoEnrolamiento.value = 1
-    showToast('Error al iniciar enrolamiento: ' + err.message, 'error')
-  }
-}
-
-async function enviarCapturaAlBackend(imageBase64) {
-  if (!enrolando.value || !enrollmentSessionId.value || pasoEnrolamiento.value !== 2) return
-
-  try {
-    const res = await api.estudiantes.fingerprint.enrollCapture(
-      enrollmentSessionId.value,
-      imageBase64
-    )
-
-    if (res.error) {
-      throw new Error(res.error)
-    }
-
-    const numMuestras = res.captures || (capturasCompletadas.value + 1)
-    capturasCompletadas.value = numMuestras
-
-    // Si el SDK indica que ya tiene suficientes muestras (ready=true) o se alcanzaron 4 muestras:
-    if (res.ready || numMuestras >= 4) {
-      // 1. Detener inmediatamente el sensor USB para evitar lecturas adicionales
-      detenerCapturaSDK()
-      enrolando.value = false
-
-      // 2. Completar enrolamiento en el servidor con validación de no-duplicado
-      try {
-        const compRes = await api.estudiantes.fingerprint.enrollComplete(enrollmentSessionId.value)
-        if (compRes.success) {
-          pasoEnrolamiento.value = 3
-          showToast(`¡Huella enrolada exitosamente para ${estudianteTarget.value.nombres}!`, 'success')
-          await cargarDatosFicha(fichaSeleccionada.value._id)
-        } else {
-          throw new Error(compRes.error || 'Error al guardar plantilla biométrica')
-        }
-      } catch (compErr) {
-        pasoEnrolamiento.value = 1
-        capturasCompletadas.value = 0
-        showToast(compErr.message, 'error')
-      }
-    } else {
-      showToast(`Muestra ${numMuestras} de 4 registrada. Levante y coloque el dedo nuevamente...`, 'info')
-      setTimeout(() => {
-        if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
-          iniciarCapturaSDK()
-        }
-      }, 700)
-    }
-  } catch (err) {
-    console.error('Error al procesar muestra:', err)
-    showToast('Muestra no válida: ' + err.message + '. Intente de nuevo.', 'warning')
-    setTimeout(() => {
-      if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
-        iniciarCapturaSDK()
-      }
-    }, 1000)
-  }
-}
-
-async function cancelarEnrolamiento() {
-  detenerCapturaSDK()
-  if (enrollmentSessionId.value) {
-    try {
-      await api.estudiantes.fingerprint.enrollCancel(enrollmentSessionId.value)
-    } catch (e) {}
-  }
-  enrolando.value = false
-  showEnrolarModal.value = false
-  estudianteTarget.value = null
-  pasoEnrolamiento.value = 1
-  capturasCompletadas.value = 0
-  enrollmentSessionId.value = null
-  modoCaptura = 'asistencia'
-}
-
-
-// =============================================
 // GESTIONAR ESTUDIANTES (Solo Líder)
 // =============================================
 const showEditEstudianteModal = ref(false)
@@ -1192,17 +747,7 @@ function descargarExcel(data, nombreArchivo) {
 </script>
 
 <template>
-  <!-- MODO KIOSCO DE PANTALLA COMPLETA / AULA -->
-  <KioscoAsistencia
-    v-if="modoKioscoActivo && fichaSeleccionada"
-    :ficha="fichaSeleccionada"
-    :instructor="usuario"
-    :fecha="fechaAsistencia"
-    @salir-kiosco="modoKioscoActivo = false"
-    @asistencia-marcada="onKioscoAsistenciaMarcada"
-  />
-
-  <div v-else class="panel-instructor">
+  <div class="panel-instructor">
     <!-- Toast Notification -->
     <Transition name="toast-fade">
       <div v-if="toast.show" class="toast-notification" :class="'toast-' + toast.type">
@@ -1280,34 +825,34 @@ function descargarExcel(data, nombreArchivo) {
               class="tab-btn"
               :class="{ active: vistaFicha === 'asistencia' }"
               @click="vistaFicha = 'asistencia'"
+              title="Tomar Asistencia"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-              Tomar Asistencia
             </button>
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'editar_asistencia' }"
               @click="vistaFicha = 'editar_asistencia'"
+              title="Historial"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
-              Historial
             </button>
             <!-- BOTÓN GESTIONAR ESTUDIANTES -->
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'gestionar_estudiantes' }"
               @click="vistaFicha = 'gestionar_estudiantes'"
+              title="Gestionar Estudiantes"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
-              Gestionar Estudiantes
             </button>
             <button
               class="tab-btn"
               :class="{ active: vistaFicha === 'docentes' }"
               @click="vistaFicha = 'docentes'"
+              title="Equipo Docente"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3.3"/><path d="M2.5 19c1.2-3.4 3.8-5.2 6.5-5.2s5.3 1.8 6.5 5.2z"/><circle cx="17" cy="8.5" r="2.6" opacity="0.75"/><path d="M15 13.6c2.2.4 4 2 5 5H18" opacity="0.75"/></svg>
-              Equipo Docente
             </button>
           </div>
         </div>
@@ -1316,7 +861,7 @@ function descargarExcel(data, nombreArchivo) {
         <!-- VISTA 1: TOMAR ASISTENCIA (POR DÍAS)      -->
         <!-- ========================================= -->
         <div v-if="vistaFicha === 'asistencia'" class="section-body">
-          <!-- CENTRO DE CONTROL REMOTO Y MODO KIOSCO -->
+          <!-- CENTRO DE CONTROL REMOTO -->
           <div class="remote-control-panel">
             <div class="remote-control-header">
               <div class="remote-control-info">
@@ -1344,20 +889,18 @@ function descargarExcel(data, nombreArchivo) {
                   class="btn-remote-start"
                   @click="iniciarSesionRemotaDocente"
                   :disabled="jornadaInhabilitada"
-                  title="Iniciar pase de lista remoto para el aula"
+                  title="Iniciar pase de lista"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5-13-7.5z"/></svg>
-                  Iniciar Pase de Lista Remoto
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>
                 <button
                   v-else
                   type="button"
                   class="btn-remote-stop"
                   @click="detenerSesionRemotaDocente"
-                  title="Finalizar pase de lista remoto"
+                  title="Finalizar pase de lista"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                  Finalizar Pase de Lista
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                 </button>
 
               </div>
@@ -1398,10 +941,10 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-nav-day"
                   @click="cambiarFechaDia(-1)"
-                  title="Día Anterior"
+                  title="Día anterior"
                   style="background: transparent; border: none; font-size: 13px; font-weight: 700; color: #475569; padding: 5px 8px; cursor: pointer; border-radius: 4px;"
                 >
-                  ◀
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                 </button>
                 <input
                   type="date"
@@ -1421,7 +964,7 @@ function descargarExcel(data, nombreArchivo) {
                   class="btn-nav-day"
                   :disabled="esFechaActualOHoy"
                   @click="cambiarFechaDia(1)"
-                  :title="esFechaActualOHoy ? 'No puedes avanzar a días futuros' : 'Día Siguiente'"
+                  :title="esFechaActualOHoy ? 'No puedes avanzar a días futuros' : 'Día siguiente'"
                   :style="{
                     background: 'transparent',
                     border: 'none',
@@ -1433,14 +976,14 @@ function descargarExcel(data, nombreArchivo) {
                     borderRadius: '4px'
                   }"
                 >
-                  ▶
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
                 <button
                   type="button"
                   class="btn-today"
                   @click="irAHoy"
                   :disabled="fechaAsistencia === fechaHoyMax"
-                  title="Ir al día de hoy"
+                  title="Ir a hoy"
                   :style="{
                     background: fechaAsistencia === fechaHoyMax ? '#f1f5f9' : '#e2e8f0',
                     border: 'none',
@@ -1453,7 +996,7 @@ function descargarExcel(data, nombreArchivo) {
                     cursor: fechaAsistencia === fechaHoyMax ? 'default' : 'pointer'
                   }"
                 >
-                  Hoy
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 </button>
               </div>
 
@@ -1464,11 +1007,10 @@ function descargarExcel(data, nombreArchivo) {
                 class="btn-inhabilitar-action"
                 @click="abrirModalInhabilitar"
                 :disabled="fechaAsistencia > fechaHoyMax"
-                title="Inhabilitar la toma de asistencia para esta jornada"
+                title="Inhabilitar día"
                 style="background: #fff1f2; border: 1.5px solid #fecdd3; color: #e11d48; font-weight: 600; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
-                Inhabilitar Sesión
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               </button>
               <button
                 v-else
@@ -1476,10 +1018,10 @@ function descargarExcel(data, nombreArchivo) {
                 class="btn-reactivar-action"
                 @click="reactivarJornada"
                 :disabled="inhabilitando"
-                title="Reactivar la jornada para tomar asistencia"
+                title="Reactivar día"
                 style="background: #f0fdf4; border: 1.5px solid #bbf7d0; color: #16a34a; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
-                {{ inhabilitando ? 'Reactivando...' : 'Reactivar Sesión' }}
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
             </div>
           </div>
@@ -1505,26 +1047,10 @@ function descargarExcel(data, nombreArchivo) {
               class="btn btn-reactivar-hud"
               @click="reactivarJornada"
               :disabled="inhabilitando"
+              title="Reactivar día"
             >
-              {{ inhabilitando ? 'Reactivando...' : 'Reactivar Jornada' }}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
-          </div>
-
-          <!-- Panel de verificación biométrica activa (Solo si la sesión no está inhabilitada) -->
-          <div v-if="verificandoHuella && !jornadaInhabilitada" class="biometric-panel">
-            <div class="biometric-pulse-icon"></div>
-            <div class="biometric-panel-text">
-              <strong>Lector biométrico activo</strong>
-              <span>Esperando que los estudiantes coloquen su dedo en el sensor...</span>
-            </div>
-            <div v-if="ultimaVerificacion" class="biometric-last-result" :class="{ 'result-ok': ultimaVerificacion.exito, 'result-fail': !ultimaVerificacion.exito }">
-              <span v-if="ultimaVerificacion.exito">
-                {{ ultimaVerificacion.nombre }} — {{ ultimaVerificacion.estado }} ({{ ultimaVerificacion.hora }})
-              </span>
-              <span v-else>
-                {{ ultimaVerificacion.mensaje }}
-              </span>
-            </div>
           </div>
 
           <!-- Contadores rápidos -->
@@ -1667,8 +1193,9 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
                       :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada"
                       @click="marcarPresente(est._id)"
+                      title="Marcar presente"
                     >
-                      {{ (asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza') ? '✓ Marcado' : '+ Presente' }}
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     </button>
 
                     <!-- Botón Excusa Táctil -->
@@ -1678,8 +1205,9 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
                       :disabled="jornadaInhabilitada"
                       @click="toggleExcusa(est._id)"
+                      title="Registrar excusa"
                     >
-                      {{ asistenciaDia[est._id]?.excusa ? 'Excusa ✓' : 'Excusa' }}
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </button>
                   </div>
                 </div>
@@ -1691,13 +1219,11 @@ function descargarExcel(data, nombreArchivo) {
           </div>
 
           <div class="action-bar" v-if="estudiantesFicha.length > 0">
-            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar lista del día a Excel">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-              Exportar Excel
+            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
-            <button class="btn-export" @click="descargarSQLite" title="Descargar archivo SQLite único para el servidor institucional">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><rect x="8" y="4" width="7" height="5"/><rect x="7" y="13" width="10" height="7"/></svg>
-              Descargar SQLite (.sqlite)
+            <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <div v-if="jornadaInhabilitada" style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
@@ -1708,8 +1234,9 @@ function descargarExcel(data, nombreArchivo) {
               class="btn btn-primary btn-guardar"
               @click="guardarAsistenciaDia"
               :disabled="guardandoAsistencia"
+              title="Guardar"
             >
-              {{ guardandoAsistencia ? 'Finalizando Jornada...' : 'Finalizar Jornada y Guardar' }}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             </button>
           </div>
         </div>
@@ -1724,13 +1251,11 @@ function descargarExcel(data, nombreArchivo) {
               <p class="section-desc">Registros de asistencia de esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn-export" @click="descargarSQLite" title="Descargar archivo SQLite acumulativo institucional">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><rect x="8" y="4" width="7" height="5"/><rect x="7" y="13" width="10" height="7"/></svg>
-                Descargar SQLite (.sqlite)
+              <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
-              <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-                Exportar Historial Excel
+              <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0" title="Exportar historial a Excel">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
             </div>
           </div>
@@ -1777,9 +1302,8 @@ function descargarExcel(data, nombreArchivo) {
                 </h4>
                 <p class="section-desc">Información y edición de los aprendices de la Ficha {{ fichaSeleccionada.codigoFicha }}:</p>
               </div>
-              <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 19h16"/></svg>
-                Exportar Lista Excel
+              <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0" title="Exportar lista a Excel">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
             </div>
 
@@ -1806,9 +1330,8 @@ function descargarExcel(data, nombreArchivo) {
                     </span>
                   </td>
                   <td>
-                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
-                      Editar
+                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)" title="Editar estudiante">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                     </button>
                     <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder</span>
                   </td>
@@ -1964,9 +1487,11 @@ function descargarExcel(data, nombreArchivo) {
           </div>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-outline" @click="showEditEstudianteModal = false">Cancelar</button>
-          <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante">
-            {{ guardandoEstudiante ? 'Guardando...' : 'Guardar Cambios' }}
+          <button class="btn btn-outline" @click="showEditEstudianteModal = false" title="Cancelar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante" title="Guardar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           </button>
         </div>
       </div>
@@ -2018,16 +1543,17 @@ function descargarExcel(data, nombreArchivo) {
         </div>
 
         <div class="modal-actions" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-          <button class="btn btn-outline" @click="showInhabilitarModal = false" :disabled="inhabilitando">
-            Cancelar
+          <button class="btn btn-outline" @click="showInhabilitarModal = false" :disabled="inhabilitando" title="Cancelar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
           <button
             class="btn btn-danger-solid"
             @click="confirmarInhabilitarJornada"
             :disabled="inhabilitando"
+            title="Inhabilitar día"
             style="background: #e11d48; color: #ffffff; border: none; font-weight: 700; padding: 9px 16px; border-radius: 8px; cursor: pointer;"
           >
-            {{ inhabilitando ? 'Inhabilitando...' : 'Inhabilitar Sesión' }}
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
           </button>
         </div>
       </div>
@@ -2812,7 +2338,7 @@ function descargarExcel(data, nombreArchivo) {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* CENTRO DE CONTROL REMOTO Y MODO KIOSCO */
+/* CENTRO DE CONTROL REMOTO */
 .remote-control-panel {
   --rc-bg-1: #0a130f;
   --rc-bg-2: #15241c;
@@ -2963,22 +2489,6 @@ function descargarExcel(data, nombreArchivo) {
   background: var(--rc-danger-dim);
 }
 
-.btn-open-kiosk {
-  background: #0284c7;
-  color: white;
-  border: none;
-  font-weight: 700;
-  font-size: 13px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-open-kiosk:hover {
-  background: #0369a1;
-}
-
 .remote-live-feed {
   margin-top: 16px;
   padding-top: 14px;
@@ -3126,8 +2636,7 @@ function descargarExcel(data, nombreArchivo) {
   }
 
   .btn-remote-start,
-  .btn-remote-stop,
-  .btn-open-kiosk {
+  .btn-remote-stop {
     width: 100%;
     justify-content: center;
     padding: 12px 16px;

@@ -1,3 +1,9 @@
 {
-  "claseActiva": null
+  "claseActiva": {
+    "fichaId": "6aab09eb774dc6d72fd18d7e",
+    "instructorId": "6aab08eda5a69ee7adc9bffa",
+    "claseId": null,
+    "codigoFicha": "3139851",
+    "estado": "Activa"
+  }
 }

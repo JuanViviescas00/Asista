@@ -36,6 +36,7 @@ onMounted(async () => {
   socket.on('DEVICES_STATUS', onDevicesStatus)
   socket.on('DEVICE_CONNECTED', onDeviceConnected)
   socket.on('DEVICE_DISCONNECTED', onDeviceDisconnected)
+  socket.on('NUEVO_DISPOSITIVO', onNuevoDispositivo)
 })
 
 onUnmounted(() => {
@@ -43,6 +44,7 @@ onUnmounted(() => {
   socket.off('DEVICES_STATUS', onDevicesStatus)
   socket.off('DEVICE_CONNECTED', onDeviceConnected)
   socket.off('DEVICE_DISCONNECTED', onDeviceDisconnected)
+  socket.off('NUEVO_DISPOSITIVO', onNuevoDispositivo)
 })
 
 function esAdmin() {
@@ -69,6 +71,12 @@ function onDeviceConnected(data) {
 
 function onDeviceDisconnected(data) {
   if (data?.deviceId) onlineMap[data.deviceId] = false
+}
+
+function onNuevoDispositivo(data) {
+  loadDispositivos()
+  const nombre = data?.hostname || data?.nombre || data?.deviceId || ''
+  showToast(`Nuevo dispositivo "${nombre}" registrado. Pendiente de aprobación.`)
 }
 
 async function loadDispositivos() {
@@ -218,7 +226,7 @@ function formatFecha(iso) {
   <div v-else>
     <!-- Pendientes de aprobación -->
     <div v-if="pendientes.length > 0" class="pendientes-section">
-      <h2 class="pendientes-title">⏳ Pendientes de aprobación</h2>
+      <h2 class="pendientes-title"> Pendientes de aprobación</h2>
       <div v-for="d in pendientes" :key="d._id" class="card card-pendiente">
         <div class="card-header">
           <div>
@@ -227,11 +235,11 @@ function formatFecha(iso) {
             <span class="muted">Registrado: {{ formatFecha(d.createdAt) }}</span>
           </div>
           <div class="card-actions">
-            <button class="btn btn-success btn-sm" :disabled="savingId === d._id" @click="aprobarDispositivo(d)">
-              ✅ Aprobar
+            <button class="btn btn-success btn-sm" :disabled="savingId === d._id" @click="aprobarDispositivo(d)" title="Aprobar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
-            <button class="btn btn-danger btn-sm" :disabled="savingId === d._id" @click="rechazarDispositivo(d)">
-              ❌ Rechazar
+            <button class="btn btn-danger btn-sm" :disabled="savingId === d._id" @click="rechazarDispositivo(d)" title="Rechazar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
         </div>
@@ -253,14 +261,14 @@ function formatFecha(iso) {
             </span>
           </div>
           <div class="card-actions">
-            <button class="btn btn-primary btn-sm" :disabled="savingId === d._id" @click="guardar(d)">
-              {{ savingId === d._id ? 'Guardando…' : '💾 Guardar' }}
+            <button class="btn btn-primary btn-sm" :disabled="savingId === d._id" @click="guardar(d)" title="Guardar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             </button>
-            <button class="btn btn-sm btn-reset" :disabled="savingId === d._id" @click="resetFingerprint(d)">
-              🔄 Resetear identidad de hardware
+            <button class="btn btn-sm btn-reset" :disabled="savingId === d._id" @click="resetFingerprint(d)" title="Resetear identidad de hardware">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
-            <button class="btn btn-danger btn-sm" :disabled="savingId === d._id" @click="deshabilitarDispositivo(d)">
-              🚫 Deshabilitar
+            <button class="btn btn-danger btn-sm" :disabled="savingId === d._id" @click="deshabilitarDispositivo(d)" title="Deshabilitar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
             </button>
           </div>
         </div>
@@ -290,7 +298,7 @@ function formatFecha(iso) {
               class="move-hint"
               :class="{ 'move-active': selecciones[d._id].includes(f._id) }"
             >
-              {{ selecciones[d._id].includes(f._id) ? '⚠️ se moverá desde' : 'en' }} {{ deviceLabel(getDispositivoDeFicha(f._id)) }}
+              {{ selecciones[d._id].includes(f._id) ? ' se moverá desde' : 'en' }} {{ deviceLabel(getDispositivoDeFicha(f._id)) }}
             </small>
           </span>
         </label>
@@ -309,8 +317,8 @@ function formatFecha(iso) {
             <span class="badge badge-danger">Inactivo</span>
           </div>
           <div class="card-actions">
-            <button class="btn btn-success btn-sm" :disabled="savingId === d._id" @click="reactivarDispositivo(d)">
-              ✅ Reactivar
+            <button class="btn btn-success btn-sm" :disabled="savingId === d._id" @click="reactivarDispositivo(d)" title="Reactivar">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
           </div>
         </div>
@@ -333,10 +341,6 @@ function formatFecha(iso) {
   margin-bottom: 12px;
 }
 
-.card-pendiente {
-  border-left: 4px solid #f59e0b;
-}
-
 .deshabilitados-title {
   font-size: 16px;
   font-weight: 700;
@@ -346,7 +350,6 @@ function formatFecha(iso) {
 
 .card-deshabilitado {
   opacity: 0.7;
-  border-left: 4px solid #64748b;
 }
 
 .dispositivos-list {

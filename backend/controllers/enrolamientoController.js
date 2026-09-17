@@ -1,5 +1,4 @@
 import Estudiante from '../models/Estudiante.js'
-import * as fp from '../services/fingerprint.js'
 
 export async function guardarTemplate(req, res) {
   const { estudianteId, fichaId, dedo, template, slot } = req.body
@@ -18,7 +17,8 @@ export async function guardarTemplate(req, res) {
       return res.status(404).json({ success: false, error: 'Estudiante no encontrado' })
     }
 
-    const otrosEnrolados = await Estudiante.find({
+    // Validación de duplicado exacto en base de datos
+    const otro = await Estudiante.findOne({
       _id: { $ne: estudianteId },
       huellaEnrolada: true,
       $or: [
@@ -27,9 +27,7 @@ export async function guardarTemplate(req, res) {
       ],
     })
 
-    const duplicateCheck = fp.checkDuplicateFingerprint(template, otrosEnrolados, estudianteId)
-    if (duplicateCheck.isDuplicate) {
-      const otro = duplicateCheck.student
+    if (otro) {
       return res.status(409).json({
         success: false,
         error: `Esta huella ya está registrada a nombre de "${otro.nombres} ${otro.apellidos}" (${otro.tipoDocumento} ${otro.numeroDocumento})`,

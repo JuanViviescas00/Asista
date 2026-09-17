@@ -201,17 +201,17 @@ async function radicarExcusa() {
             <span class="student-portal-stat-number">{{ resumen.tardanzas }}</span>
             <span class="student-portal-stat-label">Tardanzas</span>
           </div>
-          <div class="student-portal-stat" style="border-left: 4px solid #6366f1; background: #f8fafc; padding: 12px; border-radius: 8px;">
-            <span class="student-portal-stat-number" style="color: #4f46e5;">{{ resumen.totalHorasFalladas }}h</span>
-            <span class="student-portal-stat-label" style="font-size: 11px; font-weight: 700;">Total Horas Ausente</span>
+          <div class="student-portal-stat student-portal-stat-indigo">
+            <span class="student-portal-stat-number">{{ resumen.totalHorasFalladas }}h</span>
+            <span class="student-portal-stat-label">Total Horas Ausente</span>
           </div>
-          <div class="student-portal-stat student-portal-stat-absent" style="border-left: 4px solid #ef4444;">
-            <span class="student-portal-stat-number" style="color: #dc2626;">{{ resumen.horasSinExcusa }}h</span>
-            <span class="student-portal-stat-label" style="font-size: 11px; font-weight: 700;">❌ Sin Excusa</span>
+          <div class="student-portal-stat student-portal-stat-absent">
+            <span class="student-portal-stat-number">{{ resumen.horasSinExcusa }}h</span>
+            <span class="student-portal-stat-label"> Sin Excusa</span>
           </div>
-          <div class="student-portal-stat" style="border-left: 4px solid #0284c7; background: #f0f9ff; padding: 12px; border-radius: 8px;">
-            <span class="student-portal-stat-number" style="color: #0284c7;">{{ resumen.horasConExcusa }}h</span>
-            <span class="student-portal-stat-label" style="font-size: 11px; font-weight: 700;">📋 Con Excusa</span>
+          <div class="student-portal-stat student-portal-stat-blue">
+            <span class="student-portal-stat-number">{{ resumen.horasConExcusa }}h</span>
+            <span class="student-portal-stat-label"> Con Excusa</span>
           </div>
         </div>
 
@@ -221,22 +221,25 @@ async function radicarExcusa() {
             class="btn btn-sm"
             :class="filtroInasistencias === 'todas' ? 'btn-primary' : 'btn-outline'"
             @click="filtroInasistencias = 'todas'"
+            title="Todo el historial"
           >
-            📊 Todo el Historial
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <button
             class="btn btn-sm"
             :class="filtroInasistencias === 'sin_excusa' ? 'btn-danger' : 'btn-outline'"
             @click="filtroInasistencias = 'sin_excusa'"
+            title="Solo sin excusa"
           >
-            ❌ Solo Sin Excusa (Injustificadas)
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
           <button
             class="btn btn-sm"
             :class="filtroInasistencias === 'con_excusa' ? 'btn-info' : 'btn-outline'"
             @click="filtroInasistencias = 'con_excusa'"
+            title="Solo con excusa"
           >
-            📋 Solo Con Excusa (Justificadas)
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </button>
         </div>
 
@@ -277,13 +280,13 @@ async function radicarExcusa() {
                       class="student-portal-badge"
                       style="background: #e0f2fe; color: #0369a1; font-weight: 700;"
                     >
-                      📋 Excusada ({{ horasPorJornada }} hrs)
+                       Excusada ({{ horasPorJornada }} hrs)
                     </span>
                     <span
                       v-else
                       class="student-portal-badge student-portal-badge-danger"
                     >
-                      ❌ Falta ({{ horasPorJornada }} hrs)
+                       Falta ({{ horasPorJornada }} hrs)
                     </span>
                   </td>
                   <td>

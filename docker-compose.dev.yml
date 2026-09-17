@@ -1,0 +1,39 @@
+services:
+  backend:
+    image: sena-huellero-backend:dev
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: sena-huellero-backend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/data:/app/data
+    networks:
+      - sena-dev-network
+
+  frontend:
+    image: sena-huellero-frontend:dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: sena-huellero-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    networks:
+      - sena-dev-network
+
+networks:
+  sena-dev-network:
+    driver: bridge

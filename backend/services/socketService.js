@@ -395,3 +395,9 @@ export function emitirDesactivacion(deviceId, payload) {
   io.to(socketId).emit('DEACTIVATE', payload)
   return true
 }
+
+export function emitirNuevoDispositivo(payload) {
+  if (!io) return false
+  io.to('admins').emit('NUEVO_DISPOSITIVO', payload)
+  return true
+}

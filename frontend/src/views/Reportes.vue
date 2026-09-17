@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import api from '../services/index.js'
+import StatCard from '../components/StatCard.vue'
 
 // Parámetros principales de búsqueda
 const filtroFicha = ref(null)
@@ -409,7 +410,7 @@ function limpiar() {
   </div>
 
   <div v-if="usuario.rol === 'Instructor' && fichasLideradas.length === 0" class="card" style="background: #fff1f2; border-color: #fecdd3; color: #9f1239; padding: 20px;">
-    <strong>🔒 Acceso Restringido a Reportes:</strong> Como Docente Común no tienes asignada ninguna Ficha bajo tu liderazgo. La generación de reportes está reservada para el Administrador o Docente Líder de Ficha.
+    <strong> Acceso Restringido a Reportes:</strong> Como Docente Común no tienes asignada ninguna Ficha bajo tu liderazgo. La generación de reportes está reservada para el Administrador o Docente Líder de Ficha.
   </div>
 
   <div v-else class="card">
@@ -419,7 +420,7 @@ function limpiar() {
     <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
       <!-- 1. Selector de Ficha -->
       <div class="form-group">
-        <label>🏫 Ficha de Formación <span style="color: #ef4444;">*</span></label>
+        <label> Ficha de Formación <span style="color: #ef4444;">*</span></label>
         <select v-model="filtroFicha" @change="showPreview = false; filtroEstudiante = 'todos'; filtroInstructor = 'todos'">
           <option :value="null" disabled>Selecciona una ficha</option>
           <option v-for="f in fichasLideradas" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
@@ -428,7 +429,7 @@ function limpiar() {
 
       <!-- 2. Filtro por Docente / Materia -->
       <div class="form-group">
-        <label>👨‍🏫 Docente / Instructor</label>
+        <label>‍ Docente / Instructor</label>
         <select v-model="filtroInstructor" :disabled="!filtroFicha">
           <option value="todos">Todos los Docentes / Clases</option>
           <option v-for="inst in instructoresDeLaFicha" :key="inst._id" :value="inst._id">
@@ -439,7 +440,7 @@ function limpiar() {
 
       <!-- 3. Filtro por Aprendiz / Estudiante -->
       <div class="form-group">
-        <label>👤 Aprendiz Específico</label>
+        <label> Aprendiz Específico</label>
         <select v-model="filtroEstudiante" :disabled="!filtroFicha">
           <option value="todos">Todos los Aprendices</option>
           <option v-for="est in estudiantesFicha" :key="est._id" :value="est._id">
@@ -450,18 +451,18 @@ function limpiar() {
 
       <!-- 4. Rango de Fechas -->
       <div class="form-group">
-        <label>📅 Fecha Desde</label>
+        <label> Fecha Desde</label>
         <input v-model="fechaDesde" type="date" />
       </div>
 
       <div class="form-group">
-        <label>📅 Fecha Hasta</label>
+        <label> Fecha Hasta</label>
         <input v-model="fechaHasta" type="date" />
       </div>
 
       <!-- 5. Formato -->
       <div class="form-group">
-        <label>📄 Formato de Descarga</label>
+        <label> Formato de Descarga</label>
         <select v-model="formato">
           <option value="pdf">PDF (Impresión / Comité)</option>
           <option value="xlsx">XLSX (CSV Excel)</option>
@@ -472,7 +473,7 @@ function limpiar() {
     <!-- BARRA DE BÚSQUEDA LIBRE EN VIVO -->
     <div style="margin-top: 16px; padding: 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px;">
       <label style="font-weight: 700; font-size: 13px; color: #1e293b; display: flex; align-items: center; gap: 6px;">
-        <span>🔍</span> Búsqueda Rápida en Vivo (Aprendiz o Docente):
+        Búsqueda Rápida en Vivo (Aprendiz o Docente):
       </label>
       <div style="display: flex; gap: 10px; align-items: center;">
         <input
@@ -481,8 +482,8 @@ function limpiar() {
           placeholder="Escribe el nombre del aprendiz, número de documento o nombre del docente..."
           style="flex: 1; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 14px;"
         />
-        <button v-if="busquedaTexto" class="btn btn-outline btn-sm" @click="busquedaTexto = ''">
-          ✕ Limpiar
+        <button v-if="busquedaTexto" class="btn btn-outline btn-sm" @click="busquedaTexto = ''" title="Limpiar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
     </div>
@@ -494,30 +495,33 @@ function limpiar() {
         class="btn btn-sm"
         :class="filtroTipoInasistencia === 'todas' ? 'btn-primary' : 'btn-outline'"
         @click="filtroTipoInasistencia = 'todas'"
+        title="Horas Totales (Todas)"
       >
-        📊 Horas Totales (Todas)
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
       <button
         class="btn btn-sm"
         :class="filtroTipoInasistencia === 'sin_excusa' ? 'btn-danger' : 'btn-outline'"
         @click="filtroTipoInasistencia = 'sin_excusa'"
+        title="Solo Sin Excusa (Injustificadas)"
       >
-        ❌ Solo Sin Excusa (Injustificadas)
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
       <button
         class="btn btn-sm"
         :class="filtroTipoInasistencia === 'con_excusa' ? 'btn-info' : 'btn-outline'"
         @click="filtroTipoInasistencia = 'con_excusa'"
+        title="Solo Con Excusa (Justificadas)"
       >
-        📋 Solo Con Excusa (Justificadas)
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </button>
     </div>
 
     <div class="btn-group" style="margin-top: 20px;">
-      <button class="btn btn-primary" :disabled="!filtroFicha" @click="generarReporte">
-        🔍 Consultar y Generar Reporte
+      <button class="btn btn-primary" :disabled="!filtroFicha" @click="generarReporte" title="Consultar y Generar Reporte">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
-      <button class="btn btn-outline" @click="limpiar">Limpiar Filtros</button>
+      <button class="btn btn-outline" @click="limpiar" title="Limpiar Filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
   </div>
 
@@ -530,33 +534,34 @@ function limpiar() {
             class="btn btn-sm"
             :class="vistaReporte === 'aprendices' ? 'btn-primary' : 'btn-outline'"
             @click="vistaReporte = 'aprendices'"
+            title="Vista por Aprendiz"
           >
-            👤 Vista por Aprendiz ({{ datosReporteAprendicesFiltrados.length }})
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <button
             class="btn btn-sm"
             :class="vistaReporte === 'docentes' ? 'btn-primary' : 'btn-outline'"
             @click="vistaReporte = 'docentes'"
+            title="Vista por Docente"
           >
-            👨‍🏫 Vista por Docente ({{ datosReporteDocentes.length }})
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
           <button
             class="btn btn-sm"
             :class="vistaReporte === 'sesiones' ? 'btn-primary' : 'btn-outline'"
             @click="vistaReporte = 'sesiones'"
+            title="Vista por Sesión"
           >
-            📅 Vista por Sesión ({{ datosReporteSesiones.length }})
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
 
         <div class="btn-group">
-          <button v-if="formato === 'pdf'" class="btn btn-primary btn-sm" @click="descargarPDF">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Descargar PDF
+          <button v-if="formato === 'pdf'" class="btn btn-primary btn-sm" @click="descargarPDF" title="Descargar PDF">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
-          <button v-else class="btn btn-success btn-sm" @click="descargarXLSX">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Descargar CSV (Excel)
+          <button v-else class="btn btn-success btn-sm" @click="descargarXLSX" title="Descargar CSV (Excel)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         </div>
       </div>
@@ -578,30 +583,12 @@ function limpiar() {
 
       <!-- MÉTRICAS CONSOLIDADAS DE HORAS Y DOCENTES -->
       <div class="stats-row" style="margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;">
-        <div class="stat-card stat-presente">
-          <span class="stat-num">{{ resumenReporte.porcentajeGeneral }}%</span>
-          <span class="stat-label">Asistencia General</span>
-        </div>
-        <div class="stat-card" style="border-left-color: #6366f1;">
-          <span class="stat-num">{{ resumenReporte.totalHorasFalladas }}h</span>
-          <span class="stat-label">Total Horas Ausente</span>
-        </div>
-        <div class="stat-card" style="border-left-color: #ef4444;">
-          <span class="stat-num" style="color: #ef4444;">{{ resumenReporte.totalHorasSinExcusa }}h</span>
-          <span class="stat-label">❌ Sin Excusa</span>
-        </div>
-        <div class="stat-card" style="border-left-color: #0284c7;">
-          <span class="stat-num" style="color: #0284c7;">{{ resumenReporte.totalHorasConExcusa }}h</span>
-          <span class="stat-label">📋 Con Excusa</span>
-        </div>
-        <div class="stat-card" style="border-left-color: #8b5cf6;">
-          <span class="stat-num">{{ resumenReporte.totalDocentesActivos }}</span>
-          <span class="stat-label">Docentes Registrados</span>
-        </div>
-        <div class="stat-card" style="border-left-color: #f59e0b;">
-          <span class="stat-num">{{ resumenReporte.totalSesionesDictadas }}</span>
-          <span class="stat-label">Sesiones de Clase</span>
-        </div>
+        <StatCard icon="percent" label="Asistencia General" :value="`${resumenReporte.porcentajeGeneral}%`" variant="verde" />
+        <StatCard icon="clock" label="Total Horas Ausente" :value="`${resumenReporte.totalHorasFalladas}h`" variant="indigo" />
+        <StatCard icon="x-circle" label="Sin Excusa" :value="`${resumenReporte.totalHorasSinExcusa}h`" variant="rojo" />
+        <StatCard icon="file-text" label="Con Excusa" :value="`${resumenReporte.totalHorasConExcusa}h`" variant="azul" />
+        <StatCard icon="user-check" label="Docentes Registrados" :value="resumenReporte.totalDocentesActivos" variant="morado" />
+        <StatCard icon="calendar" label="Sesiones de Clase" :value="resumenReporte.totalSesionesDictadas" variant="ambar" />
       </div>
 
       <!-- ============================================= -->
@@ -622,8 +609,8 @@ function limpiar() {
                 <th>Presentes</th>
                 <th>Tardanzas</th>
                 <th>Horas Totales Ausente</th>
-                <th>❌ Sin Excusa</th>
-                <th>📋 Con Excusa</th>
+                <th> Sin Excusa</th>
+                <th> Con Excusa</th>
                 <th>Inasistencias por Fecha y Docente a Cargo</th>
                 <th>% Asistencia</th>
               </tr>
@@ -647,7 +634,7 @@ function limpiar() {
                 </td>
                 <td>
                   <span v-if="r.horasConExcusa > 0" class="badge badge-info" style="font-size: 13px;">
-                    📋 {{ r.horasConExcusa }} hrs ({{ r.fallasConExcusa }} d)
+                     {{ r.horasConExcusa }} hrs ({{ r.fallasConExcusa }} d)
                   </span>
                   <span v-else style="color: #94a3b8; font-size: 12px;">—</span>
                 </td>
@@ -659,13 +646,13 @@ function limpiar() {
                       style="margin-bottom: 4px; padding: 4px 6px; border-radius: 4px; background: #f8fafc; border-left: 3px solid;"
                       :style="{ borderColor: det.tipo === 'Excusada' ? '#0284c7' : '#ef4444' }"
                     >
-                      <strong>{{ det.fecha }} ({{ det.horas }}h)</strong> - 👨‍🏫 {{ det.docente }}:
+                      <strong>{{ det.fecha }} ({{ det.horas }}h)</strong> - ‍ {{ det.docente }}:
                       <span :style="{ color: det.tipo === 'Excusada' ? '#0369a1' : '#dc2626' }">
-                        {{ det.tipo === 'Excusada' ? `📋 ${det.motivo}` : '❌ Injustificada' }}
+                        {{ det.tipo === 'Excusada' ? ` ${det.motivo}` : ' Injustificada' }}
                       </span>
                     </div>
                   </div>
-                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;">✅ Sin inasistencias</span>
+                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;"> Sin inasistencias</span>
                 </td>
                 <td>
                   <strong :style="{ color: r.porcentaje >= 80 ? '#22c55e' : r.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
@@ -697,15 +684,15 @@ function limpiar() {
                 <th>Horas Dictadas</th>
                 <th>Asistencias Marcadas</th>
                 <th>Tardanzas</th>
-                <th>❌ Horas Sin Excusa</th>
-                <th>📋 Horas Con Excusa</th>
+                <th> Horas Sin Excusa</th>
+                <th> Horas Con Excusa</th>
                 <th>% Asistencia en sus Clases</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(d, idx) in datosReporteDocentes" :key="d.id">
                 <td>{{ idx + 1 }}</td>
-                <td><strong>👨‍🏫 {{ d.nombre }}</strong></td>
+                <td><strong>‍ {{ d.nombre }}</strong></td>
                 <td><span class="badge badge-info">{{ d.especialidad }}</span></td>
                 <td><strong>{{ d.clasesDictadas }} sesiones</strong></td>
                 <td><span style="color: #475569; font-weight: 700;">{{ d.horasDictadas }} hrs</span></td>
@@ -741,15 +728,15 @@ function limpiar() {
                 <th>Horas Sesión</th>
                 <th>Presentes</th>
                 <th>Tardanzas</th>
-                <th>❌ Sin Excusa</th>
-                <th>📋 Con Excusa</th>
+                <th> Sin Excusa</th>
+                <th> Con Excusa</th>
                 <th>% Asistencia</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in datosReporteSesiones" :key="s.fecha">
                 <td><strong>{{ s.fecha }}</strong></td>
-                <td>👨‍🏫 {{ s.docente }}</td>
+                <td>‍ {{ s.docente }}</td>
                 <td>{{ s.horasSesion }} hrs</td>
                 <td><span class="badge badge-success">{{ s.presentes }}</span></td>
                 <td><span class="badge badge-warning">{{ s.tardanzas }}</span></td>

@@ -83,6 +83,15 @@ export function iniciarRegistroDispositivo(onRegistrado) {
   void intentarRegistro()
 }
 
+export async function reiniciarIdentidadYRegistrar() {
+  saveConfig({ deviceId: null, token: null })
+  const resultado = await registrarDispositivoSiNoExiste()
+  if (resultado.ok && resultado.yaRegistrado === false && onRegistradoCb) {
+    onRegistradoCb(resultado)
+  }
+  return resultado
+}
+
 async function intentarRegistro() {
   const resultado = await registrarDispositivoSiNoExiste()
 

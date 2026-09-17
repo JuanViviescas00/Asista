@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
+import { apodoPrograma, nombreProgramaLimpio, truncar } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -188,7 +189,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
   <div class="fichas-card">
     <div class="fichas-card-header">
       <h3>Listado de Fichas</h3>
-      <button class="fichas-button fichas-button-primary" @click="openCreate">+ Nueva Ficha</button>
+      <button class="fichas-button fichas-button-primary" @click="openCreate" title="Nueva Ficha"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
 
     <div v-if="fichas.length === 0" class="fichas-empty-state">
@@ -206,31 +207,31 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
             <th>Programa</th>
             <th>Jornada</th>
             <th>Aula</th>
-            <th>Docente Líder 👑</th>
-            <th>Docentes Comunes 👤</th>
+            <th>Docente Líder </th>
+            <th>Docentes Comunes </th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="f in fichas" :key="f._id">
             <td><strong>{{ f.codigoFicha }}</strong></td>
-            <td>{{ f.nombrePrograma }}</td>
+            <td><span :title="nombreProgramaLimpio(f.nombrePrograma)">{{ apodoPrograma(f.nombrePrograma) }}</span></td>
             <td><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></td>
             <td>{{ f.aulaAsignada }}</td>
             <td>
               <span class="fichas-badge fichas-badge-leader">
-                👑 {{ getInstructorNombre(f.instructorLiderId) }}
+                 {{ getInstructorNombre(f.instructorLiderId) }}
               </span>
             </td>
             <td>
-              <span class="fichas-common-text">
-                {{ getComunesNombres(f.instructores) }}
+              <span class="fichas-common-text" :title="getComunesNombres(f.instructores)">
+                {{ truncar(getComunesNombres(f.instructores), 28) }}
               </span>
             </td>
             <td>
               <div class="fichas-button-group">
-                <button class="fichas-button fichas-button-outline fichas-button-small" @click="openEdit(f)">✏️ Editar</button>
-                <button class="fichas-button fichas-button-danger fichas-button-small" @click="eliminarFicha(f._id)">🗑️ Eliminar</button>
+                <button class="fichas-button fichas-button-outline fichas-button-small" @click="openEdit(f)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                <button class="fichas-button fichas-button-danger fichas-button-small" @click="eliminarFicha(f._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             </td>
           </tr>
@@ -242,7 +243,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
   <!-- MODAL DE CREACIÓN / EDICIÓN DE FICHA -->
   <div v-if="showModal" class="fichas-modal-overlay" @click.self="closeModal">
     <div class="fichas-modal fichas-modal-large">
-      <h2>{{ editingId ? '✏️ Editar Ficha' : '➕ Nueva Ficha' }}</h2>
+      <h2>{{ editingId ? ' Editar Ficha' : ' Nueva Ficha' }}</h2>
       <div class="fichas-form-grid">
         <div class="fichas-form-group">
           <label>Código de Ficha *</label>
@@ -255,9 +256,9 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         <div class="fichas-form-group">
           <label>Jornada *</label>
           <select v-model="fichaForm.jornada">
-            <option value="Mañana">🌅 Mañana</option>
-            <option value="Tarde">☀️ Tarde</option>
-            <option value="Noche">🌙 Noche</option>
+            <option value="Mañana"> Mañana</option>
+            <option value="Tarde"> Tarde</option>
+            <option value="Noche"> Noche</option>
           </select>
         </div>
         <div class="fichas-form-group">
@@ -267,7 +268,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
 
         <!-- BUSCADOR DE DOCENTES -->
         <div class="fichas-form-group fichas-form-group-wide">
-          <label>🔍 Filtrar / Buscar Docente en la Lista</label>
+          <label> Filtrar / Buscar Docente en la Lista</label>
           <input
             v-model="busquedaDocente"
             type="text"
@@ -277,23 +278,23 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label>👑 Docente Líder de la Ficha (Obligatorio) *</label>
+          <label> Docente Líder de la Ficha (Obligatorio) *</label>
           <select v-model="fichaForm.instructorLiderId" class="fichas-leader-select">
             <option :value="null" disabled>Selecciona al Docente Líder...</option>
             <option v-for="i in instructoresFiltrados" :key="i._id" :value="i._id">
-              👑 {{ i.nombres }} {{ i.apellidos }} — {{ i.especialidad }}
+               {{ i.nombres }} {{ i.apellidos }} — {{ i.especialidad }}
             </option>
           </select>
           <p v-if="instructoresFiltrados.length === 0" class="fichas-warning-text">
             No se encontraron docentes con la búsqueda "{{ busquedaDocente }}".
           </p>
           <p v-if="liderYaEsLiderEnOtraFicha" class="fichas-warning-text">
-            ⚠️ <strong>Aviso de Liderazgo:</strong> Este docente ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
+             <strong>Aviso de Liderazgo:</strong> Este docente ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
           </p>
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label>👤 Docentes Comunes Asignados (Opcional)</label>
+          <label> Docentes Comunes Asignados (Opcional)</label>
           <p class="fichas-help-text">Selecciona los docentes adicionales que dictan clases en esta ficha:</p>
           <div class="fichas-instructor-check-grid">
             <label
@@ -330,9 +331,9 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         </div>
       </div>
       <div class="fichas-modal-actions">
-        <button class="fichas-button fichas-button-outline" @click="closeModal">Cancelar</button>
-        <button class="fichas-button fichas-button-primary" @click="guardarFicha" :disabled="loading">
-          {{ loading ? 'Guardando...' : (editingId ? '💾 Actualizar Ficha' : '➕ Crear Ficha') }}
+        <button class="fichas-button fichas-button-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="fichas-button fichas-button-primary" @click="guardarFicha" :disabled="loading" title="Guardar">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
       </div>
     </div>

@@ -208,11 +208,11 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
     <div class="card-header">
       <h3>Calendario de Días No Laborables / Inhabilitados</h3>
       <div class="btn-group">
-        <button class="btn btn-outline" @click="sincronizarAPI" :disabled="sincronizandoAPI">
-          {{ sincronizandoAPI ? 'Sincronizando...' : 'Sincronizar Festivos Colombia (API)' }}
+        <button class="btn btn-outline" @click="sincronizarAPI" :disabled="sincronizandoAPI" title="Sincronizar Festivos">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </button>
-        <button class="btn btn-primary" @click="openCreate">
-          + Inhabilitar Día / Registrar Festivo
+        <button class="btn btn-primary" @click="openCreate" title="Agregar Día Festivo">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
     </div>
@@ -238,8 +238,8 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
               <span style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">{{ getFichasNombres(d) }}</span>
             </div>
             <div class="btn-group">
-              <button class="btn btn-outline btn-sm" @click="openEdit(d)">Editar</button>
-              <button class="btn btn-danger btn-sm" @click="eliminarDiaFestivo(d._id)">Eliminar</button>
+              <button class="btn btn-outline btn-sm" @click="openEdit(d)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+              <button class="btn btn-danger btn-sm" @click="eliminarDiaFestivo(d._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
           </div>
         </div>
@@ -258,8 +258,8 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
                 <td class="holidays-fiches-cell">{{ getFichasNombres(d) }}</td>
                 <td>
                   <div class="btn-group">
-                    <button class="btn btn-outline btn-sm" @click="openEdit(d)">Editar</button>
-                    <button class="btn btn-danger btn-sm" @click="eliminarDiaFestivo(d._id)">Eliminar</button>
+                    <button class="btn btn-outline btn-sm" @click="openEdit(d)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                    <button class="btn btn-danger btn-sm" @click="eliminarDiaFestivo(d._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                   </div>
                 </td>
               </tr>
@@ -331,14 +331,12 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
       </div>
 
       <div style="margin-top: 16px; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af;">
-        ℹ️ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
+        ℹ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
       </div>
 
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="closeModal">Cancelar</button>
-        <button class="btn btn-primary" @click="guardarDiaFestivo" :disabled="loading">
-          {{ loading ? 'Guardando...' : (editingId ? 'Actualizar' : 'Guardar e Inhabilitar') }}
-        </button>
+        <button class="btn btn-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="btn btn-primary" @click="guardarDiaFestivo" :disabled="loading" title="Guardar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
       </div>
     </div>
   </div>

@@ -7,6 +7,8 @@ import {
   LIMITE_DIAS_CONSECUTIVOS,
   LIMITE_DIAS_NO_CONSECUTIVOS,
 } from '../utils/inasistencias.js'
+import { apodoPrograma, formatearNumeroDocumento } from '../utils/textos.js'
+import StatCard from '../components/StatCard.vue'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', rol: 'Administrador' })
@@ -52,6 +54,11 @@ const etiquetaNoConsecutivos = computed(() => `${LIMITE_DIAS_NO_CONSECUTIVOS}+ d
 function getFichaNombre(fichaId) {
   const f = fichasList.value.find((f) => String(f._id) === String(fichaId))
   return f ? `${f.codigoFicha} - ${f.nombrePrograma}` : 'Sin ficha'
+}
+
+function getFichaApodo(fichaId) {
+  const f = fichasList.value.find((f) => String(f._id) === String(fichaId))
+  return f ? apodoPrograma(f.nombrePrograma) : 'Sin ficha'
 }
 
 function colorPorcentaje(pct) {
@@ -137,26 +144,17 @@ onMounted(async () => {
 
       <!-- Resumen -->
       <div class="stats-row" style="margin-top: 20px;">
-        <div class="stat-card" style="border-left-color: #ef4444;">
-          <span class="stat-num" style="color: #ef4444;">{{ consecutivos.length }}</span>
-          <span class="stat-label">Con {{ etiquetaConsecutivos }}</span>
-        </div>
-        <div class="stat-card" style="border-left-color: #f59e0b;">
-          <span class="stat-num" style="color: #f59e0b;">{{ noConsecutivos.length }}</span>
-          <span class="stat-label">Con {{ etiquetaNoConsecutivos }}</span>
-        </div>
-        <div class="stat-card stat-sinregistro">
-          <span class="stat-num">{{ estudiantesFiltrados.length }}</span>
-          <span class="stat-label">Aprendices evaluados</span>
-        </div>
+        <StatCard icon="alert-triangle" :label="`Con ${etiquetaConsecutivos}`" :value="consecutivos.length" variant="rojo" />
+        <StatCard icon="clock" :label="`Con ${etiquetaNoConsecutivos}`" :value="noConsecutivos.length" variant="ambar" />
+        <StatCard icon="users" label="Aprendices evaluados" :value="estudiantesFiltrados.length" variant="gris" />
       </div>
     </div>
 
     <!-- GRUPO 1: DIAS CONSECUTIVOS -->
-    <div class="card" style="border-top: 4px solid #ef4444;">
+    <div class="card">
       <div class="card-header">
         <div>
-          <h3 style="color: #ef4444;">🚨 {{ etiquetaConsecutivos }} fallados</h3>
+          <h3 style="color: #ef4444;"> {{ etiquetaConsecutivos }} fallados</h3>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">
             Aprendices que acumulan faltas seguidas. Requieren intervención prioritaria.
           </p>
@@ -165,8 +163,9 @@ onMounted(async () => {
           class="btn btn-outline btn-sm"
           :disabled="consecutivos.length === 0"
           @click="descargarExcel(consecutivos, 'Seguimiento_Inasistencias_Consecutivas')"
+          title="Exportar Excel"
         >
-          Exportar Excel
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
       </div>
 
@@ -195,8 +194,8 @@ onMounted(async () => {
                   Fallas: {{ a.fechasFallas.join(', ') }}
                 </div>
               </td>
-              <td>{{ a.estudiante.tipoDocumento }} {{ a.estudiante.numeroDocumento }}</td>
-              <td><span class="badge badge-ficha">{{ getFichaNombre(a.estudiante.fichaId) }}</span></td>
+              <td :title="`${a.estudiante.tipoDocumento} ${a.estudiante.numeroDocumento}`">{{ a.estudiante.tipoDocumento }} {{ formatearNumeroDocumento(a.estudiante.numeroDocumento) }}</td>
+              <td><span class="badge badge-ficha" :title="getFichaNombre(a.estudiante.fichaId)">{{ getFichaApodo(a.estudiante.fichaId) }}</span></td>
               <td style="font-size: 12px;">
                 <div>{{ a.estudiante.correo || '—' }}</div>
                 <div>{{ a.estudiante.telefono || '—' }}</div>
@@ -213,10 +212,10 @@ onMounted(async () => {
     </div>
 
     <!-- GRUPO 2: DIAS NO CONSECUTIVOS -->
-    <div class="card" style="border-top: 4px solid #f59e0b;">
+    <div class="card">
       <div class="card-header">
         <div>
-          <h3 style="color: #b45309;">⚠️ {{ etiquetaNoConsecutivos }} fallados</h3>
+          <h3 style="color: #b45309;"> {{ etiquetaNoConsecutivos }} fallados</h3>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">
             Aprendices con faltas acumuladas (no necesariamente seguidas). Requieren seguimiento.
           </p>
@@ -225,8 +224,9 @@ onMounted(async () => {
           class="btn btn-outline btn-sm"
           :disabled="noConsecutivos.length === 0"
           @click="descargarExcel(noConsecutivos, 'Seguimiento_Inasistencias_No_Consecutivas')"
+          title="Exportar Excel"
         >
-          Exportar Excel
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
       </div>
 
@@ -255,8 +255,8 @@ onMounted(async () => {
                   Fallas: {{ a.fechasFallas.join(', ') }}
                 </div>
               </td>
-              <td>{{ a.estudiante.tipoDocumento }} {{ a.estudiante.numeroDocumento }}</td>
-              <td><span class="badge badge-ficha">{{ getFichaNombre(a.estudiante.fichaId) }}</span></td>
+              <td :title="`${a.estudiante.tipoDocumento} ${a.estudiante.numeroDocumento}`">{{ a.estudiante.tipoDocumento }} {{ formatearNumeroDocumento(a.estudiante.numeroDocumento) }}</td>
+              <td><span class="badge badge-ficha" :title="getFichaNombre(a.estudiante.fichaId)">{{ getFichaApodo(a.estudiante.fichaId) }}</span></td>
               <td style="font-size: 12px;">
                 <div>{{ a.estudiante.correo || '—' }}</div>
                 <div>{{ a.estudiante.telefono || '—' }}</div>
