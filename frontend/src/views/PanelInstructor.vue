@@ -1311,7 +1311,7 @@ function descargarExcel(data, nombreArchivo) {
                 </div>
                 <p class="remote-desc">
                   {{ sesionRemotaActiva 
-                    ? 'El Kiosco del aula está recibiendo huellas de los aprendices. Las marcaciones se sincronizan aquí en tiempo real.' 
+                    ? 'El lector de huellas del aula está recibiendo marcas biométricas de los aprendices. Las asistencias se reflejan aquí en tiempo real.' 
                     : 'Inicia el pase de lista desde este dispositivo móvil/web para activar automáticamente el lector en el computador del aula.' 
                   }}
                 </p>
