@@ -22,6 +22,7 @@ const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
 const claseIniciadaAt = ref(null)
+const activandoClase = ref(false)
 
 // Toast notifications
 const toast = reactive({ show: false, message: '', type: 'success' })
@@ -116,6 +117,7 @@ async function restaurarEstadoClase() {
 
 async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
+  activandoClase.value = true
   try {
     const resultado = await api.clases.activar({
       fichaId: fichaSeleccionada.value._id,
@@ -126,6 +128,8 @@ async function iniciarSesionRemotaDocente() {
     showToast('Clase activada: el lector del aula está listo para tomar asistencia.', 'success')
   } catch (e) {
     showToast(e.message || 'No se pudo activar la clase', 'error')
+  } finally {
+    activandoClase.value = false
   }
 }
 
@@ -888,8 +892,8 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-remote-start"
                   @click="iniciarSesionRemotaDocente"
-                  :disabled="jornadaInhabilitada"
-                  title="Iniciar pase de lista"
+                  :disabled="jornadaInhabilitada || activandoClase"
+                  :title="activandoClase ? 'Activando...' : 'Iniciar pase de lista'"
                 >
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>

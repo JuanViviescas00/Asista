@@ -20,6 +20,7 @@ const vistaFicha = ref('asistencia')
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
+const activandoClase = ref(false)
 
 const emit = defineEmits(['cerrar-sesion'])
 
@@ -120,6 +121,7 @@ async function restaurarEstadoClase() {
 
 async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
+  activandoClase.value = true
   try {
     await api.clases.activar({
       fichaId: fichaSeleccionada.value._id,
@@ -129,6 +131,8 @@ async function iniciarSesionRemotaDocente() {
     showToast('Clase activada: el lector del aula está listo para tomar asistencia.', 'success')
   } catch (e) {
     showToast(e.message || 'No se pudo activar la clase', 'error')
+  } finally {
+    activandoClase.value = false
   }
 }
 
@@ -896,11 +900,11 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-remote-start"
                   @click="iniciarSesionRemotaDocente"
-                  :disabled="jornadaInhabilitada"
-                  title="Iniciar pase de lista remoto para el aula"
+                  :disabled="jornadaInhabilitada || activandoClase"
+                  :title="activandoClase ? 'Activando...' : 'Iniciar pase de lista remoto para el aula'"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5-13-7.5z"/></svg>
-                  Iniciar Pase de Lista Remoto
+                  {{ activandoClase ? 'Activando...' : 'Iniciar Pase de Lista Remoto' }}
                 </button>
                 <button
                   v-else
