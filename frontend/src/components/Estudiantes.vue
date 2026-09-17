@@ -1,8 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { apodoPrograma, truncar, formatearNumeroDocumento } from '../utils/textos.js'
-import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -231,12 +229,6 @@ function getFichaNombre(fichaId) {
   return ficha ? `${ficha.codigoFicha} - ${ficha.nombrePrograma}` : 'No asignada'
 }
 
-function getFichaApodo(fichaId) {
-  if (!fichaId) return '—'
-  const ficha = getFichaById(fichaId)
-  return ficha ? apodoPrograma(ficha.nombrePrograma) : 'No asignada'
-}
-
 function getJornada(fichaId) {
   if (!fichaId) return '—'
   const ficha = getFichaById(fichaId)
@@ -279,17 +271,17 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   </div>
 
   <div class="stats-row">
-    <StatCard icon="check-circle" label="Activos" :value="activosCount()" variant="verde" />
-    <StatCard icon="minus-circle" label="Inactivos" :value="inactivosCount()" variant="ambar" />
-    <StatCard icon="user-x" label="Retirados" :value="retiradosCount()" variant="rojo" />
+    <div class="stat-card stat-activo"><span class="stat-num">{{ activosCount() }}</span><span class="stat-label">Activos</span></div>
+    <div class="stat-card stat-inactivo"><span class="stat-num">{{ inactivosCount() }}</span><span class="stat-label">Inactivos</span></div>
+    <div class="stat-card stat-retirado"><span class="stat-num">{{ retiradosCount() }}</span><span class="stat-label">Retirados</span></div>
   </div>
 
   <div class="card">
     <div class="card-header">
       <h3>Busqueda Avanzada</h3>
       <div class="btn-group">
-        <button v-if="criteriosActivos > 0" class="btn btn-outline btn-sm" @click="limpiarBusqueda" title="Limpiar filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-outline btn-sm" @click="busquedaAvanzadaAbierta = !busquedaAvanzadaAbierta" title="Mostrar u ocultar búsqueda"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+        <button v-if="criteriosActivos > 0" class="btn btn-outline btn-sm" @click="limpiarBusqueda">Limpiar filtros ({{ criteriosActivos }})</button>
+        <button class="btn btn-outline btn-sm" @click="busquedaAvanzadaAbierta = !busquedaAvanzadaAbierta">{{ busquedaAvanzadaAbierta ? 'Ocultar' : 'Mostrar' }} busqueda</button>
       </div>
     </div>
     <div v-if="busquedaAvanzadaAbierta" class="busqueda-grid">
@@ -316,7 +308,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
         </select>
       </div>
-      <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate">+ Nuevo Estudiante</button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
@@ -332,11 +324,11 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         </thead>
         <tbody>
           <tr v-for="e in estudiantesFiltrados" :key="e._id" :class="{ 'fila-inactivo': e.estado !== 'Activo' }">
-            <td><strong :title="nombreCompleto(e)">{{ truncar(nombreCompleto(e), 22) }}</strong></td>
-            <td :title="`${e.tipoDocumento} ${e.numeroDocumento}`"><span class="doc-tipo">{{ e.tipoDocumento }}</span> {{ formatearNumeroDocumento(e.numeroDocumento) }}</td>
-            <td :title="e.correo">{{ truncar(e.correo, 24) }}</td>
+            <td><strong>{{ nombreCompleto(e) }}</strong></td>
+            <td><span class="badge badge-primary">{{ e.tipoDocumento }}</span> {{ e.numeroDocumento }}</td>
+            <td>{{ e.correo }}</td>
             <td>{{ e.telefono }}</td>
-            <td><span class="badge badge-ficha" :title="getFichaNombre(e.fichaId)">{{ getFichaApodo(e.fichaId) }}</span></td>
+            <td><span class="badge badge-ficha">{{ getFichaNombre(e.fichaId) }}</span></td>
             <td>{{ getJornada(e.fichaId) }}</td>
             <td><span class="badge" :class="asistenciaBadge(e.estadoAsistencia)">{{ e.estadoAsistencia || 'Sin registro' }}</span></td>
             <td>
@@ -346,12 +338,12 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
             <td>
               <div class="btn-group">
                 <template v-if="esLiderDeEstudiante(e)">
-                  <button class="btn btn-outline btn-sm" @click="openEdit(e)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                  <button class="btn btn-outline btn-sm" @click="openEdit(e)">Editar</button>
                   <template v-if="e.estado === 'Activo'">
-                    <button class="btn btn-warning btn-sm" @click="abrirRetirar(e, 'Inactivo')" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
-                    <button class="btn btn-danger btn-sm" @click="abrirRetirar(e, 'Retirado')" title="Retirar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/></svg></button>
+                    <button class="btn btn-warning btn-sm" @click="abrirRetirar(e, 'Inactivo')">Inhabilitar</button>
+                    <button class="btn btn-danger btn-sm" @click="abrirRetirar(e, 'Retirado')">Retirar</button>
                   </template>
-                  <button v-else class="btn btn-success btn-sm" @click="activarEstudiante(e)" title="Activar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+                  <button v-else class="btn btn-success btn-sm" @click="activarEstudiante(e)">Activar</button>
                 </template>
                 <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder de ficha</span>
               </div>
@@ -371,8 +363,8 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         <textarea v-model="retirarMotivo" rows="3" placeholder="Ej: Traslado de sede, retiro voluntario, bajo rendimiento, etc." style="width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 14px; font-family: var(--sans); resize: vertical;"></textarea>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="showRetirarModal = false" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-danger" @click="confirmarRetirar" title="Confirmar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+        <button class="btn btn-outline" @click="showRetirarModal = false">Cancelar</button>
+        <button class="btn btn-danger" @click="confirmarRetirar">Confirmar {{ retirarTipo === 'Retirado' ? 'Retiro' : 'Inhabilitacion' }}</button>
       </div>
     </div>
   </div>
@@ -400,8 +392,8 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         </div>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-primary" @click="guardarEstudiante" :disabled="loading" title="Guardar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+        <button class="btn btn-outline" @click="closeModal">Cancelar</button>
+        <button class="btn btn-primary" @click="guardarEstudiante" :disabled="loading">{{ loading ? 'Guardando...' : (editingId ? 'Actualizar' : 'Crear') + ' Estudiante' }}</button>
       </div>
     </div>
   </div>

@@ -1,8 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { truncar, formatearNumeroDocumento } from '../utils/textos.js'
-import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -198,10 +196,22 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
   </div>
 
   <div class="stats-row">
-    <StatCard icon="users" label="Total Instructores" :value="instructores.length" variant="primary" />
-    <StatCard icon="check-circle" label="Activos" :value="activosCount" variant="verde" />
-    <StatCard icon="minus-circle" label="Inactivos" :value="inactivosCount" variant="ambar" />
-    <StatCard icon="award" label="Docentes Líderes" :value="lideresCount" variant="azul" />
+    <div class="stat-card stat-activo">
+      <span class="stat-num">{{ instructores.length }}</span>
+      <span class="stat-label">Total Instructores</span>
+    </div>
+    <div class="stat-card stat-activo">
+      <span class="stat-num">{{ activosCount }}</span>
+      <span class="stat-label">Activos</span>
+    </div>
+    <div class="stat-card stat-inactivo">
+      <span class="stat-num">{{ inactivosCount }}</span>
+      <span class="stat-label">Inactivos</span>
+    </div>
+    <div class="stat-card" style="border-left: 4px solid #3b82f6;">
+      <span class="stat-num">{{ lideresCount }}</span>
+      <span class="stat-label">Docentes Líderes</span>
+    </div>
   </div>
 
   <div class="card busqueda-card">
@@ -213,8 +223,12 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
         </span>
       </div>
       <div class="btn-group">
-        <button v-if="criteriosActivos > 0" class="btn btn-outline btn-sm btn-limpiar" @click="limpiarBusqueda" title="Limpiar filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-outline btn-sm" @click="busquedaAvanzadaAbierta = !busquedaAvanzadaAbierta" title="Mostrar u ocultar filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+        <button v-if="criteriosActivos > 0" class="btn btn-outline btn-sm btn-limpiar" @click="limpiarBusqueda">
+          Limpiar filtros
+        </button>
+        <button class="btn btn-outline btn-sm" @click="busquedaAvanzadaAbierta = !busquedaAvanzadaAbierta">
+          {{ busquedaAvanzadaAbierta ? 'Ocultar' : 'Mostrar' }} filtros
+        </button>
       </div>
     </div>
 
@@ -231,7 +245,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
               placeholder="Buscar por número de documento..."
               class="input-control"
             />
-            <button v-if="busqueda.documento" class="btn-clear-campo" @click="busqueda.documento = ''" title="Borrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button v-if="busqueda.documento" class="btn-clear-campo" @click="busqueda.documento = ''" title="Borrar">×</button>
           </div>
         </div>
 
@@ -245,7 +259,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
               placeholder="Buscar por nombres o apellidos..."
               class="input-control"
             />
-            <button v-if="busqueda.nombres" class="btn-clear-campo" @click="busqueda.nombres = ''" title="Borrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button v-if="busqueda.nombres" class="btn-clear-campo" @click="busqueda.nombres = ''" title="Borrar">×</button>
           </div>
         </div>
       </div>
@@ -289,7 +303,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
           {{ instructoresFiltrados.length }} de {{ instructores.length }} resultado(s)
         </span>
       </div>
-      <button class="btn btn-primary" @click="openCreate" title="Nuevo Instructor"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button class="btn btn-primary" @click="openCreate">+ Nuevo Instructor</button>
     </div>
 
     <div v-if="instructores.length === 0" class="empty-state">
@@ -306,7 +320,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
       <p style="font-size: 15px; color: #64748b; margin-bottom: 12px;">
         No se encontraron instructores que coincidan con los criterios de búsqueda.
       </p>
-      <button class="btn btn-outline btn-sm" @click="limpiarBusqueda" title="Limpiar filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <button class="btn btn-outline btn-sm" @click="limpiarBusqueda">Limpiar Filtros</button>
     </div>
 
     <div v-else class="table-container">
@@ -325,11 +339,11 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
         </thead>
         <tbody>
           <tr v-for="i in instructoresFiltrados" :key="i._id" :class="{ 'fila-inactivo': i.estado === 'Inactivo' }">
-            <td><strong :title="nombreCompleto(i)">{{ truncar(nombreCompleto(i), 22) }}</strong></td>
-            <td :title="`${i.tipoDocumento} ${i.numeroDocumento}`"><span class="doc-tipo">{{ i.tipoDocumento }}</span> {{ formatearNumeroDocumento(i.numeroDocumento) }}</td>
-            <td :title="i.correo">{{ truncar(i.correo, 24) }}</td>
+            <td><strong>{{ nombreCompleto(i) }}</strong></td>
+            <td><span class="badge badge-primary">{{ i.tipoDocumento }}</span> {{ i.numeroDocumento }}</td>
+            <td>{{ i.correo }}</td>
             <td>{{ i.telefono }}</td>
-            <td><span class="badge badge-success" :title="i.especialidad">{{ truncar(i.especialidad, 20) }}</span></td>
+            <td><span class="badge badge-success">{{ i.especialidad }}</span></td>
             <td>
               <span class="badge" :class="i.esLider ? 'badge-primary' : 'badge-neutral'" style="font-size: 12px; font-weight: 600;">
                 {{ i.esLider ? 'Instructor Líder' : 'Instructor Común' }}
@@ -341,10 +355,10 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
             </td>
             <td>
               <div class="btn-group">
-                <button class="btn btn-outline btn-sm" @click="openEdit(i)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                <button v-if="i.estado === 'Activo'" class="btn btn-warning btn-sm" @click="abrirInhabilitar(i)" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
-                <button v-else class="btn btn-success btn-sm" @click="activarInstructor(i)" title="Activar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="btn btn-danger btn-sm" @click="eliminarInstructor(i._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                <button class="btn btn-outline btn-sm" @click="openEdit(i)">Editar</button>
+                <button v-if="i.estado === 'Activo'" class="btn btn-warning btn-sm" @click="abrirInhabilitar(i)">Inhabilitar</button>
+                <button v-else class="btn btn-success btn-sm" @click="activarInstructor(i)">Activar</button>
+                <button class="btn btn-danger btn-sm" @click="eliminarInstructor(i._id)">Eliminar</button>
               </div>
             </td>
           </tr>
@@ -365,8 +379,8 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
         <textarea v-model="inhabilitarMotivo" rows="3" placeholder="Ej: Ya no pertenece a la institucion, termino contrato, etc." style="width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 14px; font-family: var(--sans); resize: vertical;"></textarea>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="showInhabilitarModal = false" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-danger" @click="confirmarInhabilitar" title="Confirmar Inhabilitación"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+        <button class="btn btn-outline" @click="showInhabilitarModal = false">Cancelar</button>
+        <button class="btn btn-danger" @click="confirmarInhabilitar">Confirmar Inhabilitacion</button>
       </div>
     </div>
   </div>
@@ -394,8 +408,8 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
         <strong>Cuenta de Acceso Automática:</strong> Se creará una cuenta para iniciar sesión. Su usuario será <strong>{{ instructorForm.correo || 'el correo ingresado' }}</strong> y su contraseña estándar inicial será <strong>sena2026</strong> (el docente podrá cambiarla desde su Perfil).
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-primary" @click="guardarInstructor" :disabled="loading" title="Guardar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+        <button class="btn btn-outline" @click="closeModal">Cancelar</button>
+        <button class="btn btn-primary" @click="guardarInstructor" :disabled="loading">{{ loading ? 'Guardando...' : (editingId ? 'Actualizar' : 'Crear') + ' Instructor' }}</button>
       </div>
     </div>
   </div>

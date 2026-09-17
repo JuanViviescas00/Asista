@@ -1,0 +1,64 @@
+.student-consult-page { padding: 24px; }
+.student-consult-page-header { margin-bottom: 24px; }
+.student-consult-page-header h1 { font-size: 28px; font-weight: 700; color: #1e293b; }
+.student-consult-page-header p { color: #64748b; margin-top: 4px; }
+.student-consult-card { background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 24px; }
+.student-consult-search-bar { display: flex; align-items: center; gap: 12px; background: #ffffff; padding: 14px 18px; border-radius: 8px; border: 1px solid #e2e8f0; }
+.student-consult-search-icon { flex-shrink: 0; color: #64748b; }
+.student-consult-search-input { flex: 1; border: none; font-size: 16px; outline: none; background: transparent; color: #1e293b; }
+.student-consult-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; cursor: pointer; }
+.student-consult-button-outline { background: #ffffff; border: 1px solid #cbd5e1; color: #1e293b; }
+.student-consult-button-outline:hover { background: #f8fafc; border-color: #64748b; }
+.student-consult-button-primary { background: #1a73e8; color: #ffffff; }
+.student-consult-button-primary:hover { background: #1557b0; }
+.student-consult-button-small { padding: 6px 12px; font-size: 12px; }
+.student-consult-empty-state { text-align: center; padding: 48px 20px; color: #64748b; }
+.student-consult-results { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.student-consult-result-item { display: flex; align-items: center; gap: 16px; background: #ffffff; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s ease; }
+.student-consult-result-item:hover { border-color: #2563eb; background: #f8fafc; }
+.student-consult-result-avatar { width: 48px; height: 48px; background: #2563eb; color: #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; flex-shrink: 0; }
+.student-consult-result-info { display: flex; flex-direction: column; gap: 2px; flex: 1; font-size: 14px; }
+.student-consult-badge { display: inline-block; width: fit-content; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.student-consult-badge-ficha { background: #e0e7ff; color: #3730a3; }
+.student-consult-badge-success { background: #d4edda; color: #155724; }
+.student-consult-badge-warning { background: #fff3cd; color: #856404; }
+.student-consult-badge-danger { background: #f8d7da; color: #721c24; }
+.student-consult-badge-neutral { background: #f1f5f9; color: #64748b; }
+.student-consult-report-actions { margin-bottom: 20px; }
+.student-consult-report-action-group { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; }
+.student-consult-printable-report { padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.student-consult-report-header { display: flex; justify-content: space-between; border-bottom: 2px solid #000000; padding-bottom: 16px; margin-bottom: 24px; }
+.student-consult-brand-box h2 { font-size: 28px; font-weight: 800; color: #39a900; margin: 0; }
+.student-consult-brand-box span { font-size: 12px; color: #64748b; }
+.student-consult-report-title-box h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; text-align: right; }
+.student-consult-report-title-box p { font-size: 11px; color: #64748b; margin: 0; text-align: right; }
+.student-consult-profile-summary { display: flex; gap: 24px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+.student-consult-profile-avatar { width: 64px; height: 64px; background: #39a900; color: #ffffff; font-size: 24px; font-weight: 700; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.student-consult-profile-details { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 24px; flex: 1; font-size: 13px; }
+.student-consult-field-label { display: block; font-size: 11px; color: #64748b; margin-bottom: 2px; }
+.student-consult-name-value { font-size: 16px; color: #1e293b; }
+.student-consult-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.student-consult-stat { background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 20px; text-align: center; border-left: 4px solid transparent; }
+.student-consult-stat-present { border-left-color: #28a745; }
+.student-consult-stat-late { border-left-color: #f59e0b; }
+.student-consult-stat-absent { border-left-color: #dc3545; }
+.student-consult-stat-index { background: #eff6ff; border: 1px solid #bfdbfe; border-left-width: 4px; border-left-color: #1d4ed8; }
+.student-consult-stat-number { display: block; font-size: 32px; font-weight: 700; color: #1e293b; line-height: 1; }
+.student-consult-stat-index .student-consult-stat-number { color: #1d4ed8; }
+.student-consult-stat-label { font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 6px; display: block; }
+.student-consult-report-table-section { margin-top: 24px; }
+.student-consult-data-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.student-consult-data-table th, .student-consult-data-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+.student-consult-data-table th { background: #f1f5f9; font-weight: 600; }
+.student-consult-empty-cell { text-align: center; color: #94a3b8; padding: 24px !important; }
+@media (max-width: 640px) {
+  .student-consult-page { padding: 20px 16px; }
+  .student-consult-printable-report { padding: 20px 16px; }
+  .student-consult-profile-summary, .student-consult-report-action-group { flex-direction: column; align-items: stretch; }
+  .student-consult-profile-details { grid-template-columns: 1fr; }
+  .student-consult-report-title-box h3, .student-consult-report-title-box p { text-align: left; }
+}
+@media print {
+  .student-consult-no-print { display: none !important; }
+  .student-consult-printable-report { box-shadow: none; padding: 0; }
+}
