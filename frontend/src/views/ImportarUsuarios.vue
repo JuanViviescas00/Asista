@@ -405,7 +405,7 @@ function limpiarTodo() {
   <!-- SI NO TIENE PERMISO (SI ES DOCENTE COMÚN) -->
   <div v-if="!permisoCarga" class="import-users-card import-users-restricted-card">
     <div class="import-users-restricted-message">
-      🔒 <strong>Acceso Restringido:</strong> La carga masiva mediante archivos planos (XLSX) está reservada para el <strong>Administrador</strong> o <strong>Instructores Líderes de Ficha</strong>.
+       <strong>Acceso Restringido:</strong> La carga masiva mediante archivos planos (XLSX) está reservada para el <strong>Administrador</strong> o <strong>Instructores Líderes de Ficha</strong>.
     </div>
   </div>
 
@@ -419,7 +419,7 @@ function limpiarTodo() {
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
           <span v-if="usuario.rol === 'Instructor'" class="import-users-badge import-users-badge-success">
-            👑 Docente Líder Autorizado
+             Docente Líder Autorizado
           </span>
         </div>
       </div>
@@ -427,9 +427,9 @@ function limpiarTodo() {
         <div class="import-users-form-group">
           <label>Tipo de Datos a Importar</label>
           <select v-model="tipoImportacion" :disabled="archivoNombre !== ''" @change="limpiarTodo">
-            <option value="estudiantes">👨‍🎓 Estudiantes (Aprendices)</option>
-            <option value="instructores">👨‍🏫 Instructores / Docentes</option>
-            <option value="fichas" v-if="usuario.rol === 'Administrador'">📋 Fichas / Programas</option>
+            <option value="estudiantes">‍ Estudiantes (Aprendices)</option>
+            <option value="instructores">‍ Instructores / Docentes</option>
+            <option value="fichas" v-if="usuario.rol === 'Administrador'"> Fichas / Programas</option>
           </select>
         </div>
         <div class="import-users-form-group">
@@ -502,7 +502,7 @@ function limpiarTodo() {
     <!-- ADVERTENCIAS INFORMATIVAS DE LIDERAZGO -->
     <div v-if="advertencias.length > 0" class="import-users-card import-users-warning-card">
       <div class="import-users-card-header">
-        <h3 class="import-users-warning-title">⚠️ Advertencias de Liderazgo (Opcionales)</h3>
+        <h3 class="import-users-warning-title"> Advertencias de Liderazgo (Opcionales)</h3>
         <span class="import-users-badge import-users-badge-warning">{{ advertencias.length }} avisos</span>
       </div>
       <div class="import-users-table-container">
@@ -555,15 +555,15 @@ function limpiarTodo() {
                 <td>{{ r.Tipo_Doc }}</td><td>{{ r.Num_Doc }}</td><td>{{ r.Nombres }}</td><td>{{ r.Apellidos }}</td><td>{{ r.Correo }}</td><td>{{ r.Ficha }}</td>
                 <td>
                   <span class="import-users-badge" :class="['SI', 'S', 'LIDER', 'TRUE', '1'].includes(String(r.Es_Lider).toUpperCase()) ? 'import-users-badge-success' : 'import-users-badge-neutral'">
-                    {{ ['SI', 'S', 'LIDER', 'TRUE', '1'].includes(String(r.Es_Lider).toUpperCase()) ? '👑 Sí (Líder)' : '👤 No (Común)' }}
+                    {{ ['SI', 'S', 'LIDER', 'TRUE', '1'].includes(String(r.Es_Lider).toUpperCase()) ? ' Sí (Líder)' : ' No (Común)' }}
                   </span>
                 </td>
                 <td>
                   <span v-if="r._infoMultificha" class="import-users-badge import-users-badge-warning import-users-badge-spaced" :title="r._infoMultificha">
-                    📚 Multi-Clase
+                     Multi-Clase
                   </span>
                   <span v-if="r._advertencia" class="import-users-badge import-users-badge-warning" :title="r._advertencia">
-                    ⚠️ Reemplazará Líder
+                     Reemplazará Líder
                   </span>
                   <span v-if="!r._infoMultificha && !r._advertencia" class="import-users-muted">—</span>
                 </td>

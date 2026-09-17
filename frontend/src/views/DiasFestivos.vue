@@ -331,7 +331,7 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
       </div>
 
       <div style="margin-top: 16px; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af;">
-        ℹ️ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
+        ℹ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
       </div>
 
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">

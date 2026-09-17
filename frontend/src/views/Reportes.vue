@@ -410,7 +410,7 @@ function limpiar() {
   </div>
 
   <div v-if="usuario.rol === 'Instructor' && fichasLideradas.length === 0" class="card" style="background: #fff1f2; border-color: #fecdd3; color: #9f1239; padding: 20px;">
-    <strong>🔒 Acceso Restringido a Reportes:</strong> Como Docente Común no tienes asignada ninguna Ficha bajo tu liderazgo. La generación de reportes está reservada para el Administrador o Docente Líder de Ficha.
+    <strong> Acceso Restringido a Reportes:</strong> Como Docente Común no tienes asignada ninguna Ficha bajo tu liderazgo. La generación de reportes está reservada para el Administrador o Docente Líder de Ficha.
   </div>
 
   <div v-else class="card">
@@ -420,7 +420,7 @@ function limpiar() {
     <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
       <!-- 1. Selector de Ficha -->
       <div class="form-group">
-        <label>🏫 Ficha de Formación <span style="color: #ef4444;">*</span></label>
+        <label> Ficha de Formación <span style="color: #ef4444;">*</span></label>
         <select v-model="filtroFicha" @change="showPreview = false; filtroEstudiante = 'todos'; filtroInstructor = 'todos'">
           <option :value="null" disabled>Selecciona una ficha</option>
           <option v-for="f in fichasLideradas" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
@@ -429,7 +429,7 @@ function limpiar() {
 
       <!-- 2. Filtro por Docente / Materia -->
       <div class="form-group">
-        <label>👨‍🏫 Docente / Instructor</label>
+        <label>‍ Docente / Instructor</label>
         <select v-model="filtroInstructor" :disabled="!filtroFicha">
           <option value="todos">Todos los Docentes / Clases</option>
           <option v-for="inst in instructoresDeLaFicha" :key="inst._id" :value="inst._id">
@@ -440,7 +440,7 @@ function limpiar() {
 
       <!-- 3. Filtro por Aprendiz / Estudiante -->
       <div class="form-group">
-        <label>👤 Aprendiz Específico</label>
+        <label> Aprendiz Específico</label>
         <select v-model="filtroEstudiante" :disabled="!filtroFicha">
           <option value="todos">Todos los Aprendices</option>
           <option v-for="est in estudiantesFicha" :key="est._id" :value="est._id">
@@ -451,18 +451,18 @@ function limpiar() {
 
       <!-- 4. Rango de Fechas -->
       <div class="form-group">
-        <label>📅 Fecha Desde</label>
+        <label> Fecha Desde</label>
         <input v-model="fechaDesde" type="date" />
       </div>
 
       <div class="form-group">
-        <label>📅 Fecha Hasta</label>
+        <label> Fecha Hasta</label>
         <input v-model="fechaHasta" type="date" />
       </div>
 
       <!-- 5. Formato -->
       <div class="form-group">
-        <label>📄 Formato de Descarga</label>
+        <label> Formato de Descarga</label>
         <select v-model="formato">
           <option value="pdf">PDF (Impresión / Comité)</option>
           <option value="xlsx">XLSX (CSV Excel)</option>
@@ -473,7 +473,7 @@ function limpiar() {
     <!-- BARRA DE BÚSQUEDA LIBRE EN VIVO -->
     <div style="margin-top: 16px; padding: 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px;">
       <label style="font-weight: 700; font-size: 13px; color: #1e293b; display: flex; align-items: center; gap: 6px;">
-        <span>🔍</span> Búsqueda Rápida en Vivo (Aprendiz o Docente):
+        Búsqueda Rápida en Vivo (Aprendiz o Docente):
       </label>
       <div style="display: flex; gap: 10px; align-items: center;">
         <input
@@ -609,8 +609,8 @@ function limpiar() {
                 <th>Presentes</th>
                 <th>Tardanzas</th>
                 <th>Horas Totales Ausente</th>
-                <th>❌ Sin Excusa</th>
-                <th>📋 Con Excusa</th>
+                <th> Sin Excusa</th>
+                <th> Con Excusa</th>
                 <th>Inasistencias por Fecha y Docente a Cargo</th>
                 <th>% Asistencia</th>
               </tr>
@@ -634,7 +634,7 @@ function limpiar() {
                 </td>
                 <td>
                   <span v-if="r.horasConExcusa > 0" class="badge badge-info" style="font-size: 13px;">
-                    📋 {{ r.horasConExcusa }} hrs ({{ r.fallasConExcusa }} d)
+                     {{ r.horasConExcusa }} hrs ({{ r.fallasConExcusa }} d)
                   </span>
                   <span v-else style="color: #94a3b8; font-size: 12px;">—</span>
                 </td>
@@ -646,13 +646,13 @@ function limpiar() {
                       style="margin-bottom: 4px; padding: 4px 6px; border-radius: 4px; background: #f8fafc; border-left: 3px solid;"
                       :style="{ borderColor: det.tipo === 'Excusada' ? '#0284c7' : '#ef4444' }"
                     >
-                      <strong>{{ det.fecha }} ({{ det.horas }}h)</strong> - 👨‍🏫 {{ det.docente }}:
+                      <strong>{{ det.fecha }} ({{ det.horas }}h)</strong> - ‍ {{ det.docente }}:
                       <span :style="{ color: det.tipo === 'Excusada' ? '#0369a1' : '#dc2626' }">
-                        {{ det.tipo === 'Excusada' ? `📋 ${det.motivo}` : '❌ Injustificada' }}
+                        {{ det.tipo === 'Excusada' ? ` ${det.motivo}` : ' Injustificada' }}
                       </span>
                     </div>
                   </div>
-                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;">✅ Sin inasistencias</span>
+                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;"> Sin inasistencias</span>
                 </td>
                 <td>
                   <strong :style="{ color: r.porcentaje >= 80 ? '#22c55e' : r.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
@@ -684,15 +684,15 @@ function limpiar() {
                 <th>Horas Dictadas</th>
                 <th>Asistencias Marcadas</th>
                 <th>Tardanzas</th>
-                <th>❌ Horas Sin Excusa</th>
-                <th>📋 Horas Con Excusa</th>
+                <th> Horas Sin Excusa</th>
+                <th> Horas Con Excusa</th>
                 <th>% Asistencia en sus Clases</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(d, idx) in datosReporteDocentes" :key="d.id">
                 <td>{{ idx + 1 }}</td>
-                <td><strong>👨‍🏫 {{ d.nombre }}</strong></td>
+                <td><strong>‍ {{ d.nombre }}</strong></td>
                 <td><span class="badge badge-info">{{ d.especialidad }}</span></td>
                 <td><strong>{{ d.clasesDictadas }} sesiones</strong></td>
                 <td><span style="color: #475569; font-weight: 700;">{{ d.horasDictadas }} hrs</span></td>
@@ -728,15 +728,15 @@ function limpiar() {
                 <th>Horas Sesión</th>
                 <th>Presentes</th>
                 <th>Tardanzas</th>
-                <th>❌ Sin Excusa</th>
-                <th>📋 Con Excusa</th>
+                <th> Sin Excusa</th>
+                <th> Con Excusa</th>
                 <th>% Asistencia</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="s in datosReporteSesiones" :key="s.fecha">
                 <td><strong>{{ s.fecha }}</strong></td>
-                <td>👨‍🏫 {{ s.docente }}</td>
+                <td>‍ {{ s.docente }}</td>
                 <td>{{ s.horasSesion }} hrs</td>
                 <td><span class="badge badge-success">{{ s.presentes }}</span></td>
                 <td><span class="badge badge-warning">{{ s.tardanzas }}</span></td>

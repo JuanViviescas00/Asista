@@ -305,7 +305,7 @@ async function restablecerPassword() {
         <!-- FORMULARIO 2: CONSULTA APRENDIZ (POR DOCUMENTO) -->
         <div v-else class="login-form-container">
           <div class="login-consultation-info">
-            <span>ℹ️</span> Consulta únicamente tus datos y registros de asistencia ingresando tu número de documento.
+            Consulta únicamente tus datos y registros de asistencia ingresando tu número de documento.
           </div>
 
           <div class="login-form-group">

@@ -182,7 +182,7 @@ async function procesarCambioPassword() {
     })
 
     if (res.ok) {
-      showToast('✅ ¡Contraseña actualizada exitosamente!', 'success')
+      showToast(' ¡Contraseña actualizada exitosamente!', 'success')
       cerrarModalPassword()
     } else {
       passError.value = res.error || 'Error al actualizar contraseña'
@@ -197,7 +197,7 @@ async function procesarCambioPassword() {
 
 <template>
   <div class="admin-profile-page-header">
-    <h1>{{ esInstructor ? '👨‍🏫 Perfil del Instructor / Maestro' : 'Perfil del Administrador' }}</h1>
+    <h1>{{ esInstructor ? '‍ Perfil del Instructor / Maestro' : 'Perfil del Administrador' }}</h1>
     <p>{{ esInstructor ? 'Información personal y académica del docente' : 'Gestiona tu información personal y seguridad de la cuenta' }}</p>
   </div>
 
@@ -294,7 +294,7 @@ async function procesarCambioPassword() {
         <div class="admin-profile-value">
           <template v-if="esInstructor">
             <span class="admin-profile-badge" :class="esLiderCalculado ? 'admin-profile-badge-primary' : 'admin-profile-badge-neutral'" style="font-size: 13px; padding: 4px 10px; font-weight: 600;">
-              {{ esLiderCalculado ? '👥 Instructor Líder' : '👨‍🏫 Instructor Común' }}
+              {{ esLiderCalculado ? ' Instructor Líder' : '‍ Instructor Común' }}
             </span>
           </template>
           <template v-else>
@@ -322,7 +322,7 @@ async function procesarCambioPassword() {
     <div class="password-modal-card">
       <div class="password-modal-header">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 22px;">🔐</span>
+          <span style="font-size: 22px;"></span>
           <div>
             <h3 style="margin: 0; font-size: 18px; color: #1e293b;">Actualizar Contraseña</h3>
             <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Ingresa tu contraseña actual para autorizar el cambio</p>
@@ -332,7 +332,7 @@ async function procesarCambioPassword() {
       </div>
 
       <div v-if="passError" class="password-modal-error">
-        ⚠️ {{ passError }}
+         {{ passError }}
       </div>
 
       <form class="password-modal-body" @submit.prevent="procesarCambioPassword">

@@ -226,7 +226,7 @@ function formatFecha(iso) {
   <div v-else>
     <!-- Pendientes de aprobación -->
     <div v-if="pendientes.length > 0" class="pendientes-section">
-      <h2 class="pendientes-title">⏳ Pendientes de aprobación</h2>
+      <h2 class="pendientes-title"> Pendientes de aprobación</h2>
       <div v-for="d in pendientes" :key="d._id" class="card card-pendiente">
         <div class="card-header">
           <div>
@@ -298,7 +298,7 @@ function formatFecha(iso) {
               class="move-hint"
               :class="{ 'move-active': selecciones[d._id].includes(f._id) }"
             >
-              {{ selecciones[d._id].includes(f._id) ? '⚠️ se moverá desde' : 'en' }} {{ deviceLabel(getDispositivoDeFicha(f._id)) }}
+              {{ selecciones[d._id].includes(f._id) ? ' se moverá desde' : 'en' }} {{ deviceLabel(getDispositivoDeFicha(f._id)) }}
             </small>
           </span>
         </label>

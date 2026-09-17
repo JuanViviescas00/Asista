@@ -1,5 +1,5 @@
-﻿# Etapa 1: Build de la aplicacion Vue 3 con Vite
-FROM node:20-alpine AS build
+# Etapa 1: Build de la aplicacion Vue 3 con Vite
+FROM node:22-alpine AS build
 
 WORKDIR /app
 
