@@ -86,16 +86,24 @@ body {
 /* ============================================================
    SIDEBAR · Panel Admin (estilo "glass neón" desplegable con Quasar)
    ============================================================ */
+/* ============================================================
+   SIDEBAR · Panel Admin (Tema blanco con acento verde #007832)
+   ============================================================ */
 .app-sidebar.q-drawer {
-  background:
-    radial-gradient(120% 90% at 100% 0%, rgba(78, 219, 60, .22), transparent 55%),
-    linear-gradient(165deg, #0B1F08 0%, #0A2B08 45%, #071A05 100%);
-  border: none !important;
+  background: #FFFFFF !important;
+  border-right: 1px solid #E5E7EB !important;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.04);
 }
 
 .app-sidebar .q-drawer__content {
-  background: transparent;
-  overflow: visible;
+  background: #FFFFFF;
+  overflow: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.app-sidebar .q-drawer__content::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-inner {
@@ -104,50 +112,48 @@ body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  padding: 18px 16px 16px;
+  padding: 20px 14px 16px;
   border-radius: 0;
-  background:
-    radial-gradient(120% 90% at 100% 0%, rgba(78, 219, 60, .22), transparent 55%),
-    linear-gradient(165deg, #0B1F08 0%, #0A2B08 45%, #071A05 100%);
+  background: #FFFFFF;
   border: none;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+  box-shadow: none;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-inner::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-header {
   position: relative;
-  padding-bottom: 18px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, .1);
+  padding-bottom: 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #F1F3F5;
 }
 
-.sidebar-header-top {
+.sidebar-brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
+  gap: 12px;
 }
 
-.sidebar-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.q-drawer--mini .sidebar-header-top {
+.q-drawer--mini .sidebar-brand {
   justify-content: center;
 }
 
 .sidebar-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: #FFFFFF;
+  width: 48px;
+  height: 48px;
+  border-radius: 0;
+  background: transparent;
   display: grid;
   place-items: center;
-  padding: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+  padding: 0;
+  border: none;
+  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -157,65 +163,42 @@ body {
   object-fit: contain;
 }
 
-.sidebar-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(155deg, #2B7A16, #0E3A06);
-  color: #EAFBE2;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .02em;
-  border: 2px solid rgba(111, 224, 92, .55);
-  box-shadow: 0 0 12px rgba(111, 224, 92, .45);
-  flex-shrink: 0;
+.sidebar-brand-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .sidebar-title {
   font-size: 21px;
   font-weight: 800;
-  letter-spacing: -.01em;
-  color: #FFFFFF;
-  line-height: 1.2;
+  letter-spacing: -.02em;
+  color: #111827;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-title span {
-  color: #5FE13D;
-  text-shadow: 0 0 18px rgba(95, 225, 61, .55);
+  color: #007832;
 }
 
 .sidebar-subtitle {
-  font-size: 12.5px;
-  color: rgba(210, 235, 200, .6);
-  margin-top: 4px;
-}
-
-.sidebar-collapse-btn {
-  position: relative;
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  background: #163D0E;
-  border: 1px solid rgba(111, 224, 92, .5);
-  border-radius: 50%;
-  color: #C9F5BC;
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
-  transition: background .16s var(--ease), transform .16s var(--ease);
-  flex-shrink: 0;
-}
-
-.sidebar-collapse-btn:hover {
-  background: #1F5C00;
-  transform: scale(1.06);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #4B5563;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 4px 0;
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -225,64 +208,84 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 9px;
-  border-radius: 14px;
+  gap: 10px;
+  padding: 7px 12px;
+  min-height: 35px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: rgba(220, 240, 210, .78);
+  font-size: 13px;
+  font-weight: 500;
+  color: #4B5563;
   text-decoration: none;
-  transition: background .16s var(--ease), color .16s var(--ease), box-shadow .16s var(--ease);
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: none !important;
+  transition: all .16s var(--ease);
 }
 
 .q-drawer--mini .nav-item {
   justify-content: center;
-  padding: 9px 0;
+  padding: 0 !important;
+  margin: 5px auto !important;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 8px;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, .06);
-  color: #FFFFFF;
+  background: #F9FAFB;
+  color: #111827;
 }
 
 .nav-item.active {
-  background: linear-gradient(90deg, rgba(76, 194, 42, .28), rgba(76, 194, 42, .08));
-  color: #FFFFFF;
-  box-shadow: 0 0 0 1px rgba(111, 224, 92, .55), 0 0 18px rgba(111, 224, 92, .35);
-}
-
-.nav-item.active::before {
-  content: "";
-  position: absolute;
-  left: -16px;
-  top: 6px;
-  bottom: 6px;
-  width: 4px;
-  border-radius: 4px;
-  background: #6FE05C;
-  box-shadow: 0 0 10px rgba(111, 224, 92, .9);
-}
-
-.q-drawer--mini .nav-item.active::before {
-  left: -6px;
+  background: #007832 !important;
+  color: #FFFFFF !important;
+  font-weight: 500;
+  box-shadow: none !important;
 }
 
 .nav-item-icon {
-  width: 38px;
-  height: 38px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 11px;
-  background: linear-gradient(155deg, rgba(76, 194, 42, .35), rgba(15, 60, 8, .55));
-  color: #EAFBE2;
-  border: 1px solid rgba(255, 255, 255, .08);
+  background: transparent;
+  color: #6B7280;
+  transition: all .18s var(--ease);
+}
+
+.nav-item:hover .nav-item-icon {
+  color: #111827;
 }
 
 .nav-item.active .nav-item-icon {
-  background: linear-gradient(155deg, #4CC22A, #1F6B0B);
+  background: transparent;
   color: #FFFFFF;
+}
+
+.q-drawer--mini .nav-item .nav-item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: #6B7280;
+}
+
+.q-drawer--mini .nav-item:hover .nav-item-icon {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.q-drawer--mini .nav-item.active .nav-item-icon {
+  background: #007832 !important;
+  color: #FFFFFF !important;
+  box-shadow: none !important;
 }
 
 .nav-item-label {
@@ -290,70 +293,108 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 13px;
+  letter-spacing: -0.01em;
 }
 
 .nav-item-arrow {
-  color: #B7F0A8;
+  color: rgba(255, 255, 255, 0.85);
   flex-shrink: 0;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+  cursor: pointer;
+  animation: fadeInBackdrop 0.2s ease;
+}
+
+@keyframes fadeInBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.app-sidebar.q-drawer {
+  z-index: 1000 !important;
 }
 
 .sidebar-status {
   margin-top: 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
-  background: linear-gradient(100deg, rgba(196, 67, 43, .32), rgba(120, 30, 20, .12));
-  border: 1px solid rgba(240, 100, 90, .5);
-  box-shadow: 0 0 16px rgba(240, 100, 90, .18);
-  color: #FFD9D2;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #DC2626;
+  transition: all 0.2s ease;
 }
 
 .q-drawer--mini .sidebar-status {
   justify-content: center;
-  padding: 14px 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-
-.q-drawer--mini .estado-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, .06);
-  border: 2px solid currentColor;
-  box-shadow: 0 0 14px currentColor;
-}
-
-.sidebar-status.ojo-verde {
-  background: linear-gradient(100deg, rgba(76, 194, 42, .32), rgba(20, 70, 10, .12));
-  border-color: rgba(111, 224, 92, .5);
-  box-shadow: 0 0 16px rgba(111, 224, 92, .18);
-  color: #D9FBCF;
-}
-
-.sidebar-status.ojo-amarillo {
-  background: linear-gradient(100deg, rgba(240, 184, 74, .32), rgba(90, 60, 10, .12));
-  border-color: rgba(240, 184, 74, .5);
-  box-shadow: 0 0 16px rgba(240, 184, 74, .18);
-  color: #FDECC8;
-}
-
-.estado-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
+  padding: 8px 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .estado-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
   flex-shrink: 0;
+  transition: all 0.25s var(--ease);
+}
+
+.sidebar-status.ojo-verde {
+  background: #F0FDF4;
+  border-color: #BBF7D0;
+  color: #15803D;
+}
+
+.sidebar-status.ojo-verde .estado-icon {
+  background: rgba(0, 120, 50, 0.12);
+  border: 2px solid #007832;
+  color: #007832;
+  box-shadow: 0 0 10px rgba(0, 120, 50, 0.3);
+}
+
+.sidebar-status.ojo-amarillo {
+  background: #FFFBEB;
+  border-color: #FDE68A;
+  color: #B45309;
+}
+
+.sidebar-status.ojo-amarillo .estado-icon {
+  background: rgba(245, 158, 11, 0.12);
+  border: 2px solid #F59E0B;
+  color: #D97706;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+}
+
+.sidebar-status.ojo-rojo .estado-icon,
+.sidebar-status:not(.ojo-verde):not(.ojo-amarillo) .estado-icon {
+  background: rgba(239, 68, 68, 0.12);
+  border: 2px solid #EF4444;
+  color: #EF4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.estado-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
 }
 
 .status-title {

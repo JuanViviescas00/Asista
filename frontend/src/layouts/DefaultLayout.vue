@@ -10,9 +10,10 @@ const $q = useQuasar()
 const { usuario, headerTitulo, headerSubtitulo, cerrarSesion } = useAuth()
 const { estadoSistema, textoEstado, colorEstadoClass } = useSistemaEstado()
 
-// Drawer de Quasar: `drawerOpen` controla la visibilidad en móvil (overlay),
-// `drawerMini` controla el modo colapsado/desplegado en escritorio.
-const drawerOpen = ref(false)
+// Drawer de Quasar: `drawerOpen` controla la visibilidad base,
+// `drawerMini` controla el modo colapsado/desplegado con mini-to-overlay.
+const drawerOpen = ref(true)
+const drawerMini = ref(true)
 
 const currentView = getCurrentView()
 
@@ -52,48 +53,52 @@ const inicialesUsuario = computed(() => {
   return iniciales || 'SA'
 })
 
-function toggleDrawer() {
-  drawerOpen.value = !drawerOpen.value
+function toggleMini() {
+  drawerMini.value = !drawerMini.value
+}
+
+function onSidebarClick() {
+  if (drawerMini.value) {
+    drawerMini.value = false
+  }
 }
 
 function irA(key) {
   navigate(key)
-  drawerOpen.value = false
+  // Al seleccionar un item, NO se guarda/cierra el menu!
 }
 </script>
 
 <template>
   <q-layout view="hHh Lpr fFf" class="app-shell">
+    <!-- Backdrop flotante cuando el menu esta expandido para cerrar al hacer clic afuera -->
+    <div
+      v-if="!drawerMini"
+      class="sidebar-backdrop"
+      @click="drawerMini = true"
+    ></div>
+
     <q-drawer
       v-model="drawerOpen"
-      overlay
-      elevated
-      :width="280"
+      :mini="drawerMini"
+      mini-to-overlay
+      show-if-above
+      :width="290"
+      :mini-width="80"
       class="app-sidebar"
+      @click="onSidebarClick"
     >
       <div class="sidebar-inner">
         <div class="sidebar-header">
-          <div class="sidebar-header-top">
+          <div class="sidebar-brand">
             <div class="sidebar-logo">
               <img :src="senaLogo" alt="Logo SENA" />
             </div>
-            <div class="sidebar-header-actions">
-              <div class="sidebar-avatar">
-                <span>{{ inicialesUsuario }}</span>
-              </div>
-              <button
-                type="button"
-                class="sidebar-collapse-btn"
-                @click="drawerOpen = false"
-                title="Cerrar menú"
-              >
-                <q-icon name="close" size="18px" />
-              </button>
+            <div class="sidebar-brand-text" v-if="!drawerMini">
+              <h2 class="sidebar-title">{{ tituloPrincipal }} <span>{{ tituloResaltado }}</span></h2>
+              <p class="sidebar-subtitle">{{ headerSubtitulo }}</p>
             </div>
           </div>
-
-          <h2 class="sidebar-title">{{ tituloPrincipal }} <span>{{ tituloResaltado }}</span></h2>
-          <p class="sidebar-subtitle">{{ headerSubtitulo }}</p>
         </div>
 
         <nav class="sidebar-nav">
@@ -102,20 +107,25 @@ function irA(key) {
             :key="key"
             class="nav-item"
             :class="{ active: currentView === key }"
+            :title="view.label"
             @click="irA(key)"
           >
             <span class="nav-item-icon">
-              <q-icon :name="iconosPorVista[key] || 'circle'" size="20px" />
+              <q-icon :name="iconosPorVista[key] || 'circle'" size="18px" />
             </span>
-            <span class="nav-item-label">{{ view.label }}</span>
-            <q-icon v-if="currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />
+            <span v-if="!drawerMini" class="nav-item-label">{{ view.label }}</span>
+            <q-icon v-if="!drawerMini && currentView === key" name="chevron_right" class="nav-item-arrow" size="16px" />
           </a>
         </nav>
 
-        <div class="sidebar-status" :class="colorEstadoClass(estadoSistema.colorEstado)">
-          <span class="estado-dot"></span>
-          <span class="estado-icon"><q-icon name="fingerprint" size="18px" /></span>
-          <span class="status-title">{{ textoEstado }}</span>
+        <div
+          class="sidebar-status"
+          :class="colorEstadoClass(estadoSistema.colorEstado)"
+          :title="drawerMini ? textoEstado : null"
+        >
+          <span v-if="!drawerMini" class="estado-dot"></span>
+          <span class="estado-icon"><q-icon name="fingerprint" size="20px" /></span>
+          <span v-if="!drawerMini" class="status-title">{{ textoEstado }}</span>
         </div>
       </div>
     </q-drawer>
@@ -123,9 +133,9 @@ function irA(key) {
     <q-page-container>
       <main class="main-content">
         <header class="app-topbar">
-          <button class="btn-toggle-drawer" @click="toggleDrawer" title="Abrir menú de navegación">
-            <q-icon name="menu" size="20px" />
-            <span>Menú</span>
+          <button class="btn-toggle-drawer" @click="toggleMini" :title="drawerMini ? 'Expandir menú' : 'Contraer menú'">
+            <q-icon :name="drawerMini ? 'menu' : 'menu_open'" size="20px" />
+            <span>{{ drawerMini ? 'Expandir' : 'Contraer' }}</span>
           </button>
           <button class="btn-logout-top" @click="cerrarSesion" title="Cerrar sesión">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
