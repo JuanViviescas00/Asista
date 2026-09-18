@@ -112,6 +112,7 @@ export function getStatus() {
     ultimoRechazo: wsClient.getUltimoRechazo(),
     docente: docente
       ? {
+          id: docente.id,
           correo: docente.correo,
           nombre: docente.nombre,
           esLider: docente.esLider,
@@ -424,6 +425,91 @@ export async function getEstudiantesFicha(fichaId) {
 
   const estudiantes = await res.json().catch(() => null)
   return { ok: true, estudiantes: Array.isArray(estudiantes) ? estudiantes : [] }
+}
+
+function headersDocente() {
+  return docente?.token ? { Authorization: `Bearer ${docente.token}` } : {}
+}
+
+function marcarSesionExpirada() {
+  docente = null
+  avisoSesion = 'Tu sesión expiró. Vuelve a iniciar sesión.'
+  notificarEstado()
+  setTimeout(() => {
+    avisoSesion = null
+    notificarEstado()
+  }, 6000)
+}
+
+export async function consultarConsentimientoDatos(estudianteId) {
+  if (!estudianteId) {
+    return { ok: false, error: 'Estudiante no especificado' }
+  }
+  if (!docente?.token) {
+    return { ok: false, error: 'No hay sesión docente activa' }
+  }
+
+  const { backendUrl } = getConfig()
+
+  let res
+  try {
+    res = await fetch(
+      `${backendUrl}/api/estudiantes/${encodeURIComponent(estudianteId)}/consentimiento-datos`,
+      { headers: headersDocente(), signal: AbortSignal.timeout(10000) }
+    )
+  } catch {
+    return { ok: false, error: 'Sin conexión: no se pudo consultar el consentimiento de datos' }
+  }
+
+  if (res.status === 401) {
+    marcarSesionExpirada()
+    return { ok: false, error: 'Tu sesión expiró. Vuelve a iniciar sesión.' }
+  }
+
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    return { ok: false, error: data?.error || 'No se pudo consultar el consentimiento de datos' }
+  }
+
+  return { ok: true, existe: !!data?.existe, ...(data || {}) }
+}
+
+export async function registrarConsentimientoDatos({ estudianteId, instructorId, versionTerminos }) {
+  if (!estudianteId || !instructorId || !versionTerminos) {
+    return { ok: false, error: 'Faltan datos para registrar el consentimiento' }
+  }
+  if (!docente?.token) {
+    return { ok: false, error: 'No hay sesión docente activa' }
+  }
+
+  const { backendUrl } = getConfig()
+
+  let res
+  try {
+    res = await fetch(
+      `${backendUrl}/api/estudiantes/${encodeURIComponent(estudianteId)}/consentimiento-datos`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headersDocente() },
+        body: JSON.stringify({ instructorId, versionTerminos }),
+        signal: AbortSignal.timeout(10000),
+      }
+    )
+  } catch {
+    return { ok: false, error: 'Sin conexión: no se pudo registrar el consentimiento de datos' }
+  }
+
+  if (res.status === 401) {
+    marcarSesionExpirada()
+    return { ok: false, error: 'Tu sesión expiró. Vuelve a iniciar sesión.' }
+  }
+
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    return { ok: false, error: data?.error || 'No se pudo registrar el consentimiento de datos' }
+  }
+
+  return { ok: true, ...(data || {}) }
 }
 
 export async function guardarTemplate({ estudianteId, fichaId, dedo, template, slot }) {
