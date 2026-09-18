@@ -7,6 +7,7 @@ const router = Router()
 
 // Operaciones de consulta (accesible con sesión o desde Kiosco de aula)
 router.get('/', autenticarOpcional, estudianteController.getEstudiantes)
+router.get('/:id/asistencia-resumen', autenticarOpcional, estudianteController.getAsistenciaResumen)
 
 // Operaciones CRUD de aprendices (restringidas a Administrador)
 router.post('/',

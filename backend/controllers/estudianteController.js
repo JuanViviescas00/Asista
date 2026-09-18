@@ -1,6 +1,7 @@
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import mongoose from 'mongoose'
+import { calcularResumenAsistencia } from '../services/asistenciaService.js'
 
 // Resuelve un fichaId (campo Mixed: ObjectId o codigoFicha) a su documento Ficha.
 // Reutiliza el mismo patrón de resolución ya presente en getEstudiantes y getPlantillasFicha.
@@ -106,6 +107,19 @@ export async function getEstudiantes(req, res) {
   }
 }
 
+export async function getAsistenciaResumen(req, res) {
+  try {
+    const { id } = req.params
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({ error: 'ID de estudiante inválido' })
+    }
+    const resumen = await calcularResumenAsistencia(id)
+    res.json({ success: true, estudianteId: String(id), ...resumen })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
 export async function createEstudiante(req, res) {
   try {
     const estudiante = new Estudiante(req.body)
@@ -175,7 +189,6 @@ export async function importarEstudiantes(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
-
 
 
 export async function enrolarHuellaLegacy(req, res) {

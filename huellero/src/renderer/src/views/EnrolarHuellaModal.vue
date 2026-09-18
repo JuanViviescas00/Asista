@@ -32,6 +32,7 @@ const errorInicial = ref('')
 const busqueda = ref('')
 const seleccionadoId = ref(null)
 const dedo = ref('')
+const slotObjetivo = ref(null)
 const estadoCaptura = ref('idle')
 const mensajeCaptura = ref('')
 
@@ -48,6 +49,16 @@ const estudiantesFiltrados = computed(() => {
 const seleccionado = computed(
   () => estudiantes.value.find((e) => e._id === seleccionadoId.value) || null
 )
+
+const slot1Ocupado = computed(() => !!seleccionado.value?.huellaTemplate)
+const slot2Ocupado = computed(() => !!seleccionado.value?.huellaTemplate2)
+
+function estadoHuellas(e) {
+  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
+  if (n === 0) return { texto: 'Sin huella', clase: 'off' }
+  if (n === 1) return { texto: `1/2 · ${e.dedoEnrolado || e.dedoEnrolado2}`, clase: 'ok' }
+  return { texto: `2/2 · ${e.dedoEnrolado} + ${e.dedoEnrolado2}`, clase: 'ok' }
+}
 
 const captureScanState = computed(() => {
   if (estadoCaptura.value === 'capturando') return 'scanning'
@@ -117,9 +128,27 @@ function seleccionar(id) {
   seleccionadoId.value = id
   estadoCaptura.value = 'idle'
   mensajeCaptura.value = ''
+  dedo.value = ''
+
+  const est = estudiantes.value.find((e) => e._id === id)
+  if (!est?.huellaTemplate) {
+    slotObjetivo.value = 1
+  } else if (!est?.huellaTemplate2) {
+    slotObjetivo.value = 2
+  } else {
+    slotObjetivo.value = null
+  }
+}
+
+function elegirSlot(n) {
+  slotObjetivo.value = n
+  dedo.value = ''
+  estadoCaptura.value = 'idle'
+  mensajeCaptura.value = ''
 }
 
 function cancelar() {
+  window.huellero.cancelarCaptura()
   window.huellero.cancelarEnrolamiento()
 }
 
@@ -130,10 +159,24 @@ function cerrar() {
 
 async function iniciarCaptura() {
   if (!seleccionado.value) return
+  if (!slotObjetivo.value) {
+    estadoCaptura.value = 'error'
+    mensajeCaptura.value = 'Elige qué huella vas a capturar o reemplazar'
+    return
+  }
   if (!dedo.value) {
     estadoCaptura.value = 'error'
     mensajeCaptura.value = 'Elige el dedo a enrolar'
     return
+  }
+
+  const ocupado = slotObjetivo.value === 1 ? slot1Ocupado.value : slot2Ocupado.value
+  if (ocupado) {
+    const dedoExistente = slotObjetivo.value === 1 ? seleccionado.value.dedoEnrolado : seleccionado.value.dedoEnrolado2
+    const confirmado = confirm(
+      `¿Reemplazar la huella de "${dedoExistente}" por "${dedo.value}"? La anterior se perderá.`
+    )
+    if (!confirmado) return
   }
 
   estadoCaptura.value = 'capturando'
@@ -144,11 +187,22 @@ async function iniciarCaptura() {
     fichaId: ficha.value._id,
     dedo: dedo.value,
     nombre: `${seleccionado.value.nombres} ${seleccionado.value.apellidos}`.trim(),
+    slot: slotObjetivo.value,
   })
 
   if (res.ok) {
     estadoCaptura.value = 'ok'
     mensajeCaptura.value = 'Huella registrada correctamente'
+    const est = estudiantes.value.find((e) => e._id === seleccionado.value._id)
+    if (est) {
+      if (slotObjetivo.value === 1) {
+        est.huellaTemplate = '1'
+        est.dedoEnrolado = dedo.value
+      } else {
+        est.huellaTemplate2 = '1'
+        est.dedoEnrolado2 = dedo.value
+      }
+    }
   } else {
     estadoCaptura.value = 'error'
     mensajeCaptura.value = res.error || 'No se pudo registrar la huella'
@@ -250,9 +304,9 @@ async function iniciarCaptura() {
                 <strong>{{ e.nombres }} {{ e.apellidos }}</strong>
                 <span class="hint">{{ e.tipoDocumento }} {{ e.numeroDocumento }}</span>
               </div>
-              <span class="badge" :class="e.huellaEnrolada ? 'ok' : 'off'">
-                <AppIcon :name="e.huellaEnrolada ? 'check-circle' : 'x-circle'" :size="13" />
-                {{ e.huellaEnrolada ? (e.dedoEnrolado || 'Con huella') : 'Sin huella' }}
+              <span class="badge" :class="estadoHuellas(e).clase">
+                <AppIcon :name="estadoHuellas(e).clase === 'ok' ? 'check-circle' : 'x-circle'" :size="13" />
+                {{ estadoHuellas(e).texto }}
               </span>
             </li>
           </ul>
@@ -264,8 +318,47 @@ async function iniciarCaptura() {
                 <span class="hint">{{ seleccionado.numeroDocumento }}</span>
               </div>
 
+              <div class="slots">
+                <div
+                  class="slot-fila"
+                  :class="{ activo: slotObjetivo === 1, ocupado: slot1Ocupado }"
+                  @click="!slot1Ocupado && elegirSlot(1)"
+                >
+                  <span class="slot-label">Huella 1</span>
+                  <span class="slot-dedo">{{ seleccionado.dedoEnrolado || 'Vacío' }}</span>
+                  <button
+                    v-if="slot1Ocupado"
+                    class="ghost"
+                    type="button"
+                    @click.stop="elegirSlot(1)"
+                  >
+                    Reemplazar
+                  </button>
+                </div>
+                <div
+                  class="slot-fila"
+                  :class="{ activo: slotObjetivo === 2, ocupado: slot2Ocupado }"
+                  @click="!slot2Ocupado && elegirSlot(2)"
+                >
+                  <span class="slot-label">Huella 2</span>
+                  <span class="slot-dedo">{{ seleccionado.dedoEnrolado2 || 'Vacío' }}</span>
+                  <button
+                    v-if="slot2Ocupado"
+                    class="ghost"
+                    type="button"
+                    @click.stop="elegirSlot(2)"
+                  >
+                    Reemplazar
+                  </button>
+                </div>
+              </div>
+              <p v-if="!slotObjetivo" class="hint aviso-slots">
+                Este aprendiz ya tiene sus 2 huellas registradas. Elige "Reemplazar" en la que
+                quieras cambiar.
+              </p>
+
               <label class="dedo">
-                Dedo a enrolar
+                Dedo a capturar
                 <select v-model="dedo">
                   <option value="" disabled>Selecciona un dedo</option>
                   <option v-for="d in DEDOS" :key="d" :value="d">{{ d }}</option>
@@ -294,7 +387,7 @@ async function iniciarCaptura() {
 
               <button
                 class="primary"
-                :disabled="estadoCaptura === 'capturando' || hayClaseActiva"
+                :disabled="estadoCaptura === 'capturando' || hayClaseActiva || !slotObjetivo"
                 @click="iniciarCaptura"
               >
                 {{ estadoCaptura === 'capturando' ? 'Capturando…' : 'Iniciar captura' }}
@@ -560,6 +653,57 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slot-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
+}
+
+.slot-fila.ocupado {
+  cursor: default;
+}
+
+.slot-fila.activo {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+
+.slot-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.slot-dedo {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.slot-fila.ocupado .slot-dedo {
+  color: var(--text);
+  font-style: normal;
+}
+
+.aviso-slots {
+  margin: -4px 0 0;
+  color: var(--warn);
 }
 
 .dedo {

@@ -16,6 +16,9 @@ const estudianteSchema = new mongoose.Schema({
   huellaTemplate: { type: String, default: '' },
   fechaEnrolamiento: { type: String, default: '' },
   dedoEnrolado: { type: String, default: '' },
+  huellaTemplate2: { type: String, default: '' },
+  dedoEnrolado2: { type: String, default: '' },
+  fechaEnrolamiento2: { type: String, default: '' },
 }, { timestamps: true, collection: 'estudiantes' })
 
 export default mongoose.model('Estudiante', estudianteSchema)

@@ -75,6 +75,14 @@ async function leerHuella() {
   }
 }
 
+function onLeerButton() {
+  if (estado.value === 'leyendo') {
+    window.huellero.cancelarCaptura()
+  } else {
+    leerHuella()
+  }
+}
+
 const scanState = computed(() => {
   if (estado.value === 'leyendo') return 'scanning'
   if (resultado.value) return resultado.value.tipo
@@ -113,8 +121,8 @@ const scanState = computed(() => {
       <h1>{{ claseActiva ? 'Coloca tu dedo para marcar asistencia' : 'No hay clase activa' }}</h1>
       <p v-if="claseActiva" class="hint">Apoya el dedo firmemente en el lector DigitalPersona</p>
 
-      <button class="primary leer" :disabled="estado === 'leyendo' || !claseActiva" @click="leerHuella">
-        {{ estado === 'leyendo' ? 'Leyendo…' : 'Leer huella' }}
+      <button class="primary leer" :disabled="!claseActiva" @click="onLeerButton">
+        {{ estado === 'leyendo' ? 'Detener' : 'Leer huella' }}
       </button>
 
       <Transition name="resultado-in">

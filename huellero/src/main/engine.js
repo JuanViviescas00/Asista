@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { getConfig, iniciarRegistroDispositivo, tieneIdentidad, reiniciarIdentidadYRegistrar } from './config.js'
 import * as store from './store.js'
 import wsClient from './ws-client.js'
-import { capturarHuella, inicializarCaptura } from './capture.js'
+import { capturarHuella, inicializarCaptura, cancelarCapturaActual, getDevActual } from './capture.js'
 import { notificarPendienteNuevo, sincronizar } from './scheduler.js'
 import { identificarEstudiante } from '../verify.js'
 import * as fingerprint from '../fingerprint.js'
@@ -32,6 +32,14 @@ export function setOnEnrolarProgreso(cb) {
 
 export function cancelarEnrolamiento() {
   enrolamientoCancelado = true
+}
+
+export function cancelarCapturaEnCurso() {
+  const dev = getDevActual()
+  if (!dev) {
+    return { ok: false, error: 'No hay captura en curso' }
+  }
+  return cancelarCapturaActual(dev)
 }
 
 function notificarEstado() {
@@ -418,19 +426,22 @@ export async function getEstudiantesFicha(fichaId) {
   return { ok: true, estudiantes: Array.isArray(estudiantes) ? estudiantes : [] }
 }
 
-export async function guardarTemplate({ estudianteId, fichaId, dedo, template }) {
+export async function guardarTemplate({ estudianteId, fichaId, dedo, template, slot }) {
   if (!estudianteId || !fichaId || !template) {
     return { ok: false, error: 'Faltan datos para guardar la huella' }
   }
 
   const { backendUrl } = getConfig()
 
+  const body = { estudianteId, fichaId, dedo, template }
+  if (slot != null) body.slot = slot
+
   let res
   try {
     res = await fetch(`${backendUrl}/api/enrolamiento/guardar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estudianteId, fichaId, dedo, template }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
     })
   } catch {
@@ -445,7 +456,7 @@ export async function guardarTemplate({ estudianteId, fichaId, dedo, template })
   return { ok: true, ...data }
 }
 
-export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre }) {
+export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, slot }) {
   if (!estudianteId || !fichaId) {
     return { ok: false, error: 'Selecciona un estudiante' }
   }
@@ -530,7 +541,7 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre })
     }
 
     notificarProgresoEnrolamiento({ fase: 'guardando', actual, total, mensaje: 'Guardando huella…' })
-    const guardado = await guardarTemplate({ estudianteId, fichaId, dedo, template: completo.template })
+    const guardado = await guardarTemplate({ estudianteId, fichaId, dedo, template: completo.template, slot })
 
     if (guardado.ok) {
       notificarProgresoEnrolamiento({ fase: 'completado', actual, total, mensaje: 'Huella registrada correctamente' })

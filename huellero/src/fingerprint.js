@@ -333,22 +333,24 @@ export function verifyFingerprint(imageBase64, enrolledStudents, dpi = 500) {
   let bestScore = 0xFFFFFFFF
 
   for (const student of enrolledStudents) {
-    if (!student.huellaTemplate) continue
-    let enrolledBytes
-    try {
-      enrolledBytes = bufFromBase64(student.huellaTemplate)
-    } catch (e) {
-      continue
-    }
+    const templates = [student.huellaTemplate, student.huellaTemplate2].filter(Boolean)
+    for (const template of templates) {
+      let enrolledBytes
+      try {
+        enrolledBytes = bufFromBase64(template)
+      } catch (e) {
+        continue
+      }
 
-    console.log(`[fingerprint]   comparando con ${student._doc ? JSON.stringify({ nombres: student.nombres, apellidos: student.apellidos }) : 'estudiante'} (template ${enrolledBytes.length} bytes)`)
+      console.log(`[fingerprint]   comparando con ${student._doc ? JSON.stringify({ nombres: student.nombres, apellidos: student.apellidos }) : 'estudiante'} (template ${enrolledBytes.length} bytes)`)
 
-    const { ok, score } = compareFmds(probeFmd, enrolledBytes)
+      const { ok, score } = compareFmds(probeFmd, enrolledBytes)
 
-    if (ok && score < bestScore) {
-      bestScore = score
-      bestStudent = student
-      console.log(`[fingerprint]   NUEVO MEJOR: ${bestStudent.nombres} score=${score}`)
+      if (ok && score < bestScore) {
+        bestScore = score
+        bestStudent = student
+        console.log(`[fingerprint]   NUEVO MEJOR: ${bestStudent.nombres} score=${score}`)
+      }
     }
   }
 
@@ -381,28 +383,30 @@ export function checkDuplicateFingerprint(newTemplateBase64, enrolledStudents, c
 
   for (const student of enrolledStudents) {
     if (String(student._id) === String(currentStudentId)) continue
-    if (!student.huellaTemplate) continue
 
-    let existingBytes
-    try {
-      existingBytes = bufFromBase64(student.huellaTemplate)
-    } catch (e) {
-      continue
-    }
+    const templates = [student.huellaTemplate, student.huellaTemplate2].filter(Boolean)
+    for (const template of templates) {
+      let existingBytes
+      try {
+        existingBytes = bufFromBase64(template)
+      } catch (e) {
+        continue
+      }
 
-    const { ok, score } = compareFmds(newTemplateBytes, existingBytes)
-    if (ok && score <= MATCH_THRESHOLD) {
-      console.log(`[fingerprint] ⚠️ DUPLICADO: Huella coincide con ${student.nombres} ${student.apellidos} (score=${score})`)
-      return {
-        isDuplicate: true,
-        student: {
-          id: student._id,
-          nombres: student.nombres,
-          apellidos: student.apellidos,
-          tipoDocumento: student.tipoDocumento,
-          numeroDocumento: student.numeroDocumento,
-        },
-        score
+      const { ok, score } = compareFmds(newTemplateBytes, existingBytes)
+      if (ok && score <= MATCH_THRESHOLD) {
+        console.log(`[fingerprint] ⚠️ DUPLICADO: Huella coincide con ${student.nombres} ${student.apellidos} (score=${score})`)
+        return {
+          isDuplicate: true,
+          student: {
+            id: student._id,
+            nombres: student.nombres,
+            apellidos: student.apellidos,
+            tipoDocumento: student.tipoDocumento,
+            numeroDocumento: student.numeroDocumento,
+          },
+          score
+        }
       }
     }
   }
