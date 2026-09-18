@@ -13,7 +13,6 @@ const { estadoSistema, textoEstado, colorEstadoClass } = useSistemaEstado()
 // Drawer de Quasar: `drawerOpen` controla la visibilidad en móvil (overlay),
 // `drawerMini` controla el modo colapsado/desplegado en escritorio.
 const drawerOpen = ref(false)
-const drawerMini = ref(false)
 
 const currentView = getCurrentView()
 
@@ -57,55 +56,44 @@ function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
 }
 
-function toggleMini() {
-  drawerMini.value = !drawerMini.value
-}
-
 function irA(key) {
   navigate(key)
-  // Solo cerramos el overlay en móvil; en escritorio el menú
-  // permanece tal cual estaba (abierto o mini), sin cerrarse.
-  if ($q.screen.lt.md) {
-    drawerOpen.value = false
-  }
+  drawerOpen.value = false
 }
 </script>
 
 <template>
-  <q-layout view="hhh lpr fff" class="app-shell">
+  <q-layout view="hHh Lpr fFf" class="app-shell">
     <q-drawer
       v-model="drawerOpen"
-      :mini="drawerMini"
-      show-if-above
-      :width="272"
-      :mini-width="88"
+      overlay
+      elevated
+      :width="280"
       class="app-sidebar"
     >
       <div class="sidebar-inner">
         <div class="sidebar-header">
           <div class="sidebar-header-top">
-            <div class="sidebar-logo" v-if="!drawerMini">
+            <div class="sidebar-logo">
               <img :src="senaLogo" alt="Logo SENA" />
             </div>
             <div class="sidebar-header-actions">
-              <div class="sidebar-avatar" v-if="!drawerMini">
+              <div class="sidebar-avatar">
                 <span>{{ inicialesUsuario }}</span>
               </div>
               <button
                 type="button"
                 class="sidebar-collapse-btn"
-                @click="toggleMini"
-                :title="drawerMini ? 'Expandir menú' : 'Contraer menú'"
+                @click="drawerOpen = false"
+                title="Cerrar menú"
               >
-                <q-icon :name="drawerMini ? 'chevron_right' : 'chevron_left'" size="16px" />
+                <q-icon name="close" size="18px" />
               </button>
             </div>
           </div>
 
-          <template v-if="!drawerMini">
-            <h2 class="sidebar-title">{{ tituloPrincipal }} <span>{{ tituloResaltado }}</span></h2>
-            <p class="sidebar-subtitle">{{ headerSubtitulo }}</p>
-          </template>
+          <h2 class="sidebar-title">{{ tituloPrincipal }} <span>{{ tituloResaltado }}</span></h2>
+          <p class="sidebar-subtitle">{{ headerSubtitulo }}</p>
         </div>
 
         <nav class="sidebar-nav">
@@ -114,29 +102,31 @@ function irA(key) {
             :key="key"
             class="nav-item"
             :class="{ active: currentView === key }"
-            :title="drawerMini ? view.label : null"
             @click="irA(key)"
           >
             <span class="nav-item-icon">
               <q-icon :name="iconosPorVista[key] || 'circle'" size="20px" />
             </span>
-            <span v-if="!drawerMini" class="nav-item-label">{{ view.label }}</span>
-            <q-icon v-if="!drawerMini && currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />
+            <span class="nav-item-label">{{ view.label }}</span>
+            <q-icon v-if="currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />
           </a>
         </nav>
 
         <div class="sidebar-status" :class="colorEstadoClass(estadoSistema.colorEstado)">
-          <span v-if="!drawerMini" class="estado-dot"></span>
+          <span class="estado-dot"></span>
           <span class="estado-icon"><q-icon name="fingerprint" size="18px" /></span>
-          <span v-if="!drawerMini" class="status-title">{{ textoEstado }}</span>
+          <span class="status-title">{{ textoEstado }}</span>
         </div>
       </div>
     </q-drawer>
 
     <q-page-container>
-      <button class="menu-toggle" @click="toggleDrawer">&#9776;</button>
       <main class="main-content">
         <header class="app-topbar">
+          <button class="btn-toggle-drawer" @click="toggleDrawer" title="Abrir menú de navegación">
+            <q-icon name="menu" size="20px" />
+            <span>Menú</span>
+          </button>
           <button class="btn-logout-top" @click="cerrarSesion" title="Cerrar sesión">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
