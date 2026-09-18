@@ -1,9 +1,30 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { resolve } from 'path'
 import os from 'os'
+import { app } from 'electron'
 import { obtenerHardwareFingerprint } from './hardware-fingerprint.js'
 
-const CONFIG_PATH = resolve(process.cwd(), 'config.json')
+function getStorageDir() {
+  try {
+    if (app) {
+      const userData = app.getPath('userData')
+      if (!existsSync(userData)) {
+        mkdirSync(userData, { recursive: true })
+      }
+      return userData
+    }
+  } catch (_) {}
+  return process.cwd()
+}
+
+function getConfigPath() {
+  const localPath = resolve(process.cwd(), 'config.json')
+  if (!app?.isPackaged && existsSync(localPath)) {
+    return localPath
+  }
+  const dir = getStorageDir()
+  return resolve(dir, 'config.json')
+}
 
 const DEFAULTS = {
   deviceId: null,
@@ -18,14 +39,26 @@ let cache = null
 export function getConfig() {
   if (cache) return cache
 
-  if (existsSync(CONFIG_PATH)) {
+  const configPath = getConfigPath()
+  if (existsSync(configPath)) {
     try {
-      cache = { ...DEFAULTS, ...JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) }
+      cache = { ...DEFAULTS, ...JSON.parse(readFileSync(configPath, 'utf8')) }
     } catch {
       cache = { ...DEFAULTS }
     }
   } else {
-    cache = { ...DEFAULTS }
+    // Si no existe en userData pero existe en process.cwd(), migrarlo
+    const localPath = resolve(process.cwd(), 'config.json')
+    if (existsSync(localPath)) {
+      try {
+        cache = { ...DEFAULTS, ...JSON.parse(readFileSync(localPath, 'utf8')) }
+        try { writeFileSync(configPath, JSON.stringify(cache, null, 2), 'utf8') } catch (_) {}
+      } catch {
+        cache = { ...DEFAULTS }
+      }
+    } else {
+      cache = { ...DEFAULTS }
+    }
   }
 
   return cache
@@ -33,7 +66,8 @@ export function getConfig() {
 
 export function saveConfig(patch) {
   cache = { ...getConfig(), ...patch }
-  writeFileSync(CONFIG_PATH, JSON.stringify(cache, null, 2), 'utf8')
+  const configPath = getConfigPath()
+  writeFileSync(configPath, JSON.stringify(cache, null, 2), 'utf8')
   return cache
 }
 

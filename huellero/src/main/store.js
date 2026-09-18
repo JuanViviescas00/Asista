@@ -1,7 +1,32 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { resolve } from 'path'
+import { app } from 'electron'
 
-const DATA_DIR = resolve(process.cwd(), 'data')
+function getDataDir() {
+  try {
+    if (app && app.isPackaged) {
+      const dir = resolve(app.getPath('userData'), 'data')
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+      return dir
+    }
+  } catch (_) {}
+  const localDir = resolve(process.cwd(), 'data')
+  if (!existsSync(localDir)) {
+    try {
+      mkdirSync(localDir, { recursive: true })
+      return localDir
+    } catch (_) {
+      if (app) {
+        const dir = resolve(app.getPath('userData'), 'data')
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+        return dir
+      }
+    }
+  }
+  return localDir
+}
+
+const DATA_DIR = getDataDir()
 
 const PLANTILLAS_PATH = resolve(DATA_DIR, 'plantillas.json')
 const PENDIENTES_PATH = resolve(DATA_DIR, 'pendientes.json')

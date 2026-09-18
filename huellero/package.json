@@ -28,7 +28,7 @@
     "appId": "co.sena.huellero",
     "productName": "Huellero SENA",
     "directories": {
-      "output": "release"
+      "output": "release-app"
     },
     "files": [
       "out/**/*"
