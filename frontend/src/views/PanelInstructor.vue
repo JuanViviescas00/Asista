@@ -391,7 +391,7 @@ function inicializarAsistenciaDia() {
     const estado = existente ? existente.estado : 'Ninguno'
     const hora = existente ? (existente.hora || '') : ''
     const tardanzaInfo = estado === 'Tardanza'
-      ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularEstadoAsistenciaFrontend(hora, existente.horaInicioClase || claseIniciadaAt.value, jornadaFicha))
+      ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularEstadoAsistenciaFrontend(hora, existente.horaInicioClase || claseIniciadaAt.value, jornadaFicha, existente.createdAt))
       : { horas: 0, texto: '0 horas' }
 
     registros[est._id] = {
@@ -401,6 +401,9 @@ function inicializarAsistenciaDia() {
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
       horaInicioClase: existente?.horaInicioClase || null,
+      // Instante REAL de la marcación tal como lo devuelve la API (schema con
+      // timestamps: true). null si el registro aún no existe en la BD.
+      createdAt: existente?.createdAt || null,
     }
   }
   asistenciaDia.value = registros
@@ -485,6 +488,9 @@ async function guardarAsistenciaDia() {
         estadoFinal = reg.estado
         horaMarcada = reg.horaMarcacion || horaActual
         if (estadoFinal === 'Tardanza') {
+          // Sin timestamp real a propósito: en esta sesión la tardanza ya se calculó
+          // en marcarPresente() con el Date real del click; aquí solo falta el texto
+          // de respaldo, que usa la reconstrucción desde el string (igual que antes).
           const calc = calcularEstadoAsistenciaFrontend(horaMarcada, claseIniciadaAt.value, jornadaFicha)
           hTardanza = reg.horasTardanza || calc.horas
           tTardanza = reg.tiempoTardanza || calc.texto
@@ -608,7 +614,7 @@ function exportarAsistenciaDia() {
     const estadoStr = jornadaInhabilitada.value ? 'Inhabilitada' : (reg ? (reg.excusa ? 'Excusada' : reg.estado) : 'Sin registro')
     let tardanzaStr = '0 horas'
     if (estadoStr === 'Tardanza') {
-      tardanzaStr = reg?.tiempoTardanza || calcularEstadoAsistenciaFrontend(reg?.horaMarcacion, reg?.horaInicioClase, jornadaFicha).texto
+      tardanzaStr = reg?.tiempoTardanza || calcularEstadoAsistenciaFrontend(reg?.horaMarcacion, reg?.horaInicioClase, jornadaFicha, reg?.createdAt).texto
     }
     return {
       'Aprendiz': `${est.nombres} ${est.apellidos}`,
@@ -633,7 +639,7 @@ function exportarHistorial() {
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
     let tardanzaStr = '0 horas'
     if (asis.estado === 'Tardanza') {
-      tardanzaStr = asis.tiempoTardanza || calcularEstadoAsistenciaFrontend(asis.hora, asis.horaInicioClase, jornadaFicha).texto
+      tardanzaStr = asis.tiempoTardanza || calcularEstadoAsistenciaFrontend(asis.hora, asis.horaInicioClase, jornadaFicha, asis.createdAt).texto
     }
     return {
       'Fecha': asis.fecha,

@@ -65,6 +65,20 @@ function parseMinutosDesdeMedianoche(horaMarcacion) {
 }
 
 /**
+ * Convierte un valor de fecha/hora en milisegundos de un instante REAL (epoch), o
+ * null si no representa un instante válido. Acepta Date, número (epoch ms) o
+ * string ISO. Un string de solo hora ("07:15:30") NO es un instante real: devuelve
+ * null, y el llamador cae al camino de reconstrucción desde el string.
+ * @param {Date|number|string|null} valor
+ * @returns {number|null}
+ */
+function parseInstanteReal(valor) {
+  if (valor == null || valor === '') return null
+  const ms = valor instanceof Date ? valor.getTime() : new Date(valor).getTime()
+  return Number.isNaN(ms) ? null : ms
+}
+
+/**
  * Calcula el estado de una marcación usando SIEMPRE la hora real de inicio de la
  * clase cuando está disponible (inicioClaseReal). Solo si no hay inicio real
  * (null/undefined) cae al fallback de horario FIJO por jornada (HORARIOS_JORNADA),
@@ -73,9 +87,27 @@ function parseMinutosDesdeMedianoche(horaMarcacion) {
  * @param {string|Date} horaMarcacion hora de la marcación (solo hora, p. ej. "07:15:30" o "07:15 p. m.")
  * @param {number|string|Date|null} inicioClaseReal hora real de inicio de la clase (ms, ISO o Date), o null
  * @param {string} jornada 'Mañana' | 'Tarde' | 'Noche'
+ * @param {number|string|Date|null} [timestampMarcacion=null] instante REAL de la marcación (createdAt
+ *        del registro de asistencia). Si viene junto con inicioClaseReal, se usa el camino directo.
  * @returns {{ estado: string, horas: number, texto: string }}
  */
-export function calcularEstadoAsistenciaFrontend(horaMarcacion, inicioClaseReal, jornada) {
+export function calcularEstadoAsistenciaFrontend(horaMarcacion, inicioClaseReal, jornada, timestampMarcacion = null) {
+  // ---- Camino 1 (preferido): hay instante REAL de marcación Y de inicio de clase.
+  // Diferencia directa entre los dos timestamps, igual que el backend
+  // (asistenciaService.calcularEstadoAsistencia): no reconstruye la hora desde el
+  // string ni aplica wrap. Un resultado negativo (marcación antes del inicio) se
+  // trata como Presente por calcularEstadoPorTiempo, igual que en el backend.
+  const marcacionRealMs = timestampMarcacion ? parseInstanteReal(timestampMarcacion) : null
+  const inicioRealMs = inicioClaseReal ? parseInstanteReal(inicioClaseReal) : null
+  if (marcacionRealMs != null && inicioRealMs != null) {
+    const directo = calcularEstadoPorTiempo(calcularMinutosTranscurridos(inicioRealMs, marcacionRealMs))
+    return { estado: directo.estado, horas: directo.horasTardanza, texto: directo.tiempoTardanza }
+  }
+
+  // ---- Camino 2 (fallback, comportamiento previo intacto): sin instante real de
+  // marcación (registros viejos sin createdAt, o marcas de esta sesión todavía en
+  // memoria). Reconstruye la marcación desde el string de hora y, si no hay inicio
+  // real, cae al horario fijo de jornada con el wrap de Noche.
   const minutosMarcacion = parseMinutosDesdeMedianoche(horaMarcacion)
   if (minutosMarcacion == null) {
     return { estado: 'Presente', horas: 0, texto: '0 horas' }
