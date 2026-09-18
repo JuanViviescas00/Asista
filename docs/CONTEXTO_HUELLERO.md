@@ -705,3 +705,7 @@ Consolidado honesto de lo que falta, verificado contra `git log` y `git status` 
 - **`useSistemaEstado.js`**: el indicador `estadoWebSocket` ahora usa `socket.connected` en vez de un endpoint de `fingerprint-status` que ya no existe.
 
 **Pendiente de baja prioridad (no resuelto):** `estadoLectorUSB` en el mismo composable `useSistemaEstado.js` sigue dependiendo de `Fingerprint.WebApi` (también decomisionado), por lo que el "ojito" del panel puede mostrar "Huellero desconectado" de forma incorrecta. Cosmético, no bloqueante.
+
+[MERGE 2026-09-16] — Se incorporó de main: fix de rutas de config.json y data/ para que la app INSTALADA use %APPDATA% en vez de process.cwd() (que en Program Files no es escribible sin admin). Confirmado que nuestro fix de 127.0.0.1 (DEFAULTS) sigue intacto. También se agregaron 4 DLLs adicionales de DigitalPersona (dpfpapi.dll, dpfpdd5000.dll, dpfpdd7k.dll, nex_sdk.dll) — soporte para otros modelos de lector (U.are.U 5100, Nomad 30, NEX), confirmado con metadatos del binario que son aditivas y no interfieren con el flujo del U.are.U 4500 (cero referencias en código, dpfj.dll/dpfpdd.dll permanecen byte-idénticos).
+
+Gap pendiente encontrado: la migración automática de config.json a %APPDATA% no cubre la carpeta data/ (plantillas.json, pendientes.json) — si un PC tenía huellas cacheadas localmente antes de actualizar a una versión instalada con este fix, esos datos quedarían en la ubicación vieja sin migrar. Pendiente de decidir si vale la pena agregar migración también para data/.
