@@ -5,9 +5,12 @@ import FingerprintScan from '../components/FingerprintScan.vue'
 
 const props = defineProps({
   claseActiva: { type: Object, default: null },
+  instructorId: { type: String, default: null },
 })
 
 const emit = defineEmits(['close'])
+
+const VERSION_TERMINOS = 'v1'
 
 const DEDOS = [
   'Pulgar derecho',
@@ -35,6 +38,12 @@ const dedo = ref('')
 const slotObjetivo = ref(null)
 const estadoCaptura = ref('idle')
 const mensajeCaptura = ref('')
+
+const verificandoConsentimiento = ref(false)
+const mostrandoConsentimiento = ref(false)
+const estudianteConsentimientoPendiente = ref(null)
+const aceptandoConsentimiento = ref(false)
+const errorConsentimiento = ref('')
 
 const hayClaseActiva = computed(() => !!props.claseActiva)
 
@@ -124,7 +133,32 @@ onUnmounted(() => {
   if (offProgreso) offProgreso()
 })
 
-function seleccionar(id) {
+async function seleccionar(id) {
+  if (verificandoConsentimiento.value) return
+
+  const est = estudiantes.value.find((e) => e._id === id)
+  if (!est) return
+
+  verificandoConsentimiento.value = true
+  const res = await window.huellero.consultarConsentimientoDatos(id)
+  verificandoConsentimiento.value = false
+
+  if (!res.ok) {
+    estadoCaptura.value = 'error'
+    mensajeCaptura.value = res.error || 'No se pudo verificar el consentimiento de datos'
+    return
+  }
+
+  if (res.existe) {
+    aplicarSeleccion(id)
+  } else {
+    errorConsentimiento.value = ''
+    estudianteConsentimientoPendiente.value = est
+    mostrandoConsentimiento.value = true
+  }
+}
+
+function aplicarSeleccion(id) {
   seleccionadoId.value = id
   estadoCaptura.value = 'idle'
   mensajeCaptura.value = ''
@@ -140,6 +174,36 @@ function seleccionar(id) {
   }
 }
 
+async function aceptarConsentimiento() {
+  if (!estudianteConsentimientoPendiente.value) return
+
+  aceptandoConsentimiento.value = true
+  errorConsentimiento.value = ''
+
+  const res = await window.huellero.registrarConsentimientoDatos({
+    estudianteId: estudianteConsentimientoPendiente.value._id,
+    instructorId: props.instructorId,
+    versionTerminos: VERSION_TERMINOS,
+  })
+
+  aceptandoConsentimiento.value = false
+
+  if (res.ok) {
+    const id = estudianteConsentimientoPendiente.value._id
+    mostrandoConsentimiento.value = false
+    estudianteConsentimientoPendiente.value = null
+    aplicarSeleccion(id)
+  } else {
+    errorConsentimiento.value = res.error || 'No se pudo registrar el consentimiento'
+  }
+}
+
+function cancelarConsentimiento() {
+  mostrandoConsentimiento.value = false
+  estudianteConsentimientoPendiente.value = null
+  errorConsentimiento.value = ''
+}
+
 function elegirSlot(n) {
   slotObjetivo.value = n
   dedo.value = ''
@@ -148,7 +212,6 @@ function elegirSlot(n) {
 }
 
 function cancelar() {
-  window.huellero.cancelarCaptura()
   window.huellero.cancelarEnrolamiento()
 }
 
@@ -310,6 +373,65 @@ async function iniciarCaptura() {
               </span>
             </li>
           </ul>
+
+          <Transition name="panel-in">
+            <div v-if="mostrandoConsentimiento" class="panel consentimiento">
+              <div class="panel-titulo">
+                <strong>
+                  {{ estudianteConsentimientoPendiente?.nombres }}
+                  {{ estudianteConsentimientoPendiente?.apellidos }}
+                </strong>
+                <span class="hint">Tratamiento de datos personales</span>
+              </div>
+
+              <div class="texto-legal">
+                <p>
+                  De acuerdo con la Ley 1581 de 2012 y sus decretos reglamentarios, la huella
+                  dactilar es un dato personal sensible. Al continuar, el SENA recolectará,
+                  almacenará y usará la huella dactilar del aprendiz con la única finalidad de
+                  verificar su identidad para el control de asistencia a las clases de su
+                  programa de formación.
+                </p>
+                <p>
+                  Esta autorización es voluntaria. Si el aprendiz no desea otorgarla, el control
+                  de asistencia se realizará por un medio alternativo (registro manual), sin que
+                  esto afecte su permanencia en el programa.
+                </p>
+                <p>
+                  El aprendiz tiene derecho a conocer, actualizar, rectificar y solicitar la
+                  eliminación de su información, así como a revocar esta autorización en
+                  cualquier momento, dirigiéndose a su instructor líder de ficha.
+                </p>
+              </div>
+
+              <p class="hint">
+                Al hacer clic en "Acepto", confirmas que el aprendiz está presente y ha sido
+                informado de este aviso.
+              </p>
+
+              <Transition name="mensaje-in">
+                <p v-if="errorConsentimiento" class="mensaje error">
+                  <AppIcon name="alert-triangle" :size="15" />
+                  {{ errorConsentimiento }}
+                </p>
+              </Transition>
+
+              <button
+                class="primary"
+                :disabled="aceptandoConsentimiento"
+                @click="aceptarConsentimiento"
+              >
+                {{ aceptandoConsentimiento ? 'Guardando…' : 'Acepto' }}
+              </button>
+              <button
+                class="ghost"
+                :disabled="aceptandoConsentimiento"
+                @click="cancelarConsentimiento"
+              >
+                Cancelar
+              </button>
+            </div>
+          </Transition>
 
           <Transition name="panel-in">
             <div v-if="seleccionado" class="panel">
@@ -653,6 +775,27 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.texto-legal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(220px, 28vh);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.texto-legal p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
 }
 
 .slots {
