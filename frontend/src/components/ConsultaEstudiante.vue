@@ -141,8 +141,8 @@ function asistenciaBadge(estado) {
     <div v-if="estudianteSeleccionado" class="reporte-individual-container">
       <div class="student-consult-card student-consult-report-actions student-consult-no-print">
         <div class="student-consult-report-action-group">
-          <button class="student-consult-button student-consult-button-outline" @click="cerrarPerfil">⬅️ Volver a Búsqueda</button>
-          <button class="student-consult-button student-consult-button-primary" @click="imprimirReporteIndividual">🖨️ Exportar / Imprimir Reporte (PDF)</button>
+          <button class="student-consult-button student-consult-button-outline" @click="cerrarPerfil">⬅ Volver a Búsqueda</button>
+          <button class="student-consult-button student-consult-button-primary" @click="imprimirReporteIndividual"> Exportar / Imprimir Reporte (PDF)</button>
         </div>
       </div>
 
@@ -192,7 +192,7 @@ function asistenciaBadge(estado) {
             <div>
               <span class="student-consult-field-label">Registro Biométrico:</span>
               <strong :style="{ color: estudianteSeleccionado.huellaEnrolada ? '#16a34a' : '#d97706' }">
-                {{ estudianteSeleccionado.huellaEnrolada ? '🟢 Huella Enrolada' : '🟡 Huella Pendiente' }}
+                {{ estudianteSeleccionado.huellaEnrolada ? ' Huella Enrolada' : ' Huella Pendiente' }}
               </strong>
             </div>
             <div>
@@ -204,7 +204,7 @@ function asistenciaBadge(estado) {
 
         <!-- Resumen Estadístico de Asistencia -->
         <div class="report-stats-section">
-          <h4>📊 Resumen Estadístico del Aprendiz</h4>
+          <h4> Resumen Estadístico del Aprendiz</h4>
           <div class="student-consult-stats">
             <div class="student-consult-stat student-consult-stat-present">
               <span class="student-consult-stat-number">{{ metricasEstudiante.presentes }}</span>
@@ -227,7 +227,7 @@ function asistenciaBadge(estado) {
 
         <!-- Tabla Histórica de Marcas -->
         <div class="student-consult-report-table-section">
-          <h4>📋 Historial Detallado de Registros de Asistencia</h4>
+          <h4> Historial Detallado de Registros de Asistencia</h4>
           <table class="student-consult-data-table">
             <thead>
               <tr>
@@ -253,7 +253,7 @@ function asistenciaBadge(estado) {
 
         <!-- Tabla Histórica de Excusas -->
         <div class="student-consult-report-table-section">
-          <h4>📝 Historial de Excusas Radicadas</h4>
+          <h4> Historial de Excusas Radicadas</h4>
           <table class="student-consult-data-table">
             <thead>
               <tr>

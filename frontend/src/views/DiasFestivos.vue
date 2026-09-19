@@ -331,7 +331,7 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
       </div>
 
       <div style="margin-top: 16px; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af;">
-        ℹ️ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
+        ℹ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
       </div>
 
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
@@ -351,7 +351,7 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
 .card { background: #ffffff; border-radius: 20px; padding: 32px 36px 34px; box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09); margin-bottom: 22px; }
 .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
 .card-header h3 { font-size: 16.5px; font-weight: 600; color: #16210F; }
-.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-group { display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
 .festivos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .festivo-card { display: flex; align-items: center; gap: 14px; padding: 14px; background: #F7F9F5; border-radius: 12px; border: 1px solid #E2E6DE; }
 .festivo-hoy { border-color: #39A900; background: #F2F9ED; }

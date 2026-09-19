@@ -36,22 +36,10 @@ const iconosPorVista = {
   diasFestivos: 'event_busy',
 }
 
-// Título partido en dos para pintar "Panel" en blanco y el resto en verde,
+// Título partido en dos para pintar "Panel" en un color y el resto en verde,
 // tal como en el diseño de referencia.
 const tituloPrincipal = computed(() => headerTitulo.value.split(' ')[0])
 const tituloResaltado = computed(() => headerTitulo.value.split(' ').slice(1).join(' '))
-
-// Iniciales del usuario para el avatar (no hay foto de perfil en los datos).
-const inicialesUsuario = computed(() => {
-  const nombre = usuario.value?.nombre || ''
-  const iniciales = nombre
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join('')
-  return iniciales || 'SA'
-})
 
 function toggleDrawer() {
   drawerOpen.value = !drawerOpen.value
@@ -59,6 +47,15 @@ function toggleDrawer() {
 
 function toggleMini() {
   drawerMini.value = !drawerMini.value
+}
+
+// Clic sobre cualquier parte del sidebar (fuera de los enlaces) alterna
+// entre expandido y contraído. Solo en escritorio; en móvil el drawer es
+// un overlay que se controla con el botón hamburguesa.
+function onSidebarClick() {
+  if ($q.screen.gt.sm) {
+    toggleMini()
+  }
 }
 
 function irA(key) {
@@ -77,29 +74,22 @@ function irA(key) {
       v-model="drawerOpen"
       :mini="drawerMini"
       show-if-above
+      mini-to-overlay
       :width="272"
       :mini-width="88"
       class="app-sidebar"
     >
-      <div class="sidebar-inner">
+      <div class="sidebar-inner" @click="onSidebarClick">
         <div class="sidebar-header">
           <div class="sidebar-header-top">
-            <div class="sidebar-logo" v-if="!drawerMini">
+            <button
+              type="button"
+              class="sidebar-logo-btn"
+              @click.stop="toggleMini"
+              :title="drawerMini ? 'Expandir menú' : 'Contraer menú'"
+            >
               <img :src="senaLogo" alt="Logo SENA" />
-            </div>
-            <div class="sidebar-header-actions">
-              <div class="sidebar-avatar" v-if="!drawerMini">
-                <span>{{ inicialesUsuario }}</span>
-              </div>
-              <button
-                type="button"
-                class="sidebar-collapse-btn"
-                @click="toggleMini"
-                :title="drawerMini ? 'Expandir menú' : 'Contraer menú'"
-              >
-                <q-icon :name="drawerMini ? 'chevron_right' : 'chevron_left'" size="16px" />
-              </button>
-            </div>
+            </button>
           </div>
 
           <template v-if="!drawerMini">
@@ -115,13 +105,24 @@ function irA(key) {
             class="nav-item"
             :class="{ active: currentView === key }"
             :title="drawerMini ? view.label : null"
-            @click="irA(key)"
+            @click.stop="irA(key)"
           >
             <span class="nav-item-icon">
               <q-icon :name="iconosPorVista[key] || 'circle'" size="20px" />
             </span>
             <span v-if="!drawerMini" class="nav-item-label">{{ view.label }}</span>
             <q-icon v-if="!drawerMini && currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />
+          </a>
+
+          <a
+            class="nav-item nav-item-logout"
+            :title="drawerMini ? 'Cerrar Sesión' : null"
+            @click.stop="cerrarSesion"
+          >
+            <span class="nav-item-icon">
+              <q-icon name="logout" size="20px" />
+            </span>
+            <span v-if="!drawerMini" class="nav-item-label">Cerrar Sesión</span>
           </a>
         </nav>
 

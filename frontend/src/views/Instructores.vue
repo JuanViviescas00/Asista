@@ -200,7 +200,7 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
   <div class="stats-row">
     <StatCard icon="users" label="Total Instructores" :value="instructores.length" variant="primary" />
     <StatCard icon="check-circle" label="Activos" :value="activosCount" variant="verde" />
-    <StatCard icon="minus-circle" label="Inactivos" :value="inactivosCount" variant="ambar" />
+    <StatCard icon="minus-circle" label="Inactivos" :value="inactivosCount" variant="rojo" />
     <StatCard icon="award" label="Docentes Líderes" :value="lideresCount" variant="azul" />
   </div>
 

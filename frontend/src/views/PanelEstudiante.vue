@@ -172,7 +172,7 @@ async function radicarExcusa() {
           <div class="student-portal-info-item">
             <span>Huella Biométrica:</span>
             <strong :style="{ color: estudiante?.huellaEnrolada ? '#16a34a' : '#d97706' }">
-              {{ estudiante?.huellaEnrolada ? '🟢 Enrolada' : '🟡 Pendiente de Enrolar' }}
+              {{ estudiante?.huellaEnrolada ? ' Enrolada' : ' Pendiente de Enrolar' }}
             </strong>
           </div>
         </div>
@@ -196,11 +196,11 @@ async function radicarExcusa() {
           </div>
           <div class="student-portal-stat student-portal-stat-absent">
             <span class="student-portal-stat-number">{{ resumen.horasSinExcusa }}h</span>
-            <span class="student-portal-stat-label">❌ Sin Excusa</span>
+            <span class="student-portal-stat-label"> Sin Excusa</span>
           </div>
           <div class="student-portal-stat student-portal-stat-blue">
             <span class="student-portal-stat-number">{{ resumen.horasConExcusa }}h</span>
-            <span class="student-portal-stat-label">📋 Con Excusa</span>
+            <span class="student-portal-stat-label"> Con Excusa</span>
           </div>
         </div>
 
@@ -269,13 +269,13 @@ async function radicarExcusa() {
                       class="student-portal-badge"
                       style="background: #e0f2fe; color: #0369a1; font-weight: 700;"
                     >
-                      📋 Excusada ({{ horasPorJornada }} hrs)
+                       Excusada ({{ horasPorJornada }} hrs)
                     </span>
                     <span
                       v-else
                       class="student-portal-badge student-portal-badge-danger"
                     >
-                      ❌ Falta ({{ horasPorJornada }} hrs)
+                       Falta ({{ horasPorJornada }} hrs)
                     </span>
                   </td>
                   <td>
