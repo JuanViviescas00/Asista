@@ -1,6 +1,4 @@
 <script setup>
-// DEPRECATED: superseded by views/*.vue (router nuevo). Se conserva
-// solo como referencia histórica.
 import { ref, onMounted, computed } from 'vue'
 import api from '../services/index.js'
 import '../styles/panelEstudiante.css'
@@ -59,17 +57,6 @@ async function cargarDatosEstudiante() {
     loading.value = false
   }
 }
-
-const textoHuella = computed(() => {
-  const e = estudiante.value
-  if (!e) return ''
-  const d1 = e.dedoEnrolado || ''
-  const d2 = e.dedoEnrolado2 || ''
-  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
-  if (n === 0) return '🟡 Sin huella'
-  if (n === 1) return `🟢 1/2 · ${d1 || 'Sin dedo'}`
-  return `🟢 2/2 · ${d1 || 'Sin dedo'} + ${d2 || 'Sin dedo'}`
-})
 
 const horasPorJornada = computed(() => {
   const j = (ficha.value?.jornada || '').toLowerCase()
@@ -196,7 +183,7 @@ async function radicarExcusa() {
           <div class="student-portal-info-item">
             <span>Huella Biométrica:</span>
             <strong :style="{ color: estudiante?.huellaEnrolada ? '#16a34a' : '#d97706' }">
-              {{ textoHuella }}
+              {{ estudiante?.huellaEnrolada ? '🟢 Enrolada' : '🟡 Pendiente de Enrolar' }}
             </strong>
           </div>
         </div>

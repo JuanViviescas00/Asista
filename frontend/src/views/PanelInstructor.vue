@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
-import { calcularMinutosTranscurridos, calcularEstadoPorTiempo, calcularEstadoAsistenciaFrontend } from '../utils/asistenciaTiempo.js'
+import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -22,7 +22,6 @@ const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
 const feedEnVivoDocente = ref([])
 const claseIniciadaAt = ref(null)
-const activandoClase = ref(false)
 
 // Toast notifications
 const toast = reactive({ show: false, message: '', type: 'success' })
@@ -117,7 +116,6 @@ async function restaurarEstadoClase() {
 
 async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
-  activandoClase.value = true
   try {
     const resultado = await api.clases.activar({
       fichaId: fichaSeleccionada.value._id,
@@ -128,8 +126,6 @@ async function iniciarSesionRemotaDocente() {
     showToast('Clase activada: el lector del aula está listo para tomar asistencia.', 'success')
   } catch (e) {
     showToast(e.message || 'No se pudo activar la clase', 'error')
-  } finally {
-    activandoClase.value = false
   }
 }
 
@@ -380,6 +376,53 @@ async function reactivarJornada() {
   }
 }
 
+function calcularHorasTardanza(horaMarcacionStr, jornada) {
+  if (!horaMarcacionStr) return { horas: 0, texto: '0 horas' }
+
+  // Horarios de inicio oficial:
+  // Mañana: 6:00 AM (360 min) -> Tolerancia hasta 6:15 AM (375 min)
+  // Tarde: 12:30 PM (750 min) -> Tolerancia hasta 12:45 PM (765 min)
+  // Noche: 6:30 PM / 18:30 (1110 min) -> Tolerancia hasta 6:45 PM (1125 min)
+  let inicioMin = 360 // 6:00 AM por defecto
+  let limiteTolerancia = 375 // 6:15 AM
+
+  if (jornada === 'Tarde') {
+    inicioMin = 750 // 12:30 PM
+    limiteTolerancia = 765 // 12:45 PM
+  } else if (jornada === 'Noche') {
+    inicioMin = 1110 // 6:30 PM (18:30)
+    limiteTolerancia = 1125 // 6:45 PM
+  }
+
+  let minutosMarcacion = 0
+  if (horaMarcacionStr instanceof Date) {
+    minutosMarcacion = horaMarcacionStr.getHours() * 60 + horaMarcacionStr.getMinutes()
+  } else if (typeof horaMarcacionStr === 'string') {
+    const esPM = /p\.?\s*m\.?/i.test(horaMarcacionStr)
+    const esAM = /a\.?\s*m\.?/i.test(horaMarcacionStr)
+    const match = horaMarcacionStr.match(/(\d{1,2}):(\d{1,2})/)
+    if (match) {
+      let h = parseInt(match[1], 10)
+      const m = parseInt(match[2], 10)
+      if (esPM && h < 12) h += 12
+      if (esAM && h === 12) h = 0
+      minutosMarcacion = h * 60 + m
+    }
+  }
+
+  if (minutosMarcacion <= limiteTolerancia) {
+    return { horas: 0, texto: '0 horas' }
+  }
+
+  const minutosPasadosInicio = minutosMarcacion - inicioMin
+  const horasTardanza = Math.max(1, Math.ceil(minutosPasadosInicio / 60))
+
+  return {
+    horas: horasTardanza,
+    texto: `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
+  }
+}
+
 function inicializarAsistenciaDia() {
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
@@ -391,7 +434,7 @@ function inicializarAsistenciaDia() {
     const estado = existente ? existente.estado : 'Ninguno'
     const hora = existente ? (existente.hora || '') : ''
     const tardanzaInfo = estado === 'Tardanza'
-      ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularEstadoAsistenciaFrontend(hora, existente.horaInicioClase || claseIniciadaAt.value, jornadaFicha, existente.createdAt))
+      ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
       : { horas: 0, texto: '0 horas' }
 
     registros[est._id] = {
@@ -400,10 +443,6 @@ function inicializarAsistenciaDia() {
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
-      horaInicioClase: existente?.horaInicioClase || null,
-      // Instante REAL de la marcación tal como lo devuelve la API (schema con
-      // timestamps: true). null si el registro aún no existe en la BD.
-      createdAt: existente?.createdAt || null,
     }
   }
   asistenciaDia.value = registros
@@ -488,10 +527,7 @@ async function guardarAsistenciaDia() {
         estadoFinal = reg.estado
         horaMarcada = reg.horaMarcacion || horaActual
         if (estadoFinal === 'Tardanza') {
-          // Sin timestamp real a propósito: en esta sesión la tardanza ya se calculó
-          // en marcarPresente() con el Date real del click; aquí solo falta el texto
-          // de respaldo, que usa la reconstrucción desde el string (igual que antes).
-          const calc = calcularEstadoAsistenciaFrontend(horaMarcada, claseIniciadaAt.value, jornadaFicha)
+          const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
           hTardanza = reg.horasTardanza || calc.horas
           tTardanza = reg.tiempoTardanza || calc.texto
         }
@@ -548,6 +584,442 @@ const conteoAsistencia = computed(() => {
   return conteo
 })
 
+
+
+// =============================================
+// SEMÁFORO DE ESTADO (WS SERVIDORES + LECTORES USB)
+// =============================================
+const wsConectado = ref(false)
+const sdkBackendActivo = ref(false)
+const lectorConectado = ref(false)
+const sdkCargando = ref(true)
+const estadoLector = ref('Verificando Lector USB...')
+
+let fpSdk = null
+let currentReaderUid = ''
+let capturing = false
+let sdkInitIntentos = 0
+let currentFormat = null
+let modoCaptura = 'enrolamiento' // 'enrolamiento' o 'asistencia'
+
+// Estado de verificación biométrica para asistencia
+const verificandoHuella = ref(false)
+const ultimaVerificacion = ref(null)
+
+async function verificarConexionServidor() {
+  try {
+    const res = await api.estudiantes.fingerprint.status()
+    wsConectado.value = true
+    sdkBackendActivo.value = !!(res && res.sdkAvailable)
+  } catch (err) {
+    wsConectado.value = false
+    sdkBackendActivo.value = false
+  }
+}
+
+function verificarEstadoLectorUSB() {
+  if (!fpSdk || capturing || enrolando.value) return // No consultar durante captura o enrolamiento para no interrumpir la transmisión de datos
+
+  fpSdk.enumerateDevices().then(function (readers) {
+    sdkCargando.value = false
+    if (readers && readers.length > 0) {
+      currentReaderUid = readers[0]
+      lectorConectado.value = true
+      estadoLector.value = `Lector USB Conectado (${readers.length} dispositivo detectado)`
+    } else {
+      currentReaderUid = ''
+      lectorConectado.value = false
+      estadoLector.value = 'Sin lector de huellas USB'
+    }
+  }, function (error) {
+    sdkCargando.value = false
+    lectorConectado.value = false
+    currentReaderUid = ''
+    estadoLector.value = 'Servicio local de huellas no responde'
+  })
+}
+
+function initFingerprintSDK() {
+  sdkInitIntentos++
+  console.log('[FP SDK] Intento', sdkInitIntentos, '- verificando Fingerprint global...')
+
+  if (typeof Fingerprint === 'undefined') {
+    console.warn('[FP SDK] Fingerprint global no definido aun.')
+    sdkCargando.value = true
+    estadoLector.value = 'SDK no cargado - scripts faltantes'
+    if (sdkInitIntentos < 10) {
+      setTimeout(initFingerprintSDK, 1000)
+    } else {
+      sdkCargando.value = false
+      lectorConectado.value = false
+      estadoLector.value = 'SDK no disponible tras varios intentos'
+    }
+    return
+  }
+
+  console.log('[FP SDK] Fingerprint global OK, creando WebApi...')
+  try {
+    fpSdk = new Fingerprint.WebApi()
+    console.log('[FP SDK] WebApi creado:', fpSdk)
+  } catch (e) {
+    console.error('[FP SDK] Error al crear WebApi:', e.message)
+    sdkCargando.value = false
+    lectorConectado.value = false
+    estadoLector.value = 'Error al inicializar SDK: ' + e.message
+    return
+  }
+
+  fpSdk.onDeviceConnected = function (e) {
+    console.log('[FP SDK] Dispositivo conectado:', e)
+    if (e && e.deviceUid) currentReaderUid = e.deviceUid
+    lectorConectado.value = true
+    sdkCargando.value = false
+    estadoLector.value = 'Lector conectado - U.are.U 4500'
+  }
+
+  fpSdk.onDeviceDisconnected = function (e) {
+    console.log('[FP SDK] Dispositivo desconectado:', e)
+    lectorConectado.value = false
+    currentReaderUid = ''
+    estadoLector.value = 'Lector desconectado'
+  }
+
+  fpSdk.onCommunicationFailed = function (e) {
+    console.error('[FP SDK] Error de comunicacion:', e)
+    estadoLector.value = 'Error de comunicacion con el lector'
+    lectorConectado.value = false
+    sdkCargando.value = false
+  }
+
+  fpSdk.onSamplesAcquired = function (s) {
+    console.log('[FP SDK] Muestra adquirida, modo:', modoCaptura)
+    detenerCapturaSDK()
+    try {
+      const samples = JSON.parse(s.samples)
+      if (!samples || samples.length === 0) {
+        console.warn('[FP SDK] No hay samples en la respuesta')
+        return
+      }
+      const imgSrc = 'data:image/png;base64,' + Fingerprint.b64UrlTo64(samples[0])
+      console.log('[FP SDK] PNG generado, size:', imgSrc.length)
+      if (modoCaptura === 'asistencia') {
+        procesarVerificacionAsistencia(imgSrc)
+      } else {
+        enviarCapturaAlBackend(imgSrc)
+      }
+    } catch (e) {
+      console.error('[FP SDK] Error procesando muestra:', e.message)
+    }
+  }
+
+  fpSdk.onQualityReported = function (e) {
+    console.log('[FP SDK] Calidad reportada:', e.quality)
+  }
+
+  console.log('[FP SDK] Enumerando dispositivos...')
+  fpSdk.enumerateDevices().then(function (readers) {
+    console.log('[FP SDK] Dispositivos encontrados:', readers)
+    sdkCargando.value = false
+    if (readers && readers.length > 0) {
+      currentReaderUid = readers[0]
+      lectorConectado.value = true
+      estadoLector.value = 'Lector U.are.U 4500 listo (' + readers.length + ' dispositivo(s))'
+    } else {
+      estadoLector.value = 'No se detecto lector de huellas. ¿DigitalPersona Agent corriendo?'
+      lectorConectado.value = false
+    }
+  }, function (error) {
+    console.error('[FP SDK] Error al enumerar:', error)
+    sdkCargando.value = false
+    estadoLector.value = 'Error al buscar dispositivos: ' + (error.message || error)
+    lectorConectado.value = false
+  })
+}
+
+function iniciarCapturaSDK() {
+  console.log('[FP SDK] iniciarCapturaSDK - capturing:', capturing, 'readerUid:', currentReaderUid)
+  if (capturing) {
+    console.warn('[FP SDK] Ya esta capturando')
+    return
+  }
+  if (!currentReaderUid) {
+    console.log('[FP SDK] No hay readerUid, re-enumerando...')
+    fpSdk.enumerateDevices().then(function (readers) {
+      if (readers && readers.length > 0) {
+        currentReaderUid = readers[0]
+        lectorConectado.value = true
+        estadoLector.value = 'Lector listo'
+        iniciarCapturaSDK()
+      } else {
+        showToast('Lector no detectado. Verifique la conexion USB y el DigitalPersona Agent.', 'error')
+      }
+    })
+    return
+  }
+
+  console.log('[FP SDK] Iniciando adquisicion en', currentReaderUid, 'formato: PngImage')
+  currentFormat = Fingerprint.SampleFormat.PngImage
+  fpSdk.startAcquisition(currentFormat, currentReaderUid).then(function () {
+    console.log('[FP SDK] Adquisicion iniciada OK')
+    capturing = true
+  }, function (error) {
+    console.error('[FP SDK] Error al iniciar adquisicion:', error)
+    showToast('Error al iniciar captura: ' + (error.message || error), 'error')
+  })
+}
+
+function detenerCapturaSDK() {
+  if (!capturing || !fpSdk) return
+  console.log('[FP SDK] Deteniendo captura...')
+  fpSdk.stopAcquisition().then(function () {
+    console.log('[FP SDK] Captura detenida')
+    capturing = false
+  }, function (e) {
+    console.warn('[FP SDK] Error al detener:', e)
+    capturing = false
+  })
+}
+
+// =============================================
+// VERIFICACIÓN BIOMÉTRICA PARA ASISTENCIA
+// =============================================
+function iniciarVerificacionHuella() {
+  if (!fpSdk || !lectorConectado.value) {
+    showToast('El lector de huellas no está conectado.', 'error')
+    return
+  }
+  if (!fichaSeleccionada.value) {
+    showToast('Selecciona una ficha primero.', 'error')
+    return
+  }
+  verificandoHuella.value = true
+  ultimaVerificacion.value = null
+  modoCaptura = 'asistencia'
+  showToast('Coloque el dedo en el lector para registrar asistencia...', 'info')
+  iniciarCapturaSDK()
+}
+
+function detenerVerificacionHuella() {
+  detenerCapturaSDK()
+  verificandoHuella.value = false
+  modoCaptura = 'enrolamiento'
+}
+
+async function procesarVerificacionAsistencia(imageBase64) {
+  try {
+    const fichaId = fichaSeleccionada.value._id
+    const result = await api.estudiantes.fingerprint.verify(imageBase64, fichaId)
+
+    if (result.match) {
+      // Encontró al estudiante: marcarlo como presente
+      const estId = result.studentId
+      const nombre = `${result.nombres} ${result.apellidos}`
+      
+      // Verificar que el estudiante pertenece a esta ficha
+      const estudianteEnFicha = estudiantesFicha.value.find(e => e._id === estId)
+      if (estudianteEnFicha) {
+        const reg = asistenciaDia.value[estId]
+        if (reg && (reg.estado === 'Presente' || reg.estado === 'Tardanza')) {
+          // Ya está marcado, no desmarcar
+          ultimaVerificacion.value = {
+            exito: true,
+            nombre: nombre,
+            estado: reg.estado,
+            hora: reg.horaMarcacion,
+          }
+          showToast(`${nombre} ya estaba marcado como ${reg.estado}.`, 'info')
+        } else {
+          // Marcar como presente
+          marcarPresente(estId)
+          ultimaVerificacion.value = {
+            exito: true,
+            nombre: nombre,
+            estado: asistenciaDia.value[estId]?.estado || 'Presente',
+            hora: asistenciaDia.value[estId]?.horaMarcacion || '',
+          }
+          showToast(`${nombre} - ${asistenciaDia.value[estId]?.estado} (${asistenciaDia.value[estId]?.horaMarcacion})`, 'success')
+        }
+      } else {
+        ultimaVerificacion.value = {
+          exito: false,
+          nombre: nombre,
+          mensaje: 'Estudiante identificado pero no pertenece a esta ficha.',
+        }
+        showToast(`${nombre} no pertenece a esta ficha.`, 'warning')
+      }
+    } else {
+      ultimaVerificacion.value = {
+        exito: false,
+        nombre: null,
+        mensaje: 'Huella no reconocida. El estudiante puede no estar enrolado.',
+      }
+      showToast('Huella no reconocida. Intente de nuevo.', 'error')
+    }
+  } catch (err) {
+    console.error('[Verificacion] Error:', err)
+    ultimaVerificacion.value = {
+      exito: false,
+      nombre: null,
+      mensaje: 'Error al verificar: ' + err.message,
+    }
+    showToast('Error al verificar huella: ' + err.message, 'error')
+  }
+
+  // Si el modo asistencia sigue activo, reactivar captura para el siguiente estudiante
+  if (verificandoHuella.value) {
+    setTimeout(() => {
+      showToast('Lector listo para el siguiente estudiante...', 'info')
+      iniciarCapturaSDK()
+    }, 1500)
+  }
+}
+
+// =============================================
+// ENROLAMIENTO DE HUELLAS - SDK REAL
+// =============================================
+const showEnrolarModal = ref(false)
+const estudianteTarget = ref(null)
+const pasoEnrolamiento = ref(1)
+const capturasCompletadas = ref(0)
+const enrolando = ref(false)
+const enrollmentSessionId = ref(null)
+const dedoSeleccionado = ref('indice_derecho')
+
+const sdkDisponible = computed(() => {
+  return !!(lectorConectado.value && !sdkCargando.value)
+})
+
+const DEDOS = [
+  { value: 'pulgar_derecho', label: 'Pulgar Derecho' },
+  { value: 'indice_derecho', label: 'Índice Derecho' },
+  { value: 'medio_derecho', label: 'Medio Derecho' },
+  { value: 'anular_derecho', label: 'Anular Derecho' },
+  { value: 'menique_derecho', label: 'Meñique Derecho' },
+  { value: 'pulgar_izquierdo', label: 'Pulgar Izquierdo' },
+  { value: 'indice_izquierdo', label: 'Índice Izquierdo' },
+  { value: 'medio_izquierdo', label: 'Medio Izquierdo' },
+  { value: 'anular_izquierdo', label: 'Anular Izquierdo' },
+  { value: 'menique_izquierdo', label: 'Meñique Izquierdo' },
+]
+
+function abrirModalEnrolamiento(estudiante) {
+  estudianteTarget.value = estudiante
+  pasoEnrolamiento.value = 1
+  capturasCompletadas.value = 0
+  enrolando.value = false
+  dedoSeleccionado.value = estudiante.dedoEnrolado || 'indice_derecho'
+  modoCaptura = 'enrolamiento'
+  showEnrolarModal.value = true
+  verificarEstadoLectorUSB()
+}
+
+async function iniciarEnrolamientoReal() {
+  if (!lectorConectado.value) {
+    showToast('El lector de huellas USB no está conectado.', 'error')
+    return
+  }
+  if (!estudianteTarget.value) return
+
+  enrolando.value = true
+  pasoEnrolamiento.value = 2
+  capturasCompletadas.value = 0
+  modoCaptura = 'enrolamiento'
+
+  try {
+    const nombre = `${estudianteTarget.value.nombres} ${estudianteTarget.value.apellidos}`
+    const doc = `${estudianteTarget.value.tipoDocumento} ${estudianteTarget.value.numeroDocumento}`
+    const res = await api.estudiantes.fingerprint.enrollStart(
+      estudianteTarget.value._id,
+      nombre,
+      doc,
+      dedoSeleccionado.value
+    )
+
+    if (!res.success && res.error) {
+      throw new Error(res.error)
+    }
+
+    enrollmentSessionId.value = res.sessionId
+    showToast('Coloque el dedo en el lector para la primera muestra...', 'info')
+    iniciarCapturaSDK()
+  } catch (err) {
+    enrolando.value = false
+    pasoEnrolamiento.value = 1
+    showToast('Error al iniciar enrolamiento: ' + err.message, 'error')
+  }
+}
+
+async function enviarCapturaAlBackend(imageBase64) {
+  if (!enrolando.value || !enrollmentSessionId.value || pasoEnrolamiento.value !== 2) return
+
+  try {
+    const res = await api.estudiantes.fingerprint.enrollCapture(
+      enrollmentSessionId.value,
+      imageBase64
+    )
+
+    if (res.error) {
+      throw new Error(res.error)
+    }
+
+    const numMuestras = res.captures || (capturasCompletadas.value + 1)
+    capturasCompletadas.value = numMuestras
+
+    // Si el SDK indica que ya tiene suficientes muestras (ready=true) o se alcanzaron 4 muestras:
+    if (res.ready || numMuestras >= 4) {
+      // 1. Detener inmediatamente el sensor USB para evitar lecturas adicionales
+      detenerCapturaSDK()
+      enrolando.value = false
+
+      // 2. Completar enrolamiento en el servidor con validación de no-duplicado
+      try {
+        const compRes = await api.estudiantes.fingerprint.enrollComplete(enrollmentSessionId.value)
+        if (compRes.success) {
+          pasoEnrolamiento.value = 3
+          showToast(`¡Huella enrolada exitosamente para ${estudianteTarget.value.nombres}!`, 'success')
+          await cargarDatosFicha(fichaSeleccionada.value._id)
+        } else {
+          throw new Error(compRes.error || 'Error al guardar plantilla biométrica')
+        }
+      } catch (compErr) {
+        pasoEnrolamiento.value = 1
+        capturasCompletadas.value = 0
+        showToast(compErr.message, 'error')
+      }
+    } else {
+      showToast(`Muestra ${numMuestras} de 4 registrada. Levante y coloque el dedo nuevamente...`, 'info')
+      setTimeout(() => {
+        if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
+          iniciarCapturaSDK()
+        }
+      }, 700)
+    }
+  } catch (err) {
+    console.error('Error al procesar muestra:', err)
+    showToast('Muestra no válida: ' + err.message + '. Intente de nuevo.', 'warning')
+    setTimeout(() => {
+      if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
+        iniciarCapturaSDK()
+      }
+    }, 1000)
+  }
+}
+
+async function cancelarEnrolamiento() {
+  detenerCapturaSDK()
+  if (enrollmentSessionId.value) {
+    try {
+      await api.estudiantes.fingerprint.enrollCancel(enrollmentSessionId.value)
+    } catch (e) {}
+  }
+  enrolando.value = false
+  showEnrolarModal.value = false
+  estudianteTarget.value = null
+  pasoEnrolamiento.value = 1
+  capturasCompletadas.value = 0
+  enrollmentSessionId.value = null
+  modoCaptura = 'asistencia'
+}
 
 
 // =============================================
@@ -614,7 +1086,7 @@ function exportarAsistenciaDia() {
     const estadoStr = jornadaInhabilitada.value ? 'Inhabilitada' : (reg ? (reg.excusa ? 'Excusada' : reg.estado) : 'Sin registro')
     let tardanzaStr = '0 horas'
     if (estadoStr === 'Tardanza') {
-      tardanzaStr = reg?.tiempoTardanza || calcularEstadoAsistenciaFrontend(reg?.horaMarcacion, reg?.horaInicioClase, jornadaFicha, reg?.createdAt).texto
+      tardanzaStr = reg?.tiempoTardanza || calcularHorasTardanza(reg?.horaMarcacion, jornadaFicha).texto
     }
     return {
       'Aprendiz': `${est.nombres} ${est.apellidos}`,
@@ -639,7 +1111,7 @@ function exportarHistorial() {
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
     let tardanzaStr = '0 horas'
     if (asis.estado === 'Tardanza') {
-      tardanzaStr = asis.tiempoTardanza || calcularEstadoAsistenciaFrontend(asis.hora, asis.horaInicioClase, jornadaFicha, asis.createdAt).texto
+      tardanzaStr = asis.tiempoTardanza || calcularHorasTardanza(asis.hora, jornadaFicha).texto
     }
     return {
       'Fecha': asis.fecha,
@@ -852,8 +1324,8 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-remote-start"
                   @click="iniciarSesionRemotaDocente"
-                  :disabled="jornadaInhabilitada || activandoClase"
-                  :title="activandoClase ? 'Activando...' : 'Iniciar pase de lista'"
+                  :disabled="jornadaInhabilitada"
+                  title="Iniciar pase de lista"
                 >
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                 </button>
@@ -1015,6 +1487,23 @@ function descargarExcel(data, nombreArchivo) {
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
+          </div>
+
+          <!-- Panel de verificación biométrica activa (Solo si la sesión no está inhabilitada) -->
+          <div v-if="verificandoHuella && !jornadaInhabilitada" class="biometric-panel">
+            <div class="biometric-pulse-icon"></div>
+            <div class="biometric-panel-text">
+              <strong>Lector biométrico activo</strong>
+              <span>Esperando que los estudiantes coloquen su dedo en el sensor...</span>
+            </div>
+            <div v-if="ultimaVerificacion" class="biometric-last-result" :class="{ 'result-ok': ultimaVerificacion.exito, 'result-fail': !ultimaVerificacion.exito }">
+              <span v-if="ultimaVerificacion.exito">
+                {{ ultimaVerificacion.nombre }} — {{ ultimaVerificacion.estado }} ({{ ultimaVerificacion.hora }})
+              </span>
+              <span v-else>
+                {{ ultimaVerificacion.mensaje }}
+              </span>
+            </div>
           </div>
 
           <!-- Contadores rápidos -->

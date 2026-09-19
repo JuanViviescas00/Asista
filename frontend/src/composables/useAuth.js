@@ -102,9 +102,9 @@ const headerTitulo = computed(() => {
 })
 
 const headerSubtitulo = computed(() => {
-  if (usuario.value?.rol === 'Instructor') return usuario.value?.nombre || 'Instructor SENA'
-  if (usuario.value?.rol === 'Estudiante') return usuario.value?.nombre || 'Aprendiz SENA'
-  return usuario.value?.nombre || 'Administración SENA'
+  if (usuario.value?.rol === 'Instructor') return 'Docente SENA'
+  if (usuario.value?.rol === 'Estudiante') return 'Aprendiz SENA'
+  return 'Administración SENA'
 })
 
 export function useAuth() {

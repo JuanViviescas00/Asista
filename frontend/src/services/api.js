@@ -1,9 +1,6 @@
 function getBaseUrl() {
   if (typeof window === 'undefined') return 'http://localhost:3000/api'
   
-  // En producción (cuando el backend sirve el frontend), la API es relativa
-  if (import.meta.env.PROD) return '/api'
-
   const host = window.location.hostname
   const protocol = window.location.protocol
   const fullHost = window.location.host
@@ -116,6 +113,21 @@ export default {
     fingerprint: {
       enrollStart(studentId, name, documento, dedo) {
         return request('/estudiantes/enroll-start', { method: 'POST', body: JSON.stringify({ studentId, name, documento, dedo }) })
+      },
+      enrollCapture(sessionId, image) {
+        return request('/estudiantes/enroll-capture', { method: 'POST', body: JSON.stringify({ sessionId, image }) })
+      },
+      enrollComplete(sessionId) {
+        return request('/estudiantes/enroll-complete', { method: 'POST', body: JSON.stringify({ sessionId }) })
+      },
+      enrollCancel(sessionId) {
+        return request('/estudiantes/enroll-cancel', { method: 'POST', body: JSON.stringify({ sessionId }) })
+      },
+      verify(image, fichaId) {
+        return request('/estudiantes/verify', { method: 'POST', body: JSON.stringify({ image, fichaId }) })
+      },
+      status() {
+        return request('/estudiantes/fingerprint-status')
       }
     }
   },

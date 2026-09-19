@@ -1,6 +1,4 @@
 <script setup>
-// DEPRECATED: superseded by views/*.vue (router nuevo). Se conserva
-// solo como referencia histórica.
 import { ref, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/consultaEstudiante.css'
@@ -64,17 +62,6 @@ function limpiarBusqueda() {
   asistenciasEstudiante.value = []
   excusasEstudiante.value = []
 }
-
-const textoHuella = computed(() => {
-  const e = estudianteSeleccionado.value
-  if (!e) return ''
-  const d1 = e.dedoEnrolado || ''
-  const d2 = e.dedoEnrolado2 || ''
-  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
-  if (n === 0) return '🟡 Sin huella'
-  if (n === 1) return `🟢 1/2 · ${d1 || 'Sin dedo'}`
-  return `🟢 2/2 · ${d1 || 'Sin dedo'} + ${d2 || 'Sin dedo'}`
-})
 
 const metricasEstudiante = computed(() => {
   let presentes = 0, retardos = 0, fallas = 0
