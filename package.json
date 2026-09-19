@@ -14,6 +14,8 @@
     "dev:backend": "npm run dev --prefix backend",
     "start:backend": "npm start --prefix backend",
     "build:frontend": "npm run build --prefix frontend",
+    "build:prod": "npm run build --prefix frontend && node scripts/copy-dist.js",
+    "build": "npm run build:prod",
     "install:all": "npm install"
   },
   "devDependencies": {

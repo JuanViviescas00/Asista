@@ -5,7 +5,7 @@ import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
-import { getFichaIdList, getHoyString, calcularEstadoAsistencia } from '../services/asistenciaService.js'
+import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada } from '../services/asistenciaService.js'
 import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 import {
   upsertAsistenciaSQLite,
@@ -162,19 +162,40 @@ async function procesarAsistencia(item) {
   const fecha = new Date(dateObj.getTime() - offsetMs).toISOString().split('T')[0]
   const hora = dateObj.toTimeString().slice(0, 8)
 
-  // Determina la clase en curso al momento de la marcación para medir la tardanza
-  // desde su hora de inicio (iniciadaAt) y no desde la jornada fija.
-  let inicioClase = null
+  // Fuente PRIMARIA: la clase en curso al momento de la marcación (iniciadaAt).
+  // Se consulta el modelo Clase con el _id de ficha YA RESUELTO (no el fichaId
+  // crudo del payload), sin depender de que el huellero envíe horaInicioClase.
+  let claseDoc = null
   try {
     const queryClase = { fichaId: ficha._id, iniciadaAt: { $lte: dateObj } }
     if (instructorId) queryClase.instructorId = instructorId
-    const clase = await Clase.findOne(queryClase).sort({ iniciadaAt: -1 })
-    if (clase?.iniciadaAt) inicioClase = clase.iniciadaAt
+    claseDoc = await Clase.findOne(queryClase).sort({ iniciadaAt: -1 })
   } catch (_) {
-    // Sin clase localizable: se mide desde el propio instante de la marcación
-    // (equivale a "a tiempo"), comportamiento conservador.
+    // Sin clase localizable: se cae al fallback de horario fijo (jornada).
   }
-  const { estado, horasTardanza, tiempoTardanza } = calcularEstadoAsistencia(inicioClase, dateObj)
+
+  let estado
+  let horasTardanza
+  let tiempoTardanza
+  let horaInicioClaseValida = null
+  let claseIdObj = null
+
+  if (claseDoc?.iniciadaAt) {
+    const resultado = calcularEstadoAsistencia(claseDoc.iniciadaAt, dateObj)
+    estado = resultado.estado
+    horasTardanza = resultado.horasTardanza
+    tiempoTardanza = resultado.tiempoTardanza
+    horaInicioClaseValida = claseDoc.iniciadaAt
+    claseIdObj = claseDoc._id
+  } else {
+    // Fallback: horario fijo de jornada (ficha sin Clase nunca activada).
+    // Falta = día completo de falla: se guarda 0 en horasTardanza para que el
+    // banco de horas no cuente doble (ya cuenta como Falta).
+    const resultado = calcularTardanzaEscalonada(ficha.jornada, dateObj)
+    estado = resultado.estado
+    horasTardanza = estado === 'Falta' ? 0 : resultado.horas
+    tiempoTardanza = `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
+  }
 
   try {
     // Un solo registro por estudiante/ficha/día (regla de negocio): upsert atómico
@@ -193,6 +214,8 @@ async function procesarAsistencia(item) {
           hora,
           horasTardanza,
           tiempoTardanza,
+          horaInicioClase: horaInicioClaseValida,
+          claseId: claseIdObj,
           instructorId: instructorId || null,
           metodo: metodo === 'MANUAL' ? 'MANUAL' : 'HUELLA',
         },

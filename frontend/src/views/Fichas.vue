@@ -207,8 +207,8 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
             <th>Programa</th>
             <th>Jornada</th>
             <th>Aula</th>
-            <th>Docente Líder 👑</th>
-            <th>Docentes Comunes 👤</th>
+            <th>Docente Líder </th>
+            <th>Docentes Comunes </th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -220,7 +220,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
             <td>{{ f.aulaAsignada }}</td>
             <td>
               <span class="fichas-badge fichas-badge-leader">
-                👑 {{ getInstructorNombre(f.instructorLiderId) }}
+                 {{ getInstructorNombre(f.instructorLiderId) }}
               </span>
             </td>
             <td>
@@ -243,7 +243,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
   <!-- MODAL DE CREACIÓN / EDICIÓN DE FICHA -->
   <div v-if="showModal" class="fichas-modal-overlay" @click.self="closeModal">
     <div class="fichas-modal fichas-modal-large">
-      <h2>{{ editingId ? '✏️ Editar Ficha' : '➕ Nueva Ficha' }}</h2>
+      <h2>{{ editingId ? ' Editar Ficha' : ' Nueva Ficha' }}</h2>
       <div class="fichas-form-grid">
         <div class="fichas-form-group">
           <label>Código de Ficha *</label>
@@ -256,9 +256,9 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         <div class="fichas-form-group">
           <label>Jornada *</label>
           <select v-model="fichaForm.jornada">
-            <option value="Mañana">🌅 Mañana</option>
-            <option value="Tarde">☀️ Tarde</option>
-            <option value="Noche">🌙 Noche</option>
+            <option value="Mañana"> Mañana</option>
+            <option value="Tarde"> Tarde</option>
+            <option value="Noche"> Noche</option>
           </select>
         </div>
         <div class="fichas-form-group">
@@ -268,7 +268,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
 
         <!-- BUSCADOR DE DOCENTES -->
         <div class="fichas-form-group fichas-form-group-wide">
-          <label>🔍 Filtrar / Buscar Docente en la Lista</label>
+          <label> Filtrar / Buscar Docente en la Lista</label>
           <input
             v-model="busquedaDocente"
             type="text"
@@ -278,23 +278,23 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label>👑 Docente Líder de la Ficha (Obligatorio) *</label>
+          <label> Docente Líder de la Ficha (Obligatorio) *</label>
           <select v-model="fichaForm.instructorLiderId" class="fichas-leader-select">
             <option :value="null" disabled>Selecciona al Docente Líder...</option>
             <option v-for="i in instructoresFiltrados" :key="i._id" :value="i._id">
-              👑 {{ i.nombres }} {{ i.apellidos }} — {{ i.especialidad }}
+               {{ i.nombres }} {{ i.apellidos }} — {{ i.especialidad }}
             </option>
           </select>
           <p v-if="instructoresFiltrados.length === 0" class="fichas-warning-text">
             No se encontraron docentes con la búsqueda "{{ busquedaDocente }}".
           </p>
           <p v-if="liderYaEsLiderEnOtraFicha" class="fichas-warning-text">
-            ⚠️ <strong>Aviso de Liderazgo:</strong> Este docente ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
+             <strong>Aviso de Liderazgo:</strong> Este docente ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
           </p>
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label>👤 Docentes Comunes Asignados (Opcional)</label>
+          <label> Docentes Comunes Asignados (Opcional)</label>
           <p class="fichas-help-text">Selecciona los docentes adicionales que dictan clases en esta ficha:</p>
           <div class="fichas-instructor-check-grid">
             <label

@@ -1,9 +1,14 @@
 import Estudiante from '../models/Estudiante.js'
 
 export async function guardarTemplate(req, res) {
-  const { estudianteId, fichaId, dedo, template } = req.body
+  const { estudianteId, fichaId, dedo, template, slot } = req.body
   if (!estudianteId || !fichaId || !template) {
     return res.status(400).json({ success: false, error: 'estudianteId, fichaId y template son requeridos' })
+  }
+
+  const slotExplicito = slot == null ? null : Number(slot)
+  if (slotExplicito !== null && slotExplicito !== 1 && slotExplicito !== 2) {
+    return res.status(400).json({ success: false, error: 'slot debe ser 1 o 2' })
   }
 
   try {
@@ -16,7 +21,10 @@ export async function guardarTemplate(req, res) {
     const otro = await Estudiante.findOne({
       _id: { $ne: estudianteId },
       huellaEnrolada: true,
-      huellaTemplate: template,
+      $or: [
+        { huellaTemplate: { $ne: '' } },
+        { huellaTemplate2: { $ne: '' } },
+      ],
     })
 
     if (otro) {
@@ -26,13 +34,36 @@ export async function guardarTemplate(req, res) {
       })
     }
 
+    const slot1Libre = !estudiante.huellaTemplate
+    const slot2Libre = !estudiante.huellaTemplate2
+
+    let targetSlot = slotExplicito
+    if (targetSlot === null) {
+      if (slot1Libre) targetSlot = 1
+      else if (slot2Libre) targetSlot = 2
+      else {
+        return res.status(409).json({
+          success: false,
+          error: 'Este estudiante ya tiene el máximo de 2 huellas registradas. Elige cuál quieres reemplazar.',
+        })
+      }
+    }
+
+    const fecha = new Date().toISOString().split('T')[0]
+    if (targetSlot === 1) {
+      estudiante.huellaTemplate = template
+      estudiante.dedoEnrolado = dedo || ''
+      estudiante.fechaEnrolamiento = fecha
+    } else {
+      estudiante.huellaTemplate2 = template
+      estudiante.dedoEnrolado2 = dedo || ''
+      estudiante.fechaEnrolamiento2 = fecha
+    }
+
     estudiante.huellaEnrolada = true
-    estudiante.huellaTemplate = template
-    estudiante.dedoEnrolado = dedo || ''
-    estudiante.fechaEnrolamiento = new Date().toISOString().split('T')[0]
     await estudiante.save()
 
-    res.json({ success: true, message: 'Huella guardada correctamente' })
+    res.json({ success: true, slot: targetSlot, message: 'Huella guardada correctamente' })
   } catch (err) {
     res.status(500).json({ success: false, error: 'Error al guardar: ' + err.message })
   }

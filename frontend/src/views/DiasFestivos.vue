@@ -345,11 +345,11 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
 </template>
 
 <style scoped>
-.page-header { margin-bottom: 34px; }
+.page-header { margin-bottom: 20px; }
 .page-header h1 { font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: #16210F; }
 .page-header p { color: #7C857A; font-size: 14.5px; margin-top: 6px; }
-.card { background: #ffffff; border-radius: 20px; padding: 32px 36px 34px; box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09); margin-bottom: 22px; }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
+.card { background: #ffffff; border-radius: 20px; padding: 20px 24px 22px; box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09); margin-bottom: 16px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
 .card-header h3 { font-size: 16.5px; font-weight: 600; color: #16210F; }
 .btn-group { display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
 .festivos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -359,7 +359,7 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
 .festivo-dia { font-size: 20px; font-weight: 700; color: #1F5C00; line-height: 1; }
 .festivo-mes { font-size: 10px; color: #1F5C00; text-transform: uppercase; font-weight: 600; }
 .festivo-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.fichas-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; max-height: 180px; overflow-y: auto; padding: 8px; background: #F7F9F5; border: 1px solid #E2E6DE; border-radius: 8px; }
+.fichas-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 180px; overflow-y: auto; padding: 8px; background: #F7F9F5; border: 1px solid #E2E6DE; border-radius: 8px; }
 .ficha-check-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid #E2E6DE; border-radius: 6px; background: #fff; font-size: 13px; }
 .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-weight: 600; color: white; z-index: 9999; box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08); }
 .toast-success { background: #2F8C00; }

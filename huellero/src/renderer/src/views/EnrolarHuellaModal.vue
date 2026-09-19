@@ -5,9 +5,12 @@ import FingerprintScan from '../components/FingerprintScan.vue'
 
 const props = defineProps({
   claseActiva: { type: Object, default: null },
+  instructorId: { type: String, default: null },
 })
 
 const emit = defineEmits(['close'])
+
+const VERSION_TERMINOS = 'v1'
 
 const DEDOS = [
   'Pulgar derecho',
@@ -32,8 +35,15 @@ const errorInicial = ref('')
 const busqueda = ref('')
 const seleccionadoId = ref(null)
 const dedo = ref('')
+const slotObjetivo = ref(null)
 const estadoCaptura = ref('idle')
 const mensajeCaptura = ref('')
+
+const verificandoConsentimiento = ref(false)
+const mostrandoConsentimiento = ref(false)
+const estudianteConsentimientoPendiente = ref(null)
+const aceptandoConsentimiento = ref(false)
+const errorConsentimiento = ref('')
 
 const hayClaseActiva = computed(() => !!props.claseActiva)
 
@@ -48,6 +58,16 @@ const estudiantesFiltrados = computed(() => {
 const seleccionado = computed(
   () => estudiantes.value.find((e) => e._id === seleccionadoId.value) || null
 )
+
+const slot1Ocupado = computed(() => !!seleccionado.value?.huellaTemplate)
+const slot2Ocupado = computed(() => !!seleccionado.value?.huellaTemplate2)
+
+function estadoHuellas(e) {
+  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
+  if (n === 0) return { texto: 'Sin huella', clase: 'off' }
+  if (n === 1) return { texto: `1/2 · ${e.dedoEnrolado || e.dedoEnrolado2}`, clase: 'ok' }
+  return { texto: `2/2 · ${e.dedoEnrolado} + ${e.dedoEnrolado2}`, clase: 'ok' }
+}
 
 const captureScanState = computed(() => {
   if (estadoCaptura.value === 'capturando') return 'scanning'
@@ -113,8 +133,80 @@ onUnmounted(() => {
   if (offProgreso) offProgreso()
 })
 
-function seleccionar(id) {
+async function seleccionar(id) {
+  if (verificandoConsentimiento.value) return
+
+  const est = estudiantes.value.find((e) => e._id === id)
+  if (!est) return
+
+  verificandoConsentimiento.value = true
+  const res = await window.huellero.consultarConsentimientoDatos(id)
+  verificandoConsentimiento.value = false
+
+  if (!res.ok) {
+    estadoCaptura.value = 'error'
+    mensajeCaptura.value = res.error || 'No se pudo verificar el consentimiento de datos'
+    return
+  }
+
+  if (res.existe) {
+    aplicarSeleccion(id)
+  } else {
+    errorConsentimiento.value = ''
+    estudianteConsentimientoPendiente.value = est
+    mostrandoConsentimiento.value = true
+  }
+}
+
+function aplicarSeleccion(id) {
   seleccionadoId.value = id
+  estadoCaptura.value = 'idle'
+  mensajeCaptura.value = ''
+  dedo.value = ''
+
+  const est = estudiantes.value.find((e) => e._id === id)
+  if (!est?.huellaTemplate) {
+    slotObjetivo.value = 1
+  } else if (!est?.huellaTemplate2) {
+    slotObjetivo.value = 2
+  } else {
+    slotObjetivo.value = null
+  }
+}
+
+async function aceptarConsentimiento() {
+  if (!estudianteConsentimientoPendiente.value) return
+
+  aceptandoConsentimiento.value = true
+  errorConsentimiento.value = ''
+
+  const res = await window.huellero.registrarConsentimientoDatos({
+    estudianteId: estudianteConsentimientoPendiente.value._id,
+    instructorId: props.instructorId,
+    versionTerminos: VERSION_TERMINOS,
+  })
+
+  aceptandoConsentimiento.value = false
+
+  if (res.ok) {
+    const id = estudianteConsentimientoPendiente.value._id
+    mostrandoConsentimiento.value = false
+    estudianteConsentimientoPendiente.value = null
+    aplicarSeleccion(id)
+  } else {
+    errorConsentimiento.value = res.error || 'No se pudo registrar el consentimiento'
+  }
+}
+
+function cancelarConsentimiento() {
+  mostrandoConsentimiento.value = false
+  estudianteConsentimientoPendiente.value = null
+  errorConsentimiento.value = ''
+}
+
+function elegirSlot(n) {
+  slotObjetivo.value = n
+  dedo.value = ''
   estadoCaptura.value = 'idle'
   mensajeCaptura.value = ''
 }
@@ -130,10 +222,24 @@ function cerrar() {
 
 async function iniciarCaptura() {
   if (!seleccionado.value) return
+  if (!slotObjetivo.value) {
+    estadoCaptura.value = 'error'
+    mensajeCaptura.value = 'Elige qué huella vas a capturar o reemplazar'
+    return
+  }
   if (!dedo.value) {
     estadoCaptura.value = 'error'
     mensajeCaptura.value = 'Elige el dedo a enrolar'
     return
+  }
+
+  const ocupado = slotObjetivo.value === 1 ? slot1Ocupado.value : slot2Ocupado.value
+  if (ocupado) {
+    const dedoExistente = slotObjetivo.value === 1 ? seleccionado.value.dedoEnrolado : seleccionado.value.dedoEnrolado2
+    const confirmado = confirm(
+      `¿Reemplazar la huella de "${dedoExistente}" por "${dedo.value}"? La anterior se perderá.`
+    )
+    if (!confirmado) return
   }
 
   estadoCaptura.value = 'capturando'
@@ -144,11 +250,22 @@ async function iniciarCaptura() {
     fichaId: ficha.value._id,
     dedo: dedo.value,
     nombre: `${seleccionado.value.nombres} ${seleccionado.value.apellidos}`.trim(),
+    slot: slotObjetivo.value,
   })
 
   if (res.ok) {
     estadoCaptura.value = 'ok'
     mensajeCaptura.value = 'Huella registrada correctamente'
+    const est = estudiantes.value.find((e) => e._id === seleccionado.value._id)
+    if (est) {
+      if (slotObjetivo.value === 1) {
+        est.huellaTemplate = '1'
+        est.dedoEnrolado = dedo.value
+      } else {
+        est.huellaTemplate2 = '1'
+        est.dedoEnrolado2 = dedo.value
+      }
+    }
   } else {
     estadoCaptura.value = 'error'
     mensajeCaptura.value = res.error || 'No se pudo registrar la huella'
@@ -250,12 +367,71 @@ async function iniciarCaptura() {
                 <strong>{{ e.nombres }} {{ e.apellidos }}</strong>
                 <span class="hint">{{ e.tipoDocumento }} {{ e.numeroDocumento }}</span>
               </div>
-              <span class="badge" :class="e.huellaEnrolada ? 'ok' : 'off'">
-                <AppIcon :name="e.huellaEnrolada ? 'check-circle' : 'x-circle'" :size="13" />
-                {{ e.huellaEnrolada ? (e.dedoEnrolado || 'Con huella') : 'Sin huella' }}
+              <span class="badge" :class="estadoHuellas(e).clase">
+                <AppIcon :name="estadoHuellas(e).clase === 'ok' ? 'check-circle' : 'x-circle'" :size="13" />
+                {{ estadoHuellas(e).texto }}
               </span>
             </li>
           </ul>
+
+          <Transition name="panel-in">
+            <div v-if="mostrandoConsentimiento" class="panel consentimiento">
+              <div class="panel-titulo">
+                <strong>
+                  {{ estudianteConsentimientoPendiente?.nombres }}
+                  {{ estudianteConsentimientoPendiente?.apellidos }}
+                </strong>
+                <span class="hint">Tratamiento de datos personales</span>
+              </div>
+
+              <div class="texto-legal">
+                <p>
+                  De acuerdo con la Ley 1581 de 2012 y sus decretos reglamentarios, la huella
+                  dactilar es un dato personal sensible. Al continuar, el SENA recolectará,
+                  almacenará y usará la huella dactilar del aprendiz con la única finalidad de
+                  verificar su identidad para el control de asistencia a las clases de su
+                  programa de formación.
+                </p>
+                <p>
+                  Esta autorización es voluntaria. Si el aprendiz no desea otorgarla, el control
+                  de asistencia se realizará por un medio alternativo (registro manual), sin que
+                  esto afecte su permanencia en el programa.
+                </p>
+                <p>
+                  El aprendiz tiene derecho a conocer, actualizar, rectificar y solicitar la
+                  eliminación de su información, así como a revocar esta autorización en
+                  cualquier momento, dirigiéndose a su instructor líder de ficha.
+                </p>
+              </div>
+
+              <p class="hint">
+                Al hacer clic en "Acepto", confirmas que el aprendiz está presente y ha sido
+                informado de este aviso.
+              </p>
+
+              <Transition name="mensaje-in">
+                <p v-if="errorConsentimiento" class="mensaje error">
+                  <AppIcon name="alert-triangle" :size="15" />
+                  {{ errorConsentimiento }}
+                </p>
+              </Transition>
+
+              <button
+                class="primary"
+                :disabled="aceptandoConsentimiento"
+                @click="aceptarConsentimiento"
+              >
+                {{ aceptandoConsentimiento ? 'Guardando…' : 'Acepto' }}
+              </button>
+              <button
+                class="ghost"
+                :disabled="aceptandoConsentimiento"
+                @click="cancelarConsentimiento"
+              >
+                Cancelar
+              </button>
+            </div>
+          </Transition>
 
           <Transition name="panel-in">
             <div v-if="seleccionado" class="panel">
@@ -264,8 +440,47 @@ async function iniciarCaptura() {
                 <span class="hint">{{ seleccionado.numeroDocumento }}</span>
               </div>
 
+              <div class="slots">
+                <div
+                  class="slot-fila"
+                  :class="{ activo: slotObjetivo === 1, ocupado: slot1Ocupado }"
+                  @click="!slot1Ocupado && elegirSlot(1)"
+                >
+                  <span class="slot-label">Huella 1</span>
+                  <span class="slot-dedo">{{ seleccionado.dedoEnrolado || 'Vacío' }}</span>
+                  <button
+                    v-if="slot1Ocupado"
+                    class="ghost"
+                    type="button"
+                    @click.stop="elegirSlot(1)"
+                  >
+                    Reemplazar
+                  </button>
+                </div>
+                <div
+                  class="slot-fila"
+                  :class="{ activo: slotObjetivo === 2, ocupado: slot2Ocupado }"
+                  @click="!slot2Ocupado && elegirSlot(2)"
+                >
+                  <span class="slot-label">Huella 2</span>
+                  <span class="slot-dedo">{{ seleccionado.dedoEnrolado2 || 'Vacío' }}</span>
+                  <button
+                    v-if="slot2Ocupado"
+                    class="ghost"
+                    type="button"
+                    @click.stop="elegirSlot(2)"
+                  >
+                    Reemplazar
+                  </button>
+                </div>
+              </div>
+              <p v-if="!slotObjetivo" class="hint aviso-slots">
+                Este aprendiz ya tiene sus 2 huellas registradas. Elige "Reemplazar" en la que
+                quieras cambiar.
+              </p>
+
               <label class="dedo">
-                Dedo a enrolar
+                Dedo a capturar
                 <select v-model="dedo">
                   <option value="" disabled>Selecciona un dedo</option>
                   <option v-for="d in DEDOS" :key="d" :value="d">{{ d }}</option>
@@ -294,7 +509,7 @@ async function iniciarCaptura() {
 
               <button
                 class="primary"
-                :disabled="estadoCaptura === 'capturando' || hayClaseActiva"
+                :disabled="estadoCaptura === 'capturando' || hayClaseActiva || !slotObjetivo"
                 @click="iniciarCaptura"
               >
                 {{ estadoCaptura === 'capturando' ? 'Capturando…' : 'Iniciar captura' }}
@@ -560,6 +775,78 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.texto-legal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(220px, 28vh);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.texto-legal p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.slot-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
+}
+
+.slot-fila.ocupado {
+  cursor: default;
+}
+
+.slot-fila.activo {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+
+.slot-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.slot-dedo {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.slot-fila.ocupado .slot-dedo {
+  color: var(--text);
+  font-style: normal;
+}
+
+.aviso-slots {
+  margin: -4px 0 0;
+  color: var(--warn);
 }
 
 .dedo {

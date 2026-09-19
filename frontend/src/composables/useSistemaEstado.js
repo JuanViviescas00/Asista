@@ -9,7 +9,7 @@
 //   rojo    -> huellero (lector) desconectado
 // ============================================================
 import { reactive, computed, onMounted, onUnmounted } from 'vue'
-import api from '../services/index.js'
+import { socket } from '../services/index.js'
 
 export function useSistemaEstado() {
   const estadoSistema = reactive({
@@ -22,13 +22,8 @@ export function useSistemaEstado() {
   let fpSdkCheck = null
 
   async function verificarEstadoRealSistema() {
-    // 1. Verificar Servidor Backend (WebSocket/API)
-    try {
-      const res = await api.estudiantes.fingerprint.status()
-      estadoSistema.estadoWebSocket = res && res.sdkAvailable !== undefined ? 'Conectado' : 'Desconectado'
-    } catch (err) {
-      estadoSistema.estadoWebSocket = 'Desconectado'
-    }
+    // 1. Verificar conexión real con el servidor (socket.io principal de la app)
+    estadoSistema.estadoWebSocket = socket.connected ? 'Conectado' : 'Desconectado'
 
     // 2. Verificar Lector USB Físico (huellero) vía SDK
     if (typeof Fingerprint !== 'undefined') {

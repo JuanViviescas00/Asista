@@ -154,7 +154,7 @@ onMounted(async () => {
     <div class="card">
       <div class="card-header">
         <div>
-          <h3 style="color: #ef4444;">🚨 {{ etiquetaConsecutivos }} fallados</h3>
+          <h3 style="color: #ef4444;"> {{ etiquetaConsecutivos }} fallados</h3>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">
             Aprendices que acumulan faltas seguidas. Requieren intervención prioritaria.
           </p>
@@ -215,7 +215,7 @@ onMounted(async () => {
     <div class="card">
       <div class="card-header">
         <div>
-          <h3 style="color: #b45309;">⚠️ {{ etiquetaNoConsecutivos }} fallados</h3>
+          <h3 style="color: #b45309;"> {{ etiquetaNoConsecutivos }} fallados</h3>
           <p style="font-size: 13px; color: #64748b; margin-top: 4px;">
             Aprendices con faltas acumuladas (no necesariamente seguidas). Requieren seguimiento.
           </p>

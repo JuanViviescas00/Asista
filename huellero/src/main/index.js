@@ -48,8 +48,11 @@ ipcMain.handle('huellero:login', (_e, correo, password) => engine.loginDocente(c
 ipcMain.handle('huellero:logout', () => engine.logoutDocente())
 ipcMain.handle('huellero:getFichasLider', () => engine.getFichasLider())
 ipcMain.handle('huellero:getEstudiantesFicha', (_e, fichaId) => engine.getEstudiantesFicha(fichaId))
+ipcMain.handle('huellero:consultarConsentimientoDatos', (_e, estudianteId) => engine.consultarConsentimientoDatos(estudianteId))
+ipcMain.handle('huellero:registrarConsentimientoDatos', (_e, payload) => engine.registrarConsentimientoDatos(payload))
 ipcMain.handle('huellero:enrolar', (_e, payload) => engine.enrolarEstudiante(payload))
 ipcMain.handle('huellero:cancelarEnrolar', () => engine.cancelarEnrolamiento())
+ipcMain.handle('huellero:cancelarCaptura', () => engine.cancelarCapturaEnCurso())
 
 engine.setOnEstadoChange(broadcastStatus)
 engine.setOnEnrolarProgreso((progreso) => {

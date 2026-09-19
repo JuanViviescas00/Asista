@@ -56,6 +56,17 @@ const horasPorJornada = computed(() => {
   return 6
 })
 
+const textoHuella = computed(() => {
+  const e = estudiante.value
+  if (!e) return ''
+  const d1 = e.dedoEnrolado || ''
+  const d2 = e.dedoEnrolado2 || ''
+  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
+  if (n === 0) return '🟡 Sin huella'
+  if (n === 1) return `🟢 1/2 · ${d1 || 'Sin dedo'}`
+  return `🟢 2/2 · ${d1 || 'Sin dedo'} + ${d2 || 'Sin dedo'}`
+})
+
 const resumen = computed(() => {
   let presentes = 0, tardanzas = 0, fallasSinExcusa = 0, fallasConExcusa = 0
   const hDia = horasPorJornada.value

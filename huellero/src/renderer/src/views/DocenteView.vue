@@ -55,6 +55,7 @@ const modalAbierto = ref(false)
       <EnrolarHuellaModal
         v-if="modalAbierto"
         :clase-activa="status.claseActiva"
+        :instructor-id="status.docente?.id"
         @close="modalAbierto = false"
       />
     </Transition>
