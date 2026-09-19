@@ -1,5 +1,7 @@
 import 'dotenv/config'
 import http from 'http'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -133,3 +135,16 @@ app.use('/api/excusas', excusasRoutes)
 app.use('/api/clases', clasesRoutes)
 app.use('/api/enrolamiento', enrolamientoRoutes)
 app.use('/api/dispositivos', dispositivosRoutes)
+
+// Servir estáticos del frontend compilado (Single Service para Render)
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const publicPath = path.join(__dirname, 'public')
+app.use(express.static(publicPath))
+
+// Redirección SPA: si no es una petición /api, servir index.html de Vue
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Ruta de API no encontrada' })
+  }
+  res.sendFile(path.join(publicPath, 'index.html'))
+})

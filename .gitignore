@@ -38,3 +38,6 @@ huellero/release-app/
 
 # Config local del dispositivo (contiene deviceId + token)
 huellero/config.json
+
+# Backend public dist folder (generado automaticamente en el build)
+backend/public/

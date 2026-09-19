@@ -1,5 +1,7 @@
 import { io } from 'socket.io-client'
 
+
+
 function getSocketUrl() {
   if (typeof window === 'undefined') return 'http://localhost:3000'
   
@@ -15,7 +17,8 @@ function getSocketUrl() {
   return `${protocol}//${host}:3000`
 }
 
-const SOCKET_URL = getSocketUrl()
+// En producción se conecta a la misma raíz del servidor
+const SOCKET_URL = import.meta.env.PROD ? undefined : getSocketUrl()
 
 function getToken() {
   if (typeof window === 'undefined') return null

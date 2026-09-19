@@ -1,6 +1,9 @@
 function getBaseUrl() {
   if (typeof window === 'undefined') return 'http://localhost:3000/api'
   
+  // En producción (cuando el backend sirve el frontend), la API es relativa
+  if (import.meta.env.PROD) return '/api'
+
   const host = window.location.hostname
   const protocol = window.location.protocol
   const fullHost = window.location.host
