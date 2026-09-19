@@ -7,6 +7,7 @@ import StatCard from '../components/StatCard.vue'
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
 const showInhabilitarModal = ref(false)
+const motivoVer = ref(null)
 const editingId = ref(null)
 const inhabilitarTarget = ref(null)
 const inhabilitarMotivo = ref('')
@@ -172,17 +173,7 @@ async function activarInstructor(instructor) {
   try {
     await api.instructores.update(instructor._id, { estado: 'Activo', motivo: '' })
     await loadInstructores()
-    showToastFn('Instructor activado correctamente')
-  } catch (e) {
-    showToastFn('Error: ' + e.message, 'error')
-  }
-}
-
-async function eliminarInstructor(id) {
-  try {
-    await api.instructores.delete(id)
-    await loadInstructores()
-    showToastFn('Instructor eliminado correctamente')
+    showToastFn('Instructor habilitado correctamente')
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -336,20 +327,30 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
               </span>
             </td>
             <td>
-              <span class="badge" :class="i.estado === 'Activo' ? 'badge-success' : 'badge-danger'">{{ i.estado }}</span>
-              <div v-if="i.estado === 'Inactivo' && i.motivo" class="motivo-texto">{{ i.motivo }}</div>
+              <span v-if="i.estado === 'Activo'" class="badge badge-success">{{ i.estado }}</span>
+              <span v-else class="badge badge-danger badge-clickable" role="button" tabindex="0" title="Ver motivo de inhabilitación" @click="motivoVer = i" @keydown.enter="motivoVer = i">{{ i.estado }}</span>
             </td>
             <td>
               <div class="btn-group">
                 <button class="btn btn-outline btn-sm" @click="openEdit(i)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button v-if="i.estado === 'Activo'" class="btn btn-warning btn-sm" @click="abrirInhabilitar(i)" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
-                <button v-else class="btn btn-success btn-sm" @click="activarInstructor(i)" title="Activar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
-                <button class="btn btn-danger btn-sm" @click="eliminarInstructor(i._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                <button v-else class="btn btn-success btn-sm" @click="activarInstructor(i)" title="Habilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div v-if="motivoVer" class="modal-overlay" @click.self="motivoVer = null" @keydown.esc="motivoVer = null">
+    <div class="modal motivo-modal">
+      <h2>Motivo de inhabilitación</h2>
+      <p class="motivo-modal-nombre">{{ nombreCompleto(motivoVer) }}</p>
+      <div class="motivo-modal-caja">{{ motivoVer.motivo || 'No se registró un motivo para esta inhabilitación.' }}</div>
+      <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
+        <button class="btn btn-outline" @click="motivoVer = null" title="Cerrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
     </div>
   </div>
 
@@ -404,6 +405,11 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
 </template>
 
 <style scoped>
+.badge-clickable { cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
+.badge-clickable:hover { box-shadow: 0 0 0 3px rgba(196, 67, 43, 0.15); }
+.motivo-modal { max-width: 460px; }
+.motivo-modal-nombre { font-size: 14px; font-weight: 600; color: #16210F; margin: -12px 0 14px; }
+.motivo-modal-caja { padding: 14px 16px; background: #FBEAE6; border: 1px solid #F3CFC6; border-radius: 10px; color: #7A2A1A; font-size: 14.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .busqueda-card {
   padding: 20px 24px;
   margin-bottom: 24px;

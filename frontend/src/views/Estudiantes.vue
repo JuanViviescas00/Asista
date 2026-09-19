@@ -262,19 +262,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
 <template>
   <div class="page-header">
-    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-      <div>
-        <h1>Estudiantes</h1>
-        <p v-if="esInstructor">
-          ‍ Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
-        </p>
-        <p v-else>
-          Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
-        </p>
-      </div>
-      <div v-if="esInstructor" style="background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
-        Fichas asignadas: {{ fichasList.length }}
-      </div>
+    <h1>Estudiantes</h1>
+    <p v-if="esInstructor">
+      ‍ Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
+    </p>
+    <p v-else>
+      Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
+    </p>
+    <div v-if="esInstructor" style="display: inline-block; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+      Fichas asignadas: {{ fichasList.length }}
     </div>
   </div>
 

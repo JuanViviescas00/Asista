@@ -1,18 +1,49 @@
 .admin-profile-page-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   margin-bottom: 34px;
+  padding: 108px 40px 26px;
+  min-height: 150px;
+  border-radius: 20px;
+  background: #F7F9F5;
+  box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09);
+  text-align: center;
+}
+
+.admin-profile-page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%201440%20200%22%20preserveAspectRatio%3D%22none%22%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C58%20C1325%2C112%201080%2C18%20878%2C52%20C677%2C86%20605%2C128%20446%2C110%20C288%2C92%20245%2C46%20144%2C70%20C72%2C84%200%2C64%200%2C84%20Z%22%20fill%3D%22%231F5C00%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C28%20C1267%2C78%20979%2C4%20792%2C26%20C605%2C48%20547%2C92%20389%2C78%20C230%2C64%20187%2C18%2086%2C32%20C43%2C38%200%2C26%200%2C44%20Z%22%20fill%3D%22%2339A900%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C10%20C1181%2C48%20864%2C-6%20691%2C10%20C518%2C26%20461%2C58%20317%2C48%20C173%2C38%20144%2C8%2058%2C16%20C29%2C20%200%2C10%200%2C20%20Z%22%20fill%3D%22%238BD457%22/%3E%0A%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 122px;
+  pointer-events: none;
+}
+
+.admin-profile-page-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .admin-profile-page-header h1 {
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 30px;
+  font-weight: 800;
   letter-spacing: -.02em;
-  color: #16210F;
-}
+  color: #1F5C00;
+  text-align: center; }
 
 .admin-profile-page-header p {
-  color: #7C857A;
+  color: #4A5344;
   font-size: 14.5px;
-  margin-top: 6px;
+  margin-top: 8px;
+  text-align: center; }
+
+@media (max-width: 640px) {
+  .admin-profile-page-header { padding: 96px 24px 22px; }
+  .admin-profile-page-header h1 { font-size: 24px; }
 }
 
 .admin-profile-card {

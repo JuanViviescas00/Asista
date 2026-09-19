@@ -6,20 +6,13 @@ function getSocketUrl() {
   const host = window.location.hostname
   const protocol = window.location.protocol
   const fullHost = window.location.host
-  const port = window.location.port
-
+  
   // Soporte para túneles de VS Code / Dev Tunnels
   if (fullHost.includes('-5173.')) {
     return `${protocol}//${fullHost.replace('-5173.', '-3000.')}`
   }
   
-  // En desarrollo local con servidor Vite separado en :5173
-  if (port === '5173') {
-    return `${protocol}//${host}:3000`
-  }
-
-  // En producción servido desde el mismo dominio
-  return window.location.origin
+  return `${protocol}//${host}:3000`
 }
 
 const SOCKET_URL = getSocketUrl()

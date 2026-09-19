@@ -1,23 +1,17 @@
 function getBaseUrl() {
-  if (typeof window === 'undefined') return '/api'
+  if (typeof window === 'undefined') return 'http://localhost:3000/api'
   
   const host = window.location.hostname
   const protocol = window.location.protocol
   const fullHost = window.location.host
-  const port = window.location.port
-
+  
   // Si se usa VS Code Port Forwarding / Dev Tunnels (ej: abc-5173.use.devtunnels.ms)
   if (fullHost.includes('-5173.')) {
     return `${protocol}//${fullHost.replace('-5173.', '-3000.')}/api`
   }
   
-  // En desarrollo local con servidor Vite separado en :5173
-  if (port === '5173') {
-    return `${protocol}//${host}:3000/api`
-  }
-
-  // En producción (Render / Docker / Nginx) servido desde el mismo host
-  return '/api'
+  // Si se accede por IP local (ej: 192.168.1.15) o localhost
+  return `${protocol}//${host}:3000/api`
 }
 
 const BASE = getBaseUrl()

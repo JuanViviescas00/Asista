@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import api from '../services/index.js'
 import StatCard from '../components/StatCard.vue'
 
@@ -328,8 +328,92 @@ const resumenReporte = computed(() => {
   }
 })
 
+// ---------- Filtro por pasos ----------
+const TOTAL_PASOS = 4
+const pasoMax = ref(1) // último paso visible
+
+const sinMovimiento = typeof window !== 'undefined' &&
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+function mostrarPaso(n) {
+  if (n <= pasoMax.value) return
+  pasoMax.value = n
+  nextTick(() => {
+    const destino = document.getElementById(n === TOTAL_PASOS ? 'rf-resumen' : `rf-paso-${n}`)
+    destino?.scrollIntoView({ behavior: sinMovimiento ? 'auto' : 'smooth', block: 'nearest' })
+  })
+}
+
+// Al elegir ficha se revela el paso 2; si se deja vacía se vuelve al paso 1
+watch(filtroFicha, (val) => {
+  showPreview.value = false
+  filtroEstudiante.value = 'todos'
+  filtroInstructor.value = 'todos'
+  if (val) mostrarPaso(2)
+  else pasoMax.value = 1
+})
+
+const hayPersona = computed(() =>
+  filtroInstructor.value !== 'todos' || filtroEstudiante.value !== 'todos' || !!busquedaTexto.value.trim()
+)
+const hayFechas = computed(() => !!(fechaDesde.value || fechaHasta.value))
+const rangoInvalido = computed(() =>
+  !!(fechaDesde.value && fechaHasta.value && fechaDesde.value > fechaHasta.value)
+)
+
+// Fecha local (evita el desfase de toISOString por zona horaria)
+function fechaLocalISO(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dia}`
+}
+
+function aplicarAtajo(dias) {
+  if (dias === 0) {
+    fechaDesde.value = ''
+    fechaHasta.value = ''
+    return
+  }
+  const hoy = new Date()
+  const inicio = new Date()
+  inicio.setDate(hoy.getDate() - dias)
+  fechaDesde.value = fechaLocalISO(inicio)
+  fechaHasta.value = fechaLocalISO(hoy)
+}
+
+const opcionesHoras = [
+  { valor: 'todas', texto: 'Todas', icono: 'eye' },
+  { valor: 'sin_excusa', texto: 'Sin excusa', icono: 'x' },
+  { valor: 'con_excusa', texto: 'Con excusa', icono: 'check' }
+]
+const textoHoras = { todas: 'Todas las horas', sin_excusa: 'Solo sin excusa', con_excusa: 'Solo con excusa' }
+const textoFormato = { pdf: 'PDF', xlsx: 'Excel (CSV)' }
+
+// Resumen en vivo de la búsqueda
+const resumenFiltros = computed(() => {
+  const items = []
+  const f = fichaSeleccionada.value
+  items.push(f ? `Ficha ${f.codigoFicha}` : 'Sin ficha')
+
+  const inst = todosInstructores.value.find(i => String(i._id) === String(filtroInstructor.value))
+  items.push(filtroInstructor.value === 'todos' || !inst ? 'Todos los docentes' : `${inst.nombres} ${inst.apellidos}`)
+
+  const est = todosEstudiantes.value.find(e => String(e._id) === String(filtroEstudiante.value))
+  items.push(filtroEstudiante.value === 'todos' || !est ? 'Todos los aprendices' : `${est.nombres} ${est.apellidos}`)
+
+  if (busquedaTexto.value.trim()) items.push(`Busca “${busquedaTexto.value.trim()}”`)
+
+  items.push(hayFechas.value
+    ? `${fechaDesde.value || 'inicio'} a ${fechaHasta.value || 'hoy'}`
+    : 'Todo el periodo')
+  items.push(textoHoras[filtroTipoInasistencia.value])
+  items.push(textoFormato[formato.value])
+  return items
+})
+
 async function generarReporte() {
-  if (!filtroFicha.value) return
+  if (!filtroFicha.value || rangoInvalido.value) return
   try {
     const [estudiantes, asistencias] = await Promise.all([
       api.estudiantes.getAll({ fichaId: filtroFicha.value }),
@@ -399,7 +483,9 @@ function limpiar() {
   fechaHasta.value = ''
   filtroTipoInasistencia.value = 'todas'
   vistaReporte.value = 'aprendices'
+  formato.value = 'pdf'
   showPreview.value = false
+  pasoMax.value = 1
 }
 </script>
 
@@ -413,117 +499,176 @@ function limpiar() {
     <strong> Acceso Restringido a Reportes:</strong> Como Docente Común no tienes asignada ninguna Ficha bajo tu liderazgo. La generación de reportes está reservada para el Administrador o Docente Líder de Ficha.
   </div>
 
-  <div v-else class="card">
-    <div class="card-header"><h3>Parámetros de Búsqueda y Filtrado</h3></div>
-    
-    <!-- GRID DE FILTROS PRINCIPALES -->
-    <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-      <!-- 1. Selector de Ficha -->
-      <div class="form-group">
-        <label> Ficha de Formación <span style="color: #ef4444;">*</span></label>
-        <select v-model="filtroFicha" @change="showPreview = false; filtroEstudiante = 'todos'; filtroInstructor = 'todos'">
-          <option :value="null" disabled>Selecciona una ficha</option>
-          <option v-for="f in fichasLideradas" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
-        </select>
-      </div>
+  <form v-else class="rf-panel" novalidate @submit.prevent="generarReporte">
+    <h2 class="rf-h2">Parámetros de Búsqueda y Filtrado</h2>
+    <p class="rf-sub">Empieza por la ficha. Los siguientes pasos irán apareciendo a medida que avances.</p>
 
-      <!-- 2. Filtro por Docente / Materia -->
-      <div class="form-group">
-        <label>‍ Docente / Instructor</label>
-        <select v-model="filtroInstructor" :disabled="!filtroFicha">
-          <option value="todos">Todos los Docentes / Clases</option>
-          <option v-for="inst in instructoresDeLaFicha" :key="inst._id" :value="inst._id">
-            {{ inst.nombres }} {{ inst.apellidos }} ({{ inst.especialidad || 'Docente' }})
-          </option>
-        </select>
+    <!-- PASO 1: FICHA (siempre visible) -->
+    <section id="rf-paso-1" class="rf-paso" :class="{ 'rf-activo': pasoMax === 1, 'rf-completo': pasoMax > 1 }" aria-labelledby="rf-t1">
+      <div class="rf-num" aria-hidden="true">
+        <template v-if="pasoMax > 1"><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></template>
+        <template v-else>1</template>
       </div>
-
-      <!-- 3. Filtro por Aprendiz / Estudiante -->
-      <div class="form-group">
-        <label> Aprendiz Específico</label>
-        <select v-model="filtroEstudiante" :disabled="!filtroFicha">
-          <option value="todos">Todos los Aprendices</option>
-          <option v-for="est in estudiantesFicha" :key="est._id" :value="est._id">
-            {{ est.nombres }} {{ est.apellidos }} ({{ est.numeroDocumento }})
-          </option>
-        </select>
+      <div>
+        <h3 id="rf-t1" class="rf-titulo">Elige la ficha <span class="rf-etiqueta rf-obligatorio">Obligatorio</span></h3>
+        <p class="rf-ayuda">Al elegirla aparecerá el siguiente paso.</p>
+        <div class="rf-campo rf-campo-ficha">
+          <label for="rf-ficha" class="rf-solo-lectores">Ficha de Formación</label>
+          <select id="rf-ficha" v-model="filtroFicha">
+            <option :value="null" disabled>Selecciona una ficha</option>
+            <option v-for="f in fichasLideradas" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
+          </select>
+        </div>
       </div>
+    </section>
 
-      <!-- 4. Rango de Fechas -->
-      <div class="form-group">
-        <label> Fecha Desde</label>
-        <input v-model="fechaDesde" type="date" />
+    <!-- PASO 2: PERSONA -->
+    <Transition name="rf-entra">
+      <section v-if="pasoMax >= 2" id="rf-paso-2" class="rf-paso" :class="{ 'rf-activo': pasoMax === 2, 'rf-completo': pasoMax > 2 }" aria-labelledby="rf-t2">
+        <div class="rf-num" aria-hidden="true">
+          <template v-if="pasoMax > 2"><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></template>
+          <template v-else>2</template>
+        </div>
+        <div>
+          <h3 id="rf-t2" class="rf-titulo">Filtra por persona <span class="rf-etiqueta">Opcional</span></h3>
+          <p class="rf-ayuda">Déjalo vacío para ver todos los docentes y aprendices de la ficha.</p>
+          <div class="rf-rejilla">
+            <div class="rf-campo">
+              <label for="rf-docente">Docente / Instructor</label>
+              <select id="rf-docente" v-model="filtroInstructor">
+                <option value="todos">Todos los Docentes / Clases</option>
+                <option v-for="inst in instructoresDeLaFicha" :key="inst._id" :value="inst._id">
+                  {{ inst.nombres }} {{ inst.apellidos }} ({{ inst.especialidad || 'Docente' }})
+                </option>
+              </select>
+            </div>
+            <div class="rf-campo">
+              <label for="rf-aprendiz">Aprendiz Específico</label>
+              <select id="rf-aprendiz" v-model="filtroEstudiante">
+                <option value="todos">Todos los Aprendices</option>
+                <option v-for="est in estudiantesFicha" :key="est._id" :value="est._id">
+                  {{ est.nombres }} {{ est.apellidos }} ({{ est.numeroDocumento }})
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="rf-separador">o busca directamente</div>
+
+          <div class="rf-campo rf-busqueda">
+            <label for="rf-busqueda">Búsqueda rápida por aprendiz, documento o docente</label>
+            <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="rf-busqueda" v-model="busquedaTexto" type="search" autocomplete="off"
+                   placeholder="Escribe un nombre o número de documento" />
+          </div>
+
+          <div v-if="pasoMax === 2" class="rf-pie">
+            <button type="button" class="rf-continuar" @click="mostrarPaso(3)">
+              <span>{{ hayPersona ? 'Continuar' : 'Omitir este paso' }}</span> <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+    </Transition>
+
+    <!-- PASO 3: PERIODO -->
+    <Transition name="rf-entra">
+      <section v-if="pasoMax >= 3" id="rf-paso-3" class="rf-paso" :class="{ 'rf-activo': pasoMax === 3, 'rf-completo': pasoMax > 3 }" aria-labelledby="rf-t3">
+        <div class="rf-num" aria-hidden="true">
+          <template v-if="pasoMax > 3"><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></template>
+          <template v-else>3</template>
+        </div>
+        <div>
+          <h3 id="rf-t3" class="rf-titulo">Define el periodo <span class="rf-etiqueta">Opcional</span></h3>
+          <p class="rf-ayuda">Usa un atajo o escribe las fechas exactas.</p>
+          <div class="rf-rejilla">
+            <div class="rf-campo">
+              <label for="rf-desde">Fecha Desde</label>
+              <input id="rf-desde" v-model="fechaDesde" type="date" />
+            </div>
+            <div class="rf-campo">
+              <label for="rf-hasta">Fecha Hasta</label>
+              <input id="rf-hasta" v-model="fechaHasta" type="date" />
+            </div>
+          </div>
+          <div class="rf-atajos">
+            <span class="rf-atajos-titulo">Atajos:</span>
+            <button type="button" class="rf-chip" @click="aplicarAtajo(7)">Última semana</button>
+            <button type="button" class="rf-chip" @click="aplicarAtajo(30)">Último mes</button>
+            <button type="button" class="rf-chip" @click="aplicarAtajo(0)">Todo el periodo</button>
+          </div>
+          <p v-if="rangoInvalido" class="rf-error" role="alert">La fecha inicial no puede ser posterior a la final.</p>
+
+          <div v-if="pasoMax === 3" class="rf-pie">
+            <button type="button" class="rf-continuar" @click="mostrarPaso(4)">
+              <span>{{ hayFechas ? 'Continuar' : 'Omitir este paso' }}</span> <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            </button>
+          </div>
+        </div>
+      </section>
+    </Transition>
+
+    <!-- PASO 4: HORAS Y FORMATO -->
+    <Transition name="rf-entra">
+      <section v-if="pasoMax >= 4" id="rf-paso-4" class="rf-paso rf-activo" aria-labelledby="rf-t4">
+        <div class="rf-num" aria-hidden="true">4</div>
+        <div>
+          <h3 id="rf-t4" class="rf-titulo">Horas y formato de descarga <span class="rf-etiqueta">Opcional</span></h3>
+          <p class="rf-ayuda">Elige qué horas mostrar y cómo quieres descargar el resultado.</p>
+
+          <p id="rf-lbl-horas" class="rf-grupo-etq">Filtro de horas</p>
+          <div class="rf-grupo-seg" role="radiogroup" aria-labelledby="rf-lbl-horas">
+            <label v-for="op in opcionesHoras" :key="op.valor" class="rf-seg">
+              <input v-model="filtroTipoInasistencia" type="radio" name="rf_horas" :value="op.valor" />
+              <span>
+                <svg v-if="op.icono === 'eye'" class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else-if="op.icono === 'x'" class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg v-else class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                {{ op.texto }}
+              </span>
+            </label>
+          </div>
+
+          <p id="rf-lbl-formato" class="rf-grupo-etq" style="margin-top: 18px;">Formato de descarga</p>
+          <div class="rf-grupo-seg" role="radiogroup" aria-labelledby="rf-lbl-formato">
+            <label class="rf-seg">
+              <input v-model="formato" type="radio" name="rf_formato" value="pdf" />
+              <span><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> PDF (Impresión / Comité)</span>
+            </label>
+            <label class="rf-seg">
+              <input v-model="formato" type="radio" name="rf_formato" value="xlsx" />
+              <span><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Excel (CSV)</span>
+            </label>
+          </div>
+        </div>
+      </section>
+    </Transition>
+
+    <!-- RESUMEN + ACCIONES -->
+    <Transition name="rf-entra">
+      <div v-if="pasoMax >= 4" id="rf-resumen" class="rf-resumen" aria-live="polite">
+        <p class="rf-resumen-titulo">Tu búsqueda</p>
+        <ul class="rf-resumen-lista">
+          <li v-for="(item, i) in resumenFiltros" :key="i">{{ item }}</li>
+        </ul>
+        <div class="rf-acciones">
+          <button type="submit" class="rf-btn rf-btn-primario" :disabled="!filtroFicha || rangoInvalido">
+            <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Buscar
+          </button>
+          <button type="button" class="rf-btn rf-btn-secundario" @click="limpiar">
+            <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Limpiar todo
+          </button>
+        </div>
       </div>
+    </Transition>
 
-      <div class="form-group">
-        <label> Fecha Hasta</label>
-        <input v-model="fechaHasta" type="date" />
-      </div>
-
-      <!-- 5. Formato -->
-      <div class="form-group">
-        <label> Formato de Descarga</label>
-        <select v-model="formato">
-          <option value="pdf">PDF (Impresión / Comité)</option>
-          <option value="xlsx">XLSX (CSV Excel)</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- BARRA DE BÚSQUEDA LIBRE EN VIVO -->
-    <div style="margin-top: 16px; padding: 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid #e2e8f0; display: flex; flex-direction: column; gap: 10px;">
-      <label style="font-weight: 700; font-size: 13px; color: #1e293b; display: flex; align-items: center; gap: 6px;">
-        Búsqueda Rápida en Vivo (Aprendiz o Docente):
-      </label>
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <input
-          v-model="busquedaTexto"
-          type="text"
-          placeholder="Escribe el nombre del aprendiz, número de documento o nombre del docente..."
-          style="flex: 1; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 14px;"
-        />
-        <button v-if="busquedaTexto" class="btn btn-outline btn-sm" @click="busquedaTexto = ''" title="Limpiar">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- FILTRO RÁPIDO DE INASISTENCIAS (HORAS CON/SIN EXCUSA) -->
-    <div style="margin-top: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-      <span style="font-weight: 700; font-size: 13px; color: #475569;">Filtro de Horas:</span>
-      <button
-        class="btn btn-sm"
-        :class="filtroTipoInasistencia === 'todas' ? 'btn-primary' : 'btn-outline'"
-        @click="filtroTipoInasistencia = 'todas'"
-        title="Horas Totales (Todas)"
-      >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+    <!-- Si aún no llega al último paso, permite limpiar igualmente -->
+    <div v-if="pasoMax > 1 && pasoMax < 4" class="rf-acciones rf-acciones-parcial">
+      <button type="button" class="rf-btn rf-btn-secundario" @click="limpiar">
+        <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Limpiar todo
       </button>
-      <button
-        class="btn btn-sm"
-        :class="filtroTipoInasistencia === 'sin_excusa' ? 'btn-danger' : 'btn-outline'"
-        @click="filtroTipoInasistencia = 'sin_excusa'"
-        title="Solo Sin Excusa (Injustificadas)"
-      >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-      <button
-        class="btn btn-sm"
-        :class="filtroTipoInasistencia === 'con_excusa' ? 'btn-info' : 'btn-outline'"
-        @click="filtroTipoInasistencia = 'con_excusa'"
-        title="Solo Con Excusa (Justificadas)"
-      >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      </button>
     </div>
-
-    <div class="btn-group" style="margin-top: 20px;">
-      <button class="btn btn-primary" :disabled="!filtroFicha" @click="generarReporte" title="Consultar y Generar Reporte">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      </button>
-      <button class="btn btn-outline" @click="limpiar" title="Limpiar Filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-    </div>
-  </div>
+  </form>
 
   <div v-if="showPreview && fichaSeleccionada" id="reporte-print">
     <div class="card">
@@ -760,3 +905,217 @@ function limpiar() {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ====== Filtro por pasos (Reportes) ====== */
+.rf-panel {
+  --rf-verde: var(--verde, #39a900);
+  --rf-verde-osc: #2c8300;
+  --rf-verde-claro: #eaf6e0;
+  --rf-verde-borde: #b9de9c;
+  --rf-borde: var(--borde, #e3e8df);
+  --rf-borde-fuerte: #cdd5c8;
+  --rf-texto: var(--tinta, #1a1f16);
+  --rf-suave: var(--texto-suave, #5b6356);
+  --rf-tenue: #8b9385;
+  --rf-rojo: #c62828;
+  --rf-rojo-claro: #fdeceb;
+  --rf-radio: 10px;
+
+  background: #fff;
+  border-radius: 24px;
+  padding: 28px 36px 32px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(30, 50, 20, .04), 0 12px 32px rgba(30, 50, 20, .06);
+}
+
+.rf-panel :focus-visible { outline: 2px solid var(--rf-verde); outline-offset: 2px; }
+
+.rf-h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; color: var(--rf-texto); }
+.rf-sub { margin: 0 0 8px; font-size: 14px; color: var(--rf-suave); }
+
+.rf-solo-lectores { position: absolute; left: -9999px; }
+
+/* Pasos */
+.rf-paso {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  column-gap: 16px;
+  padding: 20px 0 22px;
+}
+.rf-paso + .rf-paso,
+.rf-paso + .rf-resumen { border-top: 1px solid var(--rf-borde); }
+.rf-paso + .rf-resumen { margin-top: 0; }
+
+.rf-num {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--rf-borde-fuerte);
+  background: #fff;
+  display: grid; place-items: center;
+  font-size: 14px; font-weight: 800;
+  color: var(--rf-suave);
+  transition: background .2s, border-color .2s, color .2s;
+}
+.rf-activo .rf-num { border-color: var(--rf-verde); color: var(--rf-verde-osc); background: var(--rf-verde-claro); }
+.rf-completo .rf-num { background: var(--rf-verde); border-color: var(--rf-verde); color: #fff; }
+.rf-num .rf-ico { width: 17px; height: 17px; }
+
+.rf-titulo { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 3px 0 2px; font-size: 16px; font-weight: 800; color: var(--rf-texto); }
+.rf-ayuda { margin: 0 0 14px; font-size: 13.5px; color: var(--rf-suave); }
+
+.rf-etiqueta { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #f0f2ee; color: var(--rf-suave); }
+.rf-obligatorio { background: var(--rf-rojo-claro); color: var(--rf-rojo); }
+
+.rf-ico { width: 18px; height: 18px; flex: none; }
+
+/* Campos */
+.rf-rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.rf-campo { position: relative; }
+.rf-campo label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--rf-texto); }
+.rf-campo-ficha { max-width: 460px; }
+
+.rf-campo select,
+.rf-campo input[type="search"],
+.rf-campo input[type="date"] {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  background: #fff;
+  border: 1px solid var(--rf-borde);
+  border-radius: var(--rf-radio);
+  font: inherit;
+  font-size: 15px;
+  color: var(--rf-texto);
+  transition: border-color .15s, box-shadow .15s;
+}
+.rf-campo select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 38px;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%235b6356' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+}
+.rf-campo select:hover,
+.rf-campo input:hover { border-color: var(--rf-borde-fuerte); }
+.rf-campo select:focus,
+.rf-campo input:focus { outline: none; border-color: var(--rf-verde); box-shadow: 0 0 0 3px rgba(57, 169, 0, .18); }
+.rf-campo input::placeholder { color: var(--rf-tenue); }
+
+.rf-error { margin: 10px 0 0; font-size: 13px; font-weight: 600; color: var(--rf-rojo); }
+
+.rf-separador {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px 0 12px;
+  font-size: 13px; color: var(--rf-tenue);
+}
+.rf-separador::before,
+.rf-separador::after { content: ""; flex: 1; height: 1px; background: var(--rf-borde); }
+
+.rf-busqueda .rf-ico { position: absolute; left: 14px; bottom: 13px; width: 19px; height: 19px; color: var(--rf-tenue); pointer-events: none; }
+.rf-busqueda input { padding-left: 42px; }
+
+/* Atajos y opciones segmentadas */
+.rf-atajos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+.rf-atajos-titulo { font-size: 13px; color: var(--rf-suave); margin-right: 2px; }
+
+.rf-chip,
+.rf-seg span {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--rf-borde);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px; font-weight: 600;
+  color: var(--rf-texto);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.rf-chip:hover,
+.rf-seg span:hover { border-color: var(--rf-verde-borde); background: #f7fbf3; }
+
+.rf-grupo-seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.rf-grupo-etq { font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--rf-texto); }
+
+.rf-seg { position: relative; margin: 0; }
+.rf-seg input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.rf-seg input:checked + span { background: var(--rf-verde-claro); border-color: var(--rf-verde); color: var(--rf-verde-osc); }
+.rf-seg input:focus-visible + span { outline: 2px solid var(--rf-verde); outline-offset: 2px; }
+.rf-seg span { border-radius: var(--rf-radio); }
+
+/* Botón para pasar al siguiente paso */
+.rf-pie { margin-top: 20px; }
+.rf-continuar {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 42px; padding: 0 18px;
+  background: #fff;
+  border: 1px solid var(--rf-verde-borde);
+  border-radius: var(--rf-radio);
+  color: var(--rf-verde-osc);
+  font: inherit; font-weight: 700; font-size: 14.5px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.rf-continuar:hover { background: var(--rf-verde-claro); border-color: var(--rf-verde); }
+
+/* Resumen y acciones */
+.rf-resumen {
+  margin-top: 6px;
+  padding: 16px 18px;
+  background: #f7f9f5;
+  border: 1px solid var(--rf-borde);
+  border-radius: 16px;
+}
+.rf-resumen-titulo { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--rf-suave); }
+.rf-resumen-lista { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.rf-resumen-lista li {
+  padding: 4px 12px;
+  background: #fff;
+  border: 1px solid var(--rf-borde);
+  border-radius: 999px;
+  font-size: 13px; font-weight: 600;
+  color: var(--rf-texto);
+}
+
+.rf-acciones { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.rf-acciones-parcial { margin-top: 4px; }
+
+.rf-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px; padding: 0 22px;
+  border-radius: var(--rf-radio);
+  border: 1px solid var(--rf-borde);
+  background: #fff;
+  color: var(--rf-texto);
+  font: inherit; font-weight: 700; font-size: 15px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.rf-btn .rf-ico { width: 19px; height: 19px; }
+.rf-btn-primario { background: var(--rf-verde); border-color: var(--rf-verde); color: #fff; }
+.rf-btn-primario:hover:not(:disabled) { background: var(--verde-hover, #2f8c00); border-color: var(--verde-hover, #2f8c00); }
+.rf-btn-primario:disabled { opacity: .5; cursor: not-allowed; }
+.rf-btn-secundario:hover { background: #f4f6f2; border-color: var(--rf-borde-fuerte); }
+
+/* Animación de entrada de cada paso */
+.rf-entra-enter-active { animation: rf-entra .4s cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes rf-entra {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (max-width: 860px) {
+  .rf-panel { padding: 22px 18px 26px; border-radius: 20px; }
+  .rf-rejilla { grid-template-columns: 1fr; }
+  .rf-paso { grid-template-columns: 30px 1fr; column-gap: 12px; }
+  .rf-num { width: 28px; height: 28px; font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-panel * { transition: none !important; }
+  .rf-entra-enter-active { animation: none; }
+}
+</style>

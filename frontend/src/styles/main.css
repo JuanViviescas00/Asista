@@ -340,20 +340,58 @@ body {
 }
 
 .page-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   margin-bottom: 34px;
+  padding: 108px 40px 26px;
+  min-height: 150px;
+  border-radius: var(--radio-lg);
+  background: var(--hueso);
+  box-shadow: var(--sombra-suave);
+  text-align: center;
+}
+
+.page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%201440%20200%22%20preserveAspectRatio%3D%22none%22%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C58%20C1325%2C112%201080%2C18%20878%2C52%20C677%2C86%20605%2C128%20446%2C110%20C288%2C92%20245%2C46%20144%2C70%20C72%2C84%200%2C64%200%2C84%20Z%22%20fill%3D%22%231F5C00%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C28%20C1267%2C78%20979%2C4%20792%2C26%20C605%2C48%20547%2C92%20389%2C78%20C230%2C64%20187%2C18%2086%2C32%20C43%2C38%200%2C26%200%2C44%20Z%22%20fill%3D%22%2339A900%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C10%20C1181%2C48%20864%2C-6%20691%2C10%20C518%2C26%20461%2C58%20317%2C48%20C173%2C38%20144%2C8%2058%2C16%20C29%2C20%200%2C10%200%2C20%20Z%22%20fill%3D%22%238BD457%22/%3E%0A%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 122px;
+  pointer-events: none;
+}
+
+.page-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .page-header h1 {
-  font-size: 26px;
-  font-weight: 600;
+  font-size: 30px;
+  font-weight: 800;
   letter-spacing: -.02em;
-  color: var(--tinta);
+  color: var(--verde-oscuro);
+  text-align: center;
 }
 
 .page-header p {
-  color: var(--texto-suave);
-  margin-top: 6px;
+  color: var(--texto);
+  margin-top: 8px;
   font-size: 14.5px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    padding: 96px 24px 22px;
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+  }
 }
 
 .card {
@@ -641,7 +679,6 @@ table tbody tr:hover {
 }
 
 .empty-state {
-  text-align: center;
   padding: 56px 24px 48px;
   color: var(--texto-suave);
 }
@@ -824,8 +861,8 @@ table tbody tr:hover {
    queda fijo en la esquina superior derecha. */
 .app-topbar {
   position: absolute;
-  top: 20px;
-  right: 32px;
+  top: 66px;
+  right: 64px;
   z-index: 5;
   display: flex;
   align-items: center;
@@ -835,8 +872,15 @@ table tbody tr:hover {
 
 @media (max-width: 1023px) {
   .app-topbar {
-    top: 12px;
-    right: 16px;
+    top: 56px;
+    right: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-topbar {
+    top: 44px;
+    right: 24px;
   }
 }
 
@@ -847,8 +891,9 @@ table tbody tr:hover {
   padding: 9px 18px;
   background: var(--blanco);
   border: 1px solid var(--borde);
-  border-radius: var(--radio-sm);
-  color: var(--rojo);
+  border-radius: var(--radio-pill);
+  box-shadow: 0 2px 8px rgba(22, 33, 15, .12);
+  color: var(--verde-oscuro);
   font-size: 14px;
   font-weight: 600;
   font-family: var(--sans);
@@ -857,8 +902,9 @@ table tbody tr:hover {
 }
 
 .btn-logout-top:hover {
-  background: var(--rojo-suave);
-  border-color: var(--rojo);
+  background: var(--verde-tenue);
+  border-color: var(--verde);
+  color: var(--rojo);
 }
 
 .btn:disabled {
@@ -1065,7 +1111,6 @@ table tbody tr:hover {
   font-size: 14px;
   color: var(--texto-suave);
   cursor: pointer;
-  text-align: center;
   transition: border-color .18s var(--ease), background .18s var(--ease);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1154,7 +1199,6 @@ table tbody tr:hover {
 }
 
 .reporte-header {
-  text-align: center;
   padding-bottom: 20px;
   border-bottom: 2px solid var(--borde);
   margin-bottom: 20px;
@@ -1197,7 +1241,6 @@ table tbody tr:hover {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--borde);
-  text-align: center;
   font-size: 12px;
   color: var(--texto-suave);
 }
