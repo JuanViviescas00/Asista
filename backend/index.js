@@ -27,6 +27,9 @@ const app = express()
 const httpServer = http.createServer(app)
 const PORT = process.env.PORT || 3000
 
+// Render / Heroku / etc. usan un proxy inverso → necesario para express-rate-limit y req.ip
+app.set('trust proxy', 1)
+
 initSocket(httpServer)
 
 // Middlewares de seguridad perimetral
