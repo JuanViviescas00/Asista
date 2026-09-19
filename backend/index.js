@@ -34,7 +34,10 @@ app.use(helmet({
   crossOriginResourcePolicy: false,
   contentSecurityPolicy: false
 }))
-app.use(cors())
+app.use(cors( {origin: 'https://huelleroactualizado-1.onrender.com', // Permitir solicitudes desde cualquier origen
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Métodos HTTP permitidos
+  allowedHeaders: ['Content-Type', 'Authorization'], // Encabezados permitidos
+}))
 app.use(express.json({ limit: '10mb' }))
 
 const transporter = nodemailer.createTransport({
