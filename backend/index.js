@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import http from 'http'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
@@ -146,5 +147,13 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Ruta de API no encontrada' })
   }
-  res.sendFile(path.join(publicPath, 'index.html'))
+  const indexPath = path.join(publicPath, 'index.html')
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath)
+  }
+  return res.status(200).json({
+    ok: true,
+    message: 'Backend API Asista en ejecución. El frontend no está compilado en este servicio.',
+    timestamp: new Date().toISOString()
+  })
 })
