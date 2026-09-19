@@ -1,8 +1,10 @@
 import Ficha from '../models/Ficha.js'
 import Estudiante from '../models/Estudiante.js'
 import Dispositivo from '../models/Dispositivo.js'
+import Asistencia from '../models/Asistencia.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
+import { calcularResumenDesdeAsistencias } from '../services/asistenciaService.js'
 
 export async function getFichas(req, res) {
   try {
@@ -99,19 +101,67 @@ export async function getPlantillasFicha(req, res) {
       fichaId: { $in: idsBuscar },
       estado: 'Activo',
       huellaEnrolada: true,
-      huellaTemplate: { $ne: '' },
-    }).select('nombres apellidos huellaTemplate')
+      $or: [
+        { huellaTemplate: { $ne: '' } },
+        { huellaTemplate2: { $ne: '' } },
+      ],
+    }).select('nombres apellidos huellaTemplate huellaTemplate2')
 
     // Formato mínimo que consume el huellero (verify.js → toEngineRecord):
-    // { estudianteId, nombres, apellidos, template }
+    // { estudianteId, nombres, apellidos, template, template2 }
     const plantillas = estudiantes.map((e) => ({
       estudianteId: String(e._id),
       nombres: e.nombres,
       apellidos: e.apellidos,
-      template: e.huellaTemplate,
+      template: e.huellaTemplate || '',
+      template2: e.huellaTemplate2 || '',
     }))
 
     res.json(plantillas)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function getTardanzasResumen(req, res) {
+  try {
+    const { id } = req.params
+
+    const idsBuscar = [id]
+    if (mongoose.Types.ObjectId.isValid(id)) idsBuscar.push(new mongoose.Types.ObjectId(id))
+    try {
+      const queryFicha = []
+      if (mongoose.Types.ObjectId.isValid(id)) queryFicha.push({ _id: id })
+      queryFicha.push({ codigoFicha: String(id).trim() })
+      const fichaDoc = await Ficha.findOne({ $or: queryFicha })
+      if (fichaDoc) {
+        idsBuscar.push(fichaDoc._id)
+        if (fichaDoc.codigoFicha) idsBuscar.push(fichaDoc.codigoFicha)
+      }
+    } catch (_) {}
+
+    const estudiantes = await Estudiante.find({
+      fichaId: { $in: idsBuscar },
+      estado: { $ne: 'Retirado' },
+    }).select('_id')
+
+    const estudianteIds = estudiantes.map(e => e._id)
+    const asistencias = await Asistencia.find({ estudianteId: { $in: estudianteIds } }).sort({ fecha: 1 })
+
+    const porEstudiante = new Map()
+    for (const a of asistencias) {
+      const key = String(a.estudianteId)
+      if (!porEstudiante.has(key)) porEstudiante.set(key, [])
+      porEstudiante.get(key).push(a)
+    }
+
+    const resumen = {}
+    for (const est of estudiantes) {
+      const key = String(est._id)
+      resumen[key] = calcularResumenDesdeAsistencias(porEstudiante.get(key) || [])
+    }
+
+    res.json({ ok: true, resumen })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

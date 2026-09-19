@@ -4,6 +4,7 @@ import AppIcon from '../components/AppIcon.vue'
 
 const props = defineProps({
   onLogin: { type: Function, required: true },
+  online: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['volver'])
@@ -48,6 +49,11 @@ async function enviar() {
       <h2>Acceso docente</h2>
       <p class="hint">Inicia sesión para administrar la clase y el enrolamiento.</p>
 
+      <div class="estado-conexion" :class="online ? 'ok' : 'off'">
+        <AppIcon :name="online ? 'wifi' : 'wifi-off'" :size="14" />
+        <span>{{ online ? 'En línea' : 'Sin conexión — esperando servidor' }}</span>
+      </div>
+
       <label>
         Correo electrónico
         <input v-model="correo" type="email" autocomplete="email" required autofocus />
@@ -65,9 +71,9 @@ async function enviar() {
         </p>
       </Transition>
 
-      <button class="primary" type="submit" :disabled="cargando">
-        <AppIcon v-if="cargando" name="loader" :size="16" class="spin" />
-        {{ cargando ? 'Verificando…' : 'Entrar' }}
+      <button class="primary" type="submit" :disabled="cargando || !online">
+        <AppIcon v-if="cargando || !online" name="loader" :size="16" class="spin" />
+        {{ cargando ? 'Verificando…' : (!online ? 'Conectando al servidor…' : 'Entrar') }}
       </button>
 
       <button class="ghost" type="button" @click="emit('volver')">Volver</button>
@@ -130,6 +136,23 @@ h2 {
   margin: 0 0 6px;
   color: var(--muted);
   font-size: 14px;
+}
+
+.estado-conexion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.estado-conexion.ok {
+  color: var(--accent);
+}
+
+.estado-conexion.off {
+  color: var(--muted);
 }
 
 label {

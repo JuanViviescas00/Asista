@@ -152,8 +152,13 @@ let dpfpdd = null
 let inicializado = false
 let errorInicializacion = null
 
+// Manejador del lector actualmente abierto (null cuando no hay captura en curso).
+// Lo usa cancelarCapturaActual() para poder cancelar una captura en vuelo desde
+// otro handler (IPC) mientras dpfpdd_capture corre en un worker de koffi.
+let devActual = null
+
 let dpfpdd_init, dpfpdd_query_devices, dpfpdd_open, dpfpdd_close
-let dpfpdd_get_device_capabilities, dpfpdd_capture
+let dpfpdd_get_device_capabilities, dpfpdd_capture, dpfpdd_cancel
 
 function describirError(code) {
   switch (code) {
@@ -226,6 +231,7 @@ function declararBindings() {
     koffi.pointer('uint32'),
     koffi.pointer('uint8'),
   ])
+  dpfpdd_cancel = dpfpdd.func('__stdcall', 'dpfpdd_cancel', 'int', [koffi.pointer(DPFPDD_DEV)])
 }
 
 /**
@@ -336,7 +342,7 @@ function obtenerResolucion(dev) {
   }
 }
 
-function capturarImagen(dev, timeoutMs, dpi) {
+async function capturarImagen(dev, timeoutMs, dpi) {
   const captureParam = {
     size: koffi.sizeof(DPFPDD_CAPTURE_PARAM),
     image_fmt: DPFPDD_IMG_FMT_PIXEL_BUFFER,
@@ -353,7 +359,12 @@ function capturarImagen(dev, timeoutMs, dpi) {
   sizeBuf.writeUInt32LE(MAX_IMAGE_SIZE, 0) // [in] tamaño del buffer imageBuf asignado
   const imageBuf = Buffer.alloc(MAX_IMAGE_SIZE)
 
-  const rc = dpfpdd_capture(dev, captureParam, timeoutMs, captureResult, sizeBuf, imageBuf)
+  const rc = await new Promise((resolve, reject) => {
+    dpfpdd_capture.async(dev, captureParam, timeoutMs, captureResult, sizeBuf, imageBuf, (err, rc) => {
+      if (err) reject(err)
+      else resolve(rc)
+    })
+  })
   if (rc !== DPFPDD_SUCCESS) {
     throw new Error(`dpfpdd_capture() falló: ${describirError(rc)}`)
   }
@@ -393,7 +404,8 @@ function grayscaleToPngBase64(gray, width, height) {
 }
 
 /**
- * Captura una huella del lector DigitalPersona (síncrona, bloqueante).
+ * Captura una huella del lector DigitalPersona (asíncrona: dpfpdd_capture corre en
+ * un worker de koffi, sin bloquear el hilo principal).
  *
  * @param {number} [timeoutMs] Tiempo máximo de espera en ms (por defecto 10s).
  * @returns {Promise<{ imagen: string, dpi: number }>} Imagen PNG base64 (escala de grises)
@@ -413,13 +425,44 @@ export async function capturarHuella(timeoutMs = TIMEOUT_CAPTURA_MS) {
 
   const devName = dispositivos[0].name
   const dev = abrirDispositivo(devName)
+  devActual = dev
 
   try {
     const dpi = obtenerResolucion(dev)
-    const { gray, width, height } = capturarImagen(dev, timeoutMs, dpi)
+    const { gray, width, height } = await capturarImagen(dev, timeoutMs, dpi)
     const imagen = grayscaleToPngBase64(gray, width, height)
     return { imagen, dpi }
   } finally {
+    devActual = null
     cerrarDispositivo(dev)
   }
+}
+
+/**
+ * Devuelve el manejador del lector actualmente abierto, o null si no hay captura en curso.
+ */
+export function getDevActual() {
+  return devActual
+}
+
+/**
+ * Cancela la captura pendiente de un lector DigitalPersona (dpfpdd_cancel).
+ * Es una señal instantánea y síncrona: solo envía la orden de cancelar, no espera
+ * a que la captura (que corre en un worker de koffi) devuelva el resultado.
+ *
+ * @param {*} dev Manejador del lector, tal como lo devuelve dpfpdd_open().
+ * @returns {{ ok: boolean, error?: string }} ok=true si la señal se envió correctamente.
+ */
+export function cancelarCapturaActual(dev) {
+  if (!dev) {
+    return { ok: false, error: 'Manejador de lector nulo' }
+  }
+  if (!dpfpdd_cancel) {
+    return { ok: false, error: 'dpfpdd_cancel no está disponible' }
+  }
+  const rc = dpfpdd_cancel(dev)
+  if (rc !== DPFPDD_SUCCESS) {
+    return { ok: false, error: describirError(rc) }
+  }
+  return { ok: true }
 }

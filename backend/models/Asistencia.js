@@ -12,6 +12,8 @@ const asistenciaSchema = new mongoose.Schema({
   instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Instructor' },
   uuid: { type: String, index: { unique: true, sparse: true } },
   metodo: { type: String, enum: ['HUELLA', 'MANUAL'], default: 'HUELLA' },
+  horaInicioClase: { type: Date, default: null },
+  claseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Clase', default: null },
 }, { timestamps: true, collection: 'asistencias' })
 
 // Índice único real: elimina la ventana de carrera del anti-duplicado en
