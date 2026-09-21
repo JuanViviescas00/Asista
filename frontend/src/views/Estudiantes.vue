@@ -341,6 +341,13 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
     <div v-else class="table-container">
       <table class="est-tabla">
+        <colgroup>
+          <col class="col-nombre">
+          <col class="col-ficha-num">
+          <col class="col-ficha">
+          <col class="col-estado">
+          <col class="col-acciones">
+        </colgroup>
         <thead>
           <tr>
             <th>Nombre</th><th>N° Ficha</th><th>Ficha</th><th>Estado</th><th>Acciones</th>
@@ -433,7 +440,19 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 </template>
 
 <style>
+/* Anchos de columna controlados para evitar espacios vacíos anchos entre columnas.
+   El ancho total de la tabla no cambia (sigue siendo 100% del contenedor),
+   solo se distribuye el espacio interno de forma proporcional al contenido. */
+.est-tabla { table-layout: fixed; }
+.est-tabla .col-nombre { width: 30%; }
+.est-tabla .col-ficha-num { width: 11%; }
+.est-tabla .col-ficha { width: 25%; }
+.est-tabla .col-estado { width: 13%; }
+.est-tabla .col-acciones { width: 21%; }
+
 .est-tabla td:last-child .btn-group { justify-content: flex-start; }
+.est-tabla td, .est-tabla th { overflow: hidden; text-overflow: ellipsis; }
+.est-tabla td:last-child, .est-tabla th:last-child { overflow: visible; }
 .est-ficha-nombre { white-space: nowrap; font-size: 12px; }
 .est-toggle svg { transition: transform .2s ease; }
 .est-toggle-abierto svg { transform: rotate(180deg); }
@@ -443,4 +462,10 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 .est-detalle-item { display: flex; flex-direction: column; gap: 4px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
 .est-detalle-label { font-size: 12px; font-weight: 600; color: var(--texto-suave); }
 .est-detalle-motivo { grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+  .est-tabla { min-width: 620px; }
+  .est-tabla th, .est-tabla td { padding: 12px 10px; }
+  .est-detalle { grid-template-columns: 1fr; gap: 12px 16px; padding: 16px; }
+}
 </style>

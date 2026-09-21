@@ -87,6 +87,14 @@
   .holidays-page-header { padding: 96px 24px 22px; }
   .holidays-page-header h1 { font-size: 24px; }
   .holidays-card { padding: 24px 20px 26px; }
+  .holidays-card-header { flex-direction: column; align-items: stretch; }
+  .holidays-button-group { flex-wrap: wrap; }
   .holidays-form-grid { grid-template-columns: 1fr; }
   .holidays-card-item { align-items: flex-start; flex-wrap: wrap; }
+  .holidays-table { min-width: 600px; }
+  .holidays-table th, .holidays-table td { padding: 12px 10px; }
+  .holidays-modal { padding: 22px 18px; }
+  .holidays-modal-actions { flex-wrap: wrap; }
+  .holidays-grid { grid-template-columns: 1fr; }
+  .holidays-toast { left: 14px; right: 14px; bottom: 14px; }
 }

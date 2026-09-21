@@ -197,4 +197,10 @@
   .admin-profile-info {
     grid-template-columns: 1fr;
   }
+
+  .admin-profile-toast {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+  }
 }
