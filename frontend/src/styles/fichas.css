@@ -39,6 +39,8 @@
 .fichas-button-outline:hover { background: #F2F9ED; border-color: #39A900; }
 .fichas-button-danger { background: #C4432B; color: #ffffff; }
 .fichas-button-danger:hover { background: #A8371F; }
+.fichas-button-warning { background: #B9791A; color: #ffffff; }
+.fichas-button-warning:hover { background: #9C6414; }
 .fichas-button-small { padding: 9px 16px; font-size: 13.5px; }
 .fichas-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .fichas-empty-state { padding: 56px 24px 48px; color: #7C857A; }
@@ -54,10 +56,18 @@
 .fichas-badge-primary { background: #E8F5E0; color: #1F5C00; }
 .fichas-badge-warning { background: #FBF1E1; color: #B9791A; }
 .fichas-badge-success { background: #E8F5E0; color: #1F5C00; }
+.fichas-badge-inactive { background: #FBE5E0; color: #A8371F; }
+.fichas-row-inactiva td { opacity: 0.6; }
+.fichas-row-inactiva td:last-child { opacity: 1; }
 .fichas-badge-leader { background: #E8F5E0; color: #1F5C00; font-weight: 700; }
 .fichas-common-text { font-size: 12px; color: #4A5344; }
 .fichas-modal-overlay { position: fixed; inset: 0; background: rgba(22,33,15,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .fichas-modal { background: #ffffff; border-radius: 20px; box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08); padding: 32px; max-height: 90vh; overflow-y: auto; }
+.fichas-modal-small { max-width: 520px; width: 95vw; }
+.fichas-modal-text { color: #7C857A; font-size: 15px; line-height: 1.5; margin-bottom: 16px; }
+.fichas-modal-text strong { color: #16210F; }
+.fichas-form-group textarea { padding: 13px 15px; border: 1px solid #E2E6DE; border-radius: 8px; font-size: 15px; font-family: 'Work Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #ffffff; color: #16210F; resize: vertical; width: 100%; box-sizing: border-box; }
+.fichas-form-group textarea:focus { outline: none; border-color: #39A900; box-shadow: 0 0 0 3px rgba(57,169,0,0.14); }
 .fichas-modal-large { max-width: 650px; width: 95vw; }
 .fichas-modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #16210F; }
 .fichas-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px 22px; }

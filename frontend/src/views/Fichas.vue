@@ -11,6 +11,10 @@ const loading = ref(false)
 
 const busquedaDocente = ref('')
 
+const showInhabilitarModal = ref(false)
+const inhabilitarTarget = ref(null)
+const inhabilitarMotivo = ref('')
+
 const fichaForm = reactive({
   codigoFicha: '',
   nombrePrograma: '',
@@ -141,14 +145,45 @@ async function guardarFicha() {
   }
 }
 
-async function eliminarFicha(id) {
-  if (!confirm('¿Estás seguro de eliminar esta ficha?')) return
+function estaActiva(ficha) {
+  return ficha.estado !== 'Inactivo'
+}
+
+function abrirInhabilitar(ficha) {
+  inhabilitarTarget.value = ficha
+  inhabilitarMotivo.value = ''
+  showInhabilitarModal.value = true
+}
+
+function cerrarInhabilitar() {
+  showInhabilitarModal.value = false
+  inhabilitarTarget.value = null
+}
+
+async function confirmarInhabilitar() {
+  if (!inhabilitarMotivo.value.trim()) {
+    showToastFn('Debes ingresar un motivo para la inhabilitación', 'error')
+    return
+  }
+  const ok = await cambiarEstado(inhabilitarTarget.value, 'Inactivo', inhabilitarMotivo.value.trim())
+  if (ok) cerrarInhabilitar()
+}
+
+async function cambiarEstado(ficha, nuevoEstado, motivo = '') {
+  const accion = nuevoEstado === 'Activo' ? 'habilitar' : 'inhabilitar'
   try {
-    await api.fichas.delete(id)
+    const actualizada = await api.fichas.update(ficha._id, { estado: nuevoEstado, motivo })
+    // Si el servidor no guarda el campo "estado", lo detectamos en lugar de mostrar un éxito falso.
+    if ((actualizada?.estado ?? 'Activo') !== nuevoEstado) {
+      showToastFn(`No se pudo ${accion} la ficha: el servidor no guardó el estado`, 'error')
+      return false
+    }
     await loadFichas()
-    showToastFn('Ficha eliminada correctamente')
+    showToastFn(nuevoEstado === 'Activo' ? 'Ficha habilitada correctamente' : 'Ficha inhabilitada correctamente')
+    return true
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
+    return false
   }
 }
 
@@ -209,11 +244,12 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
             <th>Aula</th>
             <th>Docente Líder </th>
             <th>Docentes Comunes </th>
+            <th>Estado</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="f in fichas" :key="f._id">
+          <tr v-for="f in fichas" :key="f._id" :class="{ 'fichas-row-inactiva': !estaActiva(f) }">
             <td><strong>{{ f.codigoFicha }}</strong></td>
             <td><span :title="nombreProgramaLimpio(f.nombrePrograma)">{{ apodoPrograma(f.nombrePrograma) }}</span></td>
             <td><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></td>
@@ -229,9 +265,13 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
               </span>
             </td>
             <td>
+              <span class="fichas-badge" :class="estaActiva(f) ? 'fichas-badge-success' : 'fichas-badge-inactive'">{{ estaActiva(f) ? 'Activa' : 'Inactiva' }}</span>
+            </td>
+            <td>
               <div class="fichas-button-group">
                 <button class="fichas-button fichas-button-outline fichas-button-small" @click="openEdit(f)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                <button class="fichas-button fichas-button-danger fichas-button-small" @click="eliminarFicha(f._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                <button v-if="estaActiva(f)" class="fichas-button fichas-button-warning fichas-button-small" @click="abrirInhabilitar(f)" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
+                <button v-else class="fichas-button fichas-button-primary fichas-button-small" @click="cambiarEstado(f, 'Activo')" title="Habilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
               </div>
             </td>
           </tr>
@@ -335,6 +375,25 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         <button class="fichas-button fichas-button-primary" @click="guardarFicha" :disabled="loading" title="Guardar">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE INHABILITACIÓN DE FICHA -->
+  <div v-if="showInhabilitarModal" class="fichas-modal-overlay" @click.self="cerrarInhabilitar">
+    <div class="fichas-modal fichas-modal-small">
+      <h2>Inhabilitar Ficha</h2>
+      <p class="fichas-modal-text">
+        Estás a punto de inhabilitar la ficha <strong>{{ inhabilitarTarget?.codigoFicha }}</strong>.
+        Esta acción la marcará como inactiva.
+      </p>
+      <div class="fichas-form-group">
+        <label>Motivo de inhabilitación</label>
+        <textarea v-model="inhabilitarMotivo" rows="3" placeholder="Ej: Ficha finalizada, se canceló la formación, etc."></textarea>
+      </div>
+      <div class="fichas-modal-actions">
+        <button class="fichas-button fichas-button-outline" @click="cerrarInhabilitar" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="fichas-button fichas-button-danger" @click="confirmarInhabilitar" title="Confirmar Inhabilitación"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
       </div>
     </div>
   </div>
