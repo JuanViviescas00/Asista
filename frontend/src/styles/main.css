@@ -840,6 +840,10 @@ table tbody tr:hover {
   .form-grid {
     grid-template-columns: 1fr;
   }
+
+  .card {
+    padding: 26px 22px 28px;
+  }
 }
 
 .menu-toggle {
@@ -1253,5 +1257,158 @@ table tbody tr:hover {
   background: var(--azul-suave);
   color: var(--azul);
   font-size: 11px;
+}
+
+/* ============================================================
+   RESPONSIVE GLOBAL (tablet y móvil)
+   ============================================================ */
+@media (max-width: 768px) {
+  .page-header {
+    padding: 92px 24px 22px;
+    min-height: 138px;
+    margin-bottom: 26px;
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .main-content {
+    --main-pad-top: 18px;
+    --main-pad-x: 14px;
+    padding: 18px 14px 40px;
+  }
+
+  .page-header {
+    padding: 80px 18px 20px;
+    min-height: 126px;
+    margin-bottom: 20px;
+    border-radius: 16px;
+  }
+
+  .page-header h1 {
+    font-size: 21px;
+  }
+
+  .page-header p {
+    font-size: 13px;
+  }
+
+  .card {
+    padding: 20px 16px 22px;
+    border-radius: 16px;
+    margin-bottom: 16px;
+  }
+
+  .card-header {
+    margin-bottom: 16px;
+  }
+
+  .card-header h3 {
+    font-size: 15.5px;
+  }
+
+  .btn {
+    padding: 11px 18px;
+    font-size: 14px;
+  }
+
+  .btn-group {
+    flex-wrap: wrap;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 15px 16px 17px;
+  }
+
+  .stat-num {
+    font-size: 27px;
+  }
+
+  .stat-label {
+    font-size: 11.5px;
+  }
+
+  /* Las tablas conservan un ancho mínimo y se desplazan en horizontal
+     en lugar de aplastar sus columnas. */
+  .table-container {
+    max-height: none;
+  }
+
+  .table-container > table {
+    min-width: 620px;
+  }
+
+  .modal {
+    padding: 22px 18px;
+    width: 94%;
+    border-radius: 16px;
+  }
+
+  .modal h2 {
+    font-size: 18px;
+    margin-bottom: 18px;
+  }
+
+  .toast {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    max-width: none;
+  }
+
+  .grafico-barras {
+    gap: 9px;
+  }
+
+  .barra-label {
+    width: 78px;
+    font-size: 11px;
+  }
+
+  .barra-valor {
+    width: 40px;
+    font-size: 12px;
+  }
+
+  .app-topbar {
+    top: 42px;
+    right: 16px;
+  }
+
+  .btn-logout-top {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .reporte-info {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .busqueda-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .page-header h1 {
+    font-size: 19px;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .btn-logout-top span {
+    display: none;
+  }
 }
 

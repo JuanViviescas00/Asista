@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
-import { apodoPrograma, nombreProgramaLimpio, truncar } from '../utils/textos.js'
+import { nombreProgramaLimpio } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -11,6 +11,7 @@ const loading = ref(false)
 
 const busquedaDocente = ref('')
 
+const expandidos = ref({})
 const showInhabilitarModal = ref(false)
 const inhabilitarTarget = ref(null)
 const inhabilitarMotivo = ref('')
@@ -145,6 +146,21 @@ async function guardarFicha() {
   }
 }
 
+// Recorta el nombre del programa sin partir palabras: "Análisis y desarrollo..."
+function acortarNombre(texto, max = 22) {
+  const s = String(texto ?? '').trim()
+  if (s.length <= max) return s
+  const corte = s.slice(0, max + 1)
+  const i = corte.lastIndexOf(' ')
+  let base = i > 0 ? corte.slice(0, i) : s.slice(0, max)
+  base = base.replace(/(\s+(de|del|la|el|los|las|y|e|en|para|por|con|a|o))+$/i, '').replace(/[\s,.;:]+$/, '')
+  return base + '...'
+}
+
+function toggleDetalle(id) {
+  expandidos.value[id] = !expandidos.value[id]
+}
+
 function estaActiva(ficha) {
   return ficha.estado !== 'Inactivo'
 }
@@ -194,14 +210,6 @@ function getInstructorNombre(id) {
   return instructor ? `${instructor.nombres} ${instructor.apellidos}` : (id.nombres ? `${id.nombres} ${id.apellidos}` : 'No asignado')
 }
 
-function getComunesNombres(comunes) {
-  if (!comunes || comunes.length === 0) return 'Ninguno'
-  return comunes
-    .map(c => getInstructorNombre(c))
-    .filter(n => n !== 'No asignado')
-    .join(', ') || 'Ninguno'
-}
-
 function jornadaBadge(jornada) {
   if (jornada === 'Mañana' || jornada === 'Diurna') return 'fichas-badge-primary'
   if (jornada === 'Tarde' || jornada === 'Mixta') return 'fichas-badge-warning'
@@ -236,45 +244,49 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
 
     <div v-else class="fichas-table-container">
       <table class="fichas-table">
+        <colgroup>
+          <col class="col-codigo">
+          <col class="col-ficha">
+          <col class="col-docente">
+          <col class="col-acciones">
+        </colgroup>
         <thead>
           <tr>
             <th>Código Ficha</th>
-            <th>Programa</th>
-            <th>Jornada</th>
-            <th>Aula</th>
-            <th>Docente Líder </th>
-            <th>Docentes Comunes </th>
-            <th>Estado</th>
+            <th>Ficha</th>
+            <th>Docente Líder</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="f in fichas" :key="f._id" :class="{ 'fichas-row-inactiva': !estaActiva(f) }">
-            <td><strong>{{ f.codigoFicha }}</strong></td>
-            <td><span :title="nombreProgramaLimpio(f.nombrePrograma)">{{ apodoPrograma(f.nombrePrograma) }}</span></td>
-            <td><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></td>
-            <td>{{ f.aulaAsignada }}</td>
-            <td>
-              <span class="fichas-badge fichas-badge-leader">
-                 {{ getInstructorNombre(f.instructorLiderId) }}
-              </span>
-            </td>
-            <td>
-              <span class="fichas-common-text" :title="getComunesNombres(f.instructores)">
-                {{ truncar(getComunesNombres(f.instructores), 28) }}
-              </span>
-            </td>
-            <td>
-              <span class="fichas-badge" :class="estaActiva(f) ? 'fichas-badge-success' : 'fichas-badge-inactive'">{{ estaActiva(f) ? 'Activa' : 'Inactiva' }}</span>
-            </td>
-            <td>
+          <template v-for="f in fichas" :key="f._id">
+            <tr :class="{ 'fichas-row-inactiva': !estaActiva(f) }">
+              <td><strong>{{ f.codigoFicha }}</strong></td>
+              <td><span class="fichas-badge fichas-badge-ficha" :title="nombreProgramaLimpio(f.nombrePrograma)">{{ acortarNombre(nombreProgramaLimpio(f.nombrePrograma)) }}</span></td>
+              <td>
+                <span class="fichas-badge fichas-badge-leader">
+                  {{ getInstructorNombre(f.instructorLiderId) }}
+                </span>
+              </td>
+              <td>
               <div class="fichas-button-group">
                 <button class="fichas-button fichas-button-outline fichas-button-small" @click="openEdit(f)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
                 <button v-if="estaActiva(f)" class="fichas-button fichas-button-warning fichas-button-small" @click="abrirInhabilitar(f)" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
                 <button v-else class="fichas-button fichas-button-primary fichas-button-small" @click="cambiarEstado(f, 'Activo')" title="Habilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
+                <button class="fichas-button fichas-button-outline fichas-button-small fichas-toggle" :class="{ 'fichas-toggle-abierto': expandidos[f._id] }" :aria-expanded="!!expandidos[f._id]" @click="toggleDetalle(f._id)" :title="expandidos[f._id] ? 'Ocultar información' : 'Ver más información'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
               </div>
-            </td>
-          </tr>
+              </td>
+            </tr>
+            <tr v-if="expandidos[f._id]" class="fichas-detalle-fila">
+              <td colspan="4">
+                <div class="fichas-detalle">
+                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Aula</span><span>{{ f.aulaAsignada || '—' }}</span></div>
+                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Jornada</span><span><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></span></div>
+                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Estado</span><span><span class="fichas-badge" :class="estaActiva(f) ? 'fichas-badge-success' : 'fichas-badge-inactive'">{{ estaActiva(f) ? 'Activa' : 'Inactiva' }}</span></span></div>
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>

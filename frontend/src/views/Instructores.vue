@@ -13,6 +13,7 @@ const inhabilitarTarget = ref(null)
 const inhabilitarMotivo = ref('')
 const loading = ref(false)
 const busquedaAvanzadaAbierta = ref(true)
+const expandidos = ref({})
 
 const busqueda = reactive({
   documento: '',
@@ -180,6 +181,7 @@ async function activarInstructor(instructor) {
 }
 
 function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
+function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
 </script>
 
 <template>
@@ -301,13 +303,17 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
     </div>
 
     <div v-else class="table-container">
-      <table>
+      <table class="instructores-tabla">
+        <colgroup>
+          <col class="col-nombre">
+          <col class="col-especialidad">
+          <col class="col-tipo">
+          <col class="col-estado">
+          <col class="col-acciones">
+        </colgroup>
         <thead>
           <tr>
             <th>Nombre</th>
-            <th>Documento</th>
-            <th>Correo</th>
-            <th>Teléfono</th>
             <th>Especialidad</th>
             <th>Tipo Docente</th>
             <th>Estado</th>
@@ -315,29 +321,38 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
           </tr>
         </thead>
         <tbody>
-          <tr v-for="i in instructoresFiltrados" :key="i._id" :class="{ 'fila-inactivo': i.estado === 'Inactivo' }">
-            <td><strong :title="nombreCompleto(i)">{{ truncar(nombreCompleto(i), 22) }}</strong></td>
-            <td :title="`${i.tipoDocumento} ${i.numeroDocumento}`"><span class="doc-tipo">{{ i.tipoDocumento }}</span> {{ formatearNumeroDocumento(i.numeroDocumento) }}</td>
-            <td :title="i.correo">{{ truncar(i.correo, 24) }}</td>
-            <td>{{ i.telefono }}</td>
-            <td><span class="badge badge-success" :title="i.especialidad">{{ truncar(i.especialidad, 20) }}</span></td>
-            <td>
-              <span class="badge" :class="i.esLider ? 'badge-primary' : 'badge-neutral'" style="font-size: 12px; font-weight: 600;">
-                {{ i.esLider ? 'Instructor Líder' : 'Instructor Común' }}
-              </span>
-            </td>
-            <td>
-              <span v-if="i.estado === 'Activo'" class="badge badge-success">{{ i.estado }}</span>
-              <span v-else class="badge badge-danger badge-clickable" role="button" tabindex="0" title="Ver motivo de inhabilitación" @click="motivoVer = i" @keydown.enter="motivoVer = i">{{ i.estado }}</span>
-            </td>
-            <td>
-              <div class="btn-group">
-                <button class="btn btn-outline btn-sm" @click="openEdit(i)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                <button v-if="i.estado === 'Activo'" class="btn btn-warning btn-sm" @click="abrirInhabilitar(i)" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
-                <button v-else class="btn btn-success btn-sm" @click="activarInstructor(i)" title="Habilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
-              </div>
-            </td>
-          </tr>
+          <template v-for="i in instructoresFiltrados" :key="i._id">
+            <tr :class="{ 'fila-inactivo': i.estado === 'Inactivo' }">
+              <td><strong :title="nombreCompleto(i)">{{ truncar(nombreCompleto(i), 22) }}</strong></td>
+              <td><span class="badge badge-success" :title="i.especialidad">{{ truncar(i.especialidad, 20) }}</span></td>
+              <td>
+                <span class="badge" :class="i.esLider ? 'badge-primary' : 'badge-neutral'" style="font-size: 12px; font-weight: 600;">
+                  {{ i.esLider ? 'Instructor Líder' : 'Instructor Común' }}
+                </span>
+              </td>
+              <td>
+                <span v-if="i.estado === 'Activo'" class="badge badge-success">{{ i.estado }}</span>
+                <span v-else class="badge badge-danger badge-clickable" role="button" tabindex="0" title="Ver motivo de inhabilitación" @click="motivoVer = i" @keydown.enter="motivoVer = i">{{ i.estado }}</span>
+              </td>
+              <td>
+                <div class="btn-group">
+                  <button class="btn btn-outline btn-sm" @click="openEdit(i)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                  <button v-if="i.estado === 'Activo'" class="btn btn-warning btn-sm" @click="abrirInhabilitar(i)" title="Inhabilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></button>
+                  <button v-else class="btn btn-success btn-sm" @click="activarInstructor(i)" title="Habilitar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
+                  <button class="btn btn-outline btn-sm instr-toggle" :class="{ 'instr-toggle-abierto': expandidos[i._id] }" :aria-expanded="!!expandidos[i._id]" @click="toggleDetalle(i._id)" :title="expandidos[i._id] ? 'Ocultar información' : 'Ver más información'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="expandidos[i._id]" class="instr-detalle-fila">
+              <td colspan="5">
+                <div class="instr-detalle">
+                  <div class="instr-detalle-item"><span class="instr-detalle-label">Documento</span><span :title="`${i.tipoDocumento} ${i.numeroDocumento}`"><span class="doc-tipo">{{ i.tipoDocumento }}</span> {{ formatearNumeroDocumento(i.numeroDocumento) }}</span></div>
+                  <div class="instr-detalle-item"><span class="instr-detalle-label">Correo</span><span :title="i.correo">{{ i.correo || '—' }}</span></div>
+                  <div class="instr-detalle-item"><span class="instr-detalle-label">Teléfono</span><span>{{ i.telefono || '—' }}</span></div>
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -405,6 +420,30 @@ function nombreCompleto(i) { return `${i.nombres} ${i.apellidos}` }
 </template>
 
 <style scoped>
+.instructores-tabla { table-layout: fixed; }
+.instructores-tabla .col-nombre { width: 24%; }
+.instructores-tabla .col-especialidad { width: 24%; }
+.instructores-tabla .col-tipo { width: 20%; }
+.instructores-tabla .col-estado { width: 14%; }
+.instructores-tabla .col-acciones { width: 18%; }
+.instructores-tabla td, .instructores-tabla th { overflow: hidden; text-overflow: ellipsis; }
+.instructores-tabla td:last-child, .instructores-tabla th:last-child { overflow: visible; }
+.instr-toggle svg { transition: transform .2s ease; }
+.instr-toggle-abierto svg { transform: rotate(180deg); }
+.instr-detalle-fila td { padding: 0; background: var(--verde-tenue); }
+.instr-detalle-fila:hover { background: var(--verde-tenue) !important; }
+.instr-detalle { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px 24px; padding: 18px 20px; }
+.instr-detalle-item { display: flex; flex-direction: column; gap: 4px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.instr-detalle-label { font-size: 12px; font-weight: 600; color: var(--texto-suave); }
+
+@media (max-width: 640px) {
+  .busqueda-card { padding: 18px 16px; }
+  .instructores-tabla { min-width: 620px; }
+  .instructores-tabla th, .instructores-tabla td { padding: 12px 10px; }
+  .instr-detalle { grid-template-columns: 1fr; gap: 12px 16px; padding: 16px; }
+  .header-title-group { flex-wrap: wrap; }
+}
+
 .badge-clickable { cursor: pointer; transition: box-shadow 0.15s, transform 0.15s; }
 .badge-clickable:hover { box-shadow: 0 0 0 3px rgba(196, 67, 43, 0.15); }
 .motivo-modal { max-width: 460px; }

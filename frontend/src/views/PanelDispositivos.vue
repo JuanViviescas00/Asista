@@ -448,4 +448,31 @@ function formatFecha(iso) {
   background: #f3f4f6;
   color: #6b7280;
 }
+
+@media (max-width: 640px) {
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .card-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .pendientes-title,
+  .deshabilitados-title {
+    font-size: 15px;
+  }
+
+  .dispositivo-fichas-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fichas-asociadas {
+    font-size: 12px;
+  }
+}
 </style>

@@ -1114,6 +1114,18 @@ function limpiar() {
   .rf-num { width: 28px; height: 28px; font-size: 13px; }
 }
 
+@media (max-width: 640px) {
+  .rf-panel { padding: 18px 14px 22px; border-radius: 16px; }
+  .rf-campo-ficha { max-width: none; }
+  .rf-titulo { font-size: 15px; }
+  .rf-ayuda { font-size: 13px; }
+  .rf-acciones { flex-direction: column; align-items: stretch; }
+  .rf-acciones .rf-btn,
+  .rf-pie .rf-continuar { width: 100%; }
+  .reporte-header { text-align: left; }
+  .reporte-header h2 { font-size: 16px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rf-panel * { transition: none !important; }
   .rf-entra-enter-active { animation: none; }
