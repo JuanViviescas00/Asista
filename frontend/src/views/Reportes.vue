@@ -1015,7 +1015,7 @@ function limpiar() {
 .rf-separador::after { content: ""; flex: 1; height: 1px; background: var(--rf-borde); }
 
 .rf-busqueda .rf-ico { position: absolute; left: 14px; bottom: 13px; width: 19px; height: 19px; color: var(--rf-tenue); pointer-events: none; }
-.rf-busqueda input { padding-left: 42px; }
+.rf-campo.rf-busqueda input[type="search"] { padding-left: 44px; }
 
 /* Atajos y opciones segmentadas */
 .rf-atajos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
