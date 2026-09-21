@@ -124,7 +124,7 @@ docker compose down
 ```
 
 * **Frontend Web:** `http://localhost` (puerto 80)
-* **Backend API directo:** `http://localhost:3000`
+* **Backend API directo:** `http://localhost:3001`
 
 ---
 
@@ -143,7 +143,7 @@ docker compose -f docker-compose.dev.yml down
 ```
 
 * **Frontend Vite Dev:** `http://localhost:5173`
-* **Backend API Dev:** `http://localhost:3000`
+* **Backend API Dev:** `http://localhost:3001`
 
 ---
 
@@ -166,7 +166,7 @@ npm run dev
 # Iniciar solo el Frontend Web (http://localhost:5173)
 npm run dev:frontend
 
-# Iniciar solo el Backend API (http://localhost:3000)
+# Iniciar solo el Backend API (http://localhost:3001)
 npm run dev:backend
 
 # Compilar Frontend para producción

@@ -350,7 +350,7 @@ wsClient.onDeactivate(({ fichaId, claseId }) => {
   console.log('Clase desactivada:', { fichaId, claseId })
 })
 
-wsClient.connect({ deviceId: '...', token: '...', wsUrl: 'ws://localhost:3000' })
+wsClient.connect({ deviceId: '...', token: '...', wsUrl: 'ws://localhost:3001' })
 
 // mensaje saliente futuro:
 wsClient.send('ACTIVATED', { fichaId: '...', claseId: '...' })
