@@ -1,3 +1,4 @@
+process.env.TZ = process.env.TZ || 'America/Bogota'
 import 'dotenv/config'
 import http from 'http'
 import path from 'path'

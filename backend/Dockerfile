@@ -8,6 +8,7 @@ RUN npm install --omit=dev
 
 COPY . .
 
+ENV TZ=America/Bogota
 EXPOSE 3001
 
 CMD ["npm", "start"]

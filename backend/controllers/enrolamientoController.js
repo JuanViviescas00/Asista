@@ -1,4 +1,5 @@
 import Estudiante from '../models/Estudiante.js'
+import { formatearFechaColombia } from '../services/asistenciaService.js'
 
 export async function guardarTemplate(req, res) {
   const { estudianteId, fichaId, dedo, template, slot } = req.body
@@ -49,7 +50,7 @@ export async function guardarTemplate(req, res) {
       }
     }
 
-    const fecha = new Date().toISOString().split('T')[0]
+    const fecha = formatearFechaColombia()
     if (targetSlot === 1) {
       estudiante.huellaTemplate = template
       estudiante.dedoEnrolado = dedo || ''

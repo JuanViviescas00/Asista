@@ -5,7 +5,7 @@ import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
-import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada } from '../services/asistenciaService.js'
+import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada, formatearFechaColombia, formatearHoraColombia } from '../services/asistenciaService.js'
 import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 import {
   upsertAsistenciaSQLite,
@@ -72,7 +72,7 @@ export async function createAsistencia(req, res) {
         fichaId,
         fecha,
         estado,
-        hora: hora || '—',
+        hora: hora || formatearHoraColombia(),
         horasTardanza: horasTardanza || 0,
         tiempoTardanza: tiempoTardanza || (horasTardanza ? `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}` : '0 horas'),
         motivoInhabilitacion: motivoInhabilitacion || '',
@@ -158,9 +158,8 @@ async function procesarAsistencia(item) {
   if (Number.isNaN(dateObj.getTime())) {
     return { uuid, estado: 'error', error: 'timestamp inválido' }
   }
-  const offsetMs = dateObj.getTimezoneOffset() * 60000
-  const fecha = new Date(dateObj.getTime() - offsetMs).toISOString().split('T')[0]
-  const hora = dateObj.toTimeString().slice(0, 8)
+  const fecha = formatearFechaColombia(dateObj)
+  const hora = formatearHoraColombia(dateObj)
 
   // Fuente PRIMARIA: la clase en curso al momento de la marcación (iniciadaAt).
   // Se consulta el modelo Clase con el _id de ficha YA RESUELTO (no el fichaId

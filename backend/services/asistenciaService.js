@@ -3,13 +3,26 @@ import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
 
 /**
- * Retorna la fecha actual local en formato YYYY-MM-DD
+ * Retorna la fecha actual en zona horaria de Colombia (America/Bogota) en formato YYYY-MM-DD
  */
 export function getHoyString() {
-  const ahora = new Date()
-  const offsetMs = ahora.getTimezoneOffset() * 60000
-  const localDate = new Date(ahora.getTime() - offsetMs)
-  return localDate.toISOString().split('T')[0]
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date())
+}
+
+/**
+ * Formatea una fecha u objeto Date en formato YYYY-MM-DD según la zona horaria de Colombia
+ */
+export function formatearFechaColombia(date = new Date()) {
+  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(d)
+}
+
+/**
+ * Formatea la hora en HH:mm:ss según la zona horaria de Colombia
+ */
+export function formatearHoraColombia(date = new Date()) {
+  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
+  return d.toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour12: false })
 }
 
 /**
@@ -108,7 +121,16 @@ function escalaDesdeMinutos(minutosTardanza) {
  */
 export function calcularTardanzaEscalonada(jornada, fechaHora = new Date()) {
   const inicio = HORARIOS_JORNADA[jornada] ?? HORARIOS_JORNADA['Mañana']
-  const minutosMarcacion = fechaHora.getHours() * 60 + fechaHora.getMinutes()
+  const d = typeof fechaHora === 'string' || typeof fechaHora === 'number' ? new Date(fechaHora) : fechaHora
+  const partes = new Intl.DateTimeFormat('es-CO', {
+    timeZone: 'America/Bogota',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  }).formatToParts(d)
+  const horas = parseInt(partes.find((p) => p.type === 'hour')?.value || '0', 10)
+  const minutos = parseInt(partes.find((p) => p.type === 'minute')?.value || '0', 10)
+  const minutosMarcacion = horas * 60 + minutos
   let minutosTardanza = minutosMarcacion - inicio
   // Solo jornada Noche: un negativo es casi seguro un cruce de medianoche
   // (marcación de madrugada tras un inicio a las 18:00), no una llegada

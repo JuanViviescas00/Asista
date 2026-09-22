@@ -137,7 +137,7 @@ export function iniciarCronJobs() {
 
   // 2. Cron nocturno de sincronización SQLite por Docente
   cron.schedule(schedule, async () => {
-    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO')}: Iniciando procesamiento nocturno de SQLite por DOCENTE (filtro 3 días hábiles)...`)
+    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando procesamiento nocturno de SQLite por DOCENTE (filtro 3 días hábiles)...`)
     try {
       const resultado = await sincronizarSqlitePorDocente()
       console.log(`[CRON] ✅ Proceso finalizado. Docentes: ${resultado.totalDocentes}, Clases/Registros: ${resultado.totalRegistros}, Elegibles subida: ${resultado.totalElegiblesSubida}`)

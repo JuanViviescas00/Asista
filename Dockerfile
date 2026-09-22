@@ -35,6 +35,7 @@ RUN mkdir -p /app/data
 
 # Render asigna dinámicamente la variable PORT (por defecto 10000)
 ENV PORT=10000
+ENV TZ=America/Bogota
 EXPOSE 10000
 
 CMD ["npm", "start"]
