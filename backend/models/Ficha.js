@@ -10,6 +10,8 @@ const fichaSchema = new mongoose.Schema({
   dispositivoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispositivo', default: null },
   fechaInicio: { type: String, required: true },
   fechaFin: { type: String, required: true },
+  estado: { type: String, enum: ['Activo', 'Inactivo'], default: 'Activo' },
+  motivo: { type: String, default: '' },
 }, { timestamps: true, collection: 'fichas' })
 
 export default mongoose.model('Ficha', fichaSchema)
