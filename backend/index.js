@@ -37,7 +37,21 @@ app.use(helmet({
   crossOriginResourcePolicy: false,
   contentSecurityPolicy: false
 }))
-app.use(cors())
+const ORIGENES_PERMITIDOS = [
+  'https://huelleroactualizado-1.onrender.com',
+]
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true)
+    if (ORIGENES_PERMITIDOS.includes(origin)) return callback(null, true)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
+    if (/^https?:\/\/[a-z0-9-]+-\d+\.(use\.devtunnels\.ms|app\.github\.dev|trycloudflare\.com)$/i.test(origin)) return callback(null, true)
+    return callback(new Error(`Origen no permitido por CORS: ${origin}`))
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}))
 app.use(express.json({ limit: '10mb' }))
 
 const transporter = nodemailer.createTransport({

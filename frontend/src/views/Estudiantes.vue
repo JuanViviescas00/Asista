@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { apodoPrograma, truncar, formatearNumeroDocumento } from '../utils/textos.js'
+import { nombreProgramaLimpio, truncar, formatearNumeroDocumento } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
@@ -14,6 +14,7 @@ const retirarTipo = ref('Inactivo')
 const filtroEstado = ref('Todos')
 const busquedaAvanzadaAbierta = ref(false)
 const loading = ref(false)
+const expandidos = ref({})
 
 const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : null)
@@ -231,10 +232,35 @@ function getFichaNombre(fichaId) {
   return ficha ? `${ficha.codigoFicha} - ${ficha.nombrePrograma}` : 'No asignada'
 }
 
-function getFichaApodo(fichaId) {
+function getFichaProgramaCompleto(fichaId) {
   if (!fichaId) return '—'
   const ficha = getFichaById(fichaId)
-  return ficha ? apodoPrograma(ficha.nombrePrograma) : 'No asignada'
+  return ficha ? nombreProgramaLimpio(ficha.nombrePrograma) : 'No asignada'
+}
+
+// Recorta el nombre del programa sin partir palabras: "Análisis y desarrollo..."
+function acortarNombre(texto, max = 22) {
+  const s = String(texto ?? '').trim()
+  if (s.length <= max) return s
+  const corte = s.slice(0, max + 1)
+  const i = corte.lastIndexOf(' ')
+  let base = i > 0 ? corte.slice(0, i) : s.slice(0, max)
+  base = base.replace(/(\s+(de|del|la|el|los|las|y|e|en|para|por|con|a|o))+$/i, '').replace(/[\s,.;:]+$/, '')
+  return base + '...'
+}
+
+function getFichaPrograma(fichaId) {
+  return acortarNombre(getFichaProgramaCompleto(fichaId))
+}
+
+function getFichaCodigo(fichaId) {
+  if (!fichaId) return '—'
+  const ficha = getFichaById(fichaId)
+  return ficha ? ficha.codigoFicha : '—'
+}
+
+function toggleDetalle(id) {
+  expandidos.value[id] = !expandidos.value[id]
 }
 
 function getJornada(fichaId) {
@@ -249,12 +275,6 @@ function estadoBadge(estado) {
   return 'badge-danger'
 }
 
-function asistenciaBadge(estado) {
-  if (estado === 'Presente') return 'badge-success'
-  if (estado === 'Ausente') return 'badge-danger'
-  return 'badge-neutral'
-}
-
 function activosCount() { return estudiantes.value.filter(e => e.estado === 'Activo').length }
 function inactivosCount() { return estudiantes.value.filter(e => e.estado === 'Inactivo').length }
 function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'Retirado').length }
@@ -262,19 +282,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
 <template>
   <div class="page-header">
-    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-      <div>
-        <h1>Estudiantes</h1>
-        <p v-if="esInstructor">
-          ‍ Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
-        </p>
-        <p v-else>
-          Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
-        </p>
-      </div>
-      <div v-if="esInstructor" style="background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
-        Fichas asignadas: {{ fichasList.length }}
-      </div>
+    <h1>Estudiantes</h1>
+    <p v-if="esInstructor">
+      ‍ Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
+    </p>
+    <p v-else>
+      Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
+    </p>
+    <div v-if="esInstructor" style="display: inline-block; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+      Fichas asignadas: {{ fichasList.length }}
     </div>
   </div>
 
@@ -324,26 +340,27 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
     </div>
 
     <div v-else class="table-container">
-      <table>
+      <table class="est-tabla">
+        <colgroup>
+          <col class="col-nombre">
+          <col class="col-ficha-num">
+          <col class="col-ficha">
+          <col class="col-estado">
+          <col class="col-acciones">
+        </colgroup>
         <thead>
           <tr>
-            <th>Nombre</th><th>Documento</th><th>Correo</th><th>Telefono</th><th>Ficha</th><th>Jornada</th><th>Asistencia</th><th>Estado</th><th>Acciones</th>
+            <th>Nombre</th><th>N° Ficha</th><th>Ficha</th><th>Estado</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="e in estudiantesFiltrados" :key="e._id" :class="{ 'fila-inactivo': e.estado !== 'Activo' }">
-            <td><strong :title="nombreCompleto(e)">{{ truncar(nombreCompleto(e), 22) }}</strong></td>
-            <td :title="`${e.tipoDocumento} ${e.numeroDocumento}`"><span class="doc-tipo">{{ e.tipoDocumento }}</span> {{ formatearNumeroDocumento(e.numeroDocumento) }}</td>
-            <td :title="e.correo">{{ truncar(e.correo, 24) }}</td>
-            <td>{{ e.telefono }}</td>
-            <td><span class="badge badge-ficha" :title="getFichaNombre(e.fichaId)">{{ getFichaApodo(e.fichaId) }}</span></td>
-            <td>{{ getJornada(e.fichaId) }}</td>
-            <td><span class="badge" :class="asistenciaBadge(e.estadoAsistencia)">{{ e.estadoAsistencia || 'Sin registro' }}</span></td>
-            <td>
-              <span class="badge" :class="estadoBadge(e.estado)">{{ e.estado }}</span>
-              <div v-if="e.estado !== 'Activo' && e.motivo" class="motivo-texto">{{ e.motivo }}</div>
-            </td>
-            <td>
+          <template v-for="e in estudiantesFiltrados" :key="e._id">
+            <tr :class="{ 'fila-inactivo': e.estado !== 'Activo' }">
+              <td><strong :title="nombreCompleto(e)">{{ truncar(nombreCompleto(e), 28) }}</strong></td>
+              <td><strong>{{ getFichaCodigo(e.fichaId) }}</strong></td>
+              <td><span class="badge badge-ficha est-ficha-nombre" :title="getFichaProgramaCompleto(e.fichaId)">{{ getFichaPrograma(e.fichaId) }}</span></td>
+              <td><span class="badge" :class="estadoBadge(e.estado)">{{ e.estado }}</span></td>
+              <td>
               <div class="btn-group">
                 <template v-if="esLiderDeEstudiante(e)">
                   <button class="btn btn-outline btn-sm" @click="openEdit(e)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
@@ -354,9 +371,22 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
                   <button v-else class="btn btn-success btn-sm" @click="activarEstudiante(e)" title="Activar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
                 </template>
                 <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder de ficha</span>
+                <button class="btn btn-outline btn-sm est-toggle" :class="{ 'est-toggle-abierto': expandidos[e._id] }" :aria-expanded="!!expandidos[e._id]" @click="toggleDetalle(e._id)" :title="expandidos[e._id] ? 'Ocultar información' : 'Ver más información'"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
               </div>
-            </td>
-          </tr>
+              </td>
+            </tr>
+            <tr v-if="expandidos[e._id]" class="est-detalle-fila">
+              <td colspan="5">
+                <div class="est-detalle">
+                  <div class="est-detalle-item"><span class="est-detalle-label">Documento</span><span :title="`${e.tipoDocumento} ${e.numeroDocumento}`"><span class="doc-tipo">{{ e.tipoDocumento }}</span> {{ formatearNumeroDocumento(e.numeroDocumento) }}</span></div>
+                  <div class="est-detalle-item"><span class="est-detalle-label">Correo</span><span>{{ e.correo || '—' }}</span></div>
+                  <div class="est-detalle-item"><span class="est-detalle-label">Teléfono</span><span>{{ e.telefono || '—' }}</span></div>
+                  <div class="est-detalle-item"><span class="est-detalle-label">Jornada</span><span>{{ getJornada(e.fichaId) }}</span></div>
+                  <div v-if="e.estado !== 'Activo' && e.motivo" class="est-detalle-item est-detalle-motivo"><span class="est-detalle-label">Motivo</span><span>{{ e.motivo }}</span></div>
+                </div>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -408,3 +438,34 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
   <div v-if="toast.show" class="toast" :class="'toast-' + toast.type">{{ toast.message }}</div>
 </template>
+
+<style>
+/* Anchos de columna controlados para evitar espacios vacíos anchos entre columnas.
+   El ancho total de la tabla no cambia (sigue siendo 100% del contenedor),
+   solo se distribuye el espacio interno de forma proporcional al contenido. */
+.est-tabla { table-layout: fixed; }
+.est-tabla .col-nombre { width: 30%; }
+.est-tabla .col-ficha-num { width: 11%; }
+.est-tabla .col-ficha { width: 25%; }
+.est-tabla .col-estado { width: 13%; }
+.est-tabla .col-acciones { width: 21%; }
+
+.est-tabla td:last-child .btn-group { justify-content: flex-start; }
+.est-tabla td, .est-tabla th { overflow: hidden; text-overflow: ellipsis; }
+.est-tabla td:last-child, .est-tabla th:last-child { overflow: visible; }
+.est-ficha-nombre { white-space: nowrap; font-size: 12px; }
+.est-toggle svg { transition: transform .2s ease; }
+.est-toggle-abierto svg { transform: rotate(180deg); }
+.est-detalle-fila td { padding: 0; background: var(--verde-tenue); }
+.est-detalle-fila:hover { background: var(--verde-tenue) !important; }
+.est-detalle { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px 24px; padding: 18px 20px; }
+.est-detalle-item { display: flex; flex-direction: column; gap: 4px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.est-detalle-label { font-size: 12px; font-weight: 600; color: var(--texto-suave); }
+.est-detalle-motivo { grid-column: 1 / -1; }
+
+@media (max-width: 640px) {
+  .est-tabla { min-width: 620px; }
+  .est-tabla th, .est-tabla td { padding: 12px 10px; }
+  .est-detalle { grid-template-columns: 1fr; gap: 12px 16px; padding: 16px; }
+}
+</style>

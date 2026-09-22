@@ -173,15 +173,21 @@ function procesarArchivo(event) {
       const data = new Uint8Array(e.target.result)
       const workbook = XLSX.read(data, { type: 'array' })
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-      const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' })
-      if (json.length === 0) {
+      const matrix = XLSX.utils.sheet_to_json(firstSheet, {
+        header: 1,
+        defval: '',
+        raw: true,
+      })
+      if (matrix.length < 2) {
         showToastFn('El archivo está vacío o no se pudo leer', 'error')
         return
       }
-      headers = Object.keys(json[0]).map(h => String(h).trim())
-      rows = json.map((r, idx) => {
+      headers = matrix[0].map(h => String(h ?? '').trim())
+      rows = matrix.slice(1).map((values, idx) => {
         const row = {}
-        headers.forEach(h => { row[h] = celdaAString(r[h]) })
+        headers.forEach((h, columnIndex) => {
+          if (h) row[h] = celdaAString(values[columnIndex])
+        })
         row._linea = idx + 2
         return row
       })

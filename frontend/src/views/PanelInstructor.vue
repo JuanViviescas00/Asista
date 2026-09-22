@@ -1532,7 +1532,7 @@ function descargarExcel(data, nombreArchivo) {
               SESIÓN INHABILITADA — Los controles de marcado se encuentran pausados para este día
             </div>
 
-            <table class="data-table">
+            <table class="data-table data-table-asistencia">
               <thead>
                 <tr>
                   <th>Aprendiz</th>
@@ -1713,6 +1713,7 @@ function descargarExcel(data, nombreArchivo) {
             </div>
           </div>
 
+          <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
@@ -1740,6 +1741,7 @@ function descargarExcel(data, nombreArchivo) {
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
 
         <!-- ========================================= -->
@@ -1760,6 +1762,7 @@ function descargarExcel(data, nombreArchivo) {
               </button>
             </div>
 
+            <div class="table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
@@ -1794,6 +1797,7 @@ function descargarExcel(data, nombreArchivo) {
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
 
@@ -2246,6 +2250,11 @@ function descargarExcel(data, nombreArchivo) {
 .conteo-excusada { background: #e0f2fe; color: #0369a1; }
 
 /* Tables */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -3096,9 +3105,27 @@ function descargarExcel(data, nombreArchivo) {
     font-size: 14px;
   }
 
-  /* Ocultar tabla rígida de 6 columnas en móvil y mostrar tarjetas táctiles */
-  .data-table {
+  /* Ocultar SOLO la tabla rígida de 6 columnas de asistencia en móvil;
+     el resto de tablas (historial, aprendices) se desplazan en horizontal. */
+  .data-table-asistencia {
     display: none;
+  }
+
+  .data-table:not(.data-table-asistencia) {
+    min-width: 560px;
+  }
+
+  .ficha-detail {
+    padding: 14px;
+  }
+
+  .action-bar {
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .modal {
+    padding: 18px 16px;
   }
 
   .mobile-student-cards {

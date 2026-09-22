@@ -10,7 +10,7 @@ function getBaseUrl() {
   if (fullHost.includes('-5173.')) {
     return `${protocol}//${fullHost.replace('-5173.', '-3000.')}/api`
   }
-  
+
   // En desarrollo local con servidor Vite separado en :5173
   if (port === '5173') {
     return `${protocol}//${host}:3000/api`

@@ -1,6 +1,33 @@
-.import-users-page-header { margin-bottom: 34px; }
-.import-users-page-header h1 { font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: #16210F; }
-.import-users-page-header p { color: #7C857A; font-size: 14.5px; margin-top: 6px; }
+.import-users-page-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-bottom: 34px;
+  padding: 108px 40px 26px;
+  min-height: 150px;
+  border-radius: 20px;
+  background: #F7F9F5;
+  box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09);
+  text-align: center;
+}
+.import-users-page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%201440%20200%22%20preserveAspectRatio%3D%22none%22%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C58%20C1325%2C112%201080%2C18%20878%2C52%20C677%2C86%20605%2C128%20446%2C110%20C288%2C92%20245%2C46%20144%2C70%20C72%2C84%200%2C64%200%2C84%20Z%22%20fill%3D%22%231F5C00%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C28%20C1267%2C78%20979%2C4%20792%2C26%20C605%2C48%20547%2C92%20389%2C78%20C230%2C64%20187%2C18%2086%2C32%20C43%2C38%200%2C26%200%2C44%20Z%22%20fill%3D%22%2339A900%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C10%20C1181%2C48%20864%2C-6%20691%2C10%20C518%2C26%20461%2C58%20317%2C48%20C173%2C38%20144%2C8%2058%2C16%20C29%2C20%200%2C10%200%2C20%20Z%22%20fill%3D%22%238BD457%22/%3E%0A%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 122px;
+  pointer-events: none;
+}
+.import-users-page-header > * { position: relative; z-index: 1; }
+.import-users-page-header h1 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: #1F5C00; text-align: center; }
+.import-users-page-header p { color: #4A5344; font-size: 14.5px; margin-top: 8px; text-align: center; }
+@media (max-width: 640px) {
+  .import-users-page-header { padding: 96px 24px 22px; }
+  .import-users-page-header h1 { font-size: 24px; }
+}
 .import-users-card { background: #ffffff; border-radius: 20px; padding: 32px 36px 34px; box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09); margin-bottom: 22px; }
 .import-users-restricted-card { border: 1.5px solid #F3CFC6; background: #FBEAE6; }
 .import-users-restricted-message { color: #C4432B; font-size: 15px; }
@@ -14,7 +41,7 @@
 .import-users-form-group select:focus { outline: none; border-color: #39A900; box-shadow: 0 0 0 3px rgba(57,169,0,0.14); }
 .import-users-file-upload { position: relative; }
 .import-users-file-input { display: none; }
-.import-users-file-label { display: block; padding: 13px 16px; border: 1.5px dashed #E2E6DE; border-radius: 8px; text-align: center; color: #7C857A; font-size: 14px; cursor: pointer; background: #F7F9F5; transition: all 0.2s; }
+.import-users-file-label { display: block; padding: 13px 16px; border: 1.5px dashed #E2E6DE; border-radius: 8px; color: #7C857A; font-size: 14px; cursor: pointer; background: #F7F9F5; transition: all 0.2s; }
 .import-users-file-label:hover { border-color: #39A900; color: #1F5C00; background: #F2F9ED; }
 .import-users-info { background: #F7F9F5; border: 1px solid #E2E6DE; border-radius: 8px; padding: 16px; font-size: 13px; color: #4A5344; }
 .import-users-info h4 { font-size: 14px; margin-bottom: 8px; color: #16210F; }
@@ -39,7 +66,7 @@
 .import-users-warning-title { color: #B9791A; }
 .import-users-warning-cell { color: #B9791A; font-size: 12.5px !important; }
 .import-users-muted { font-size: 11px; color: #7C857A; }
-.import-users-more-message { text-align: center; padding: 12px; color: #7C857A; font-size: 13px; }
+.import-users-more-message { padding: 12px; color: #7C857A; font-size: 13px; }
 .import-users-actions { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }
 .import-users-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 13px 24px; border-radius: 8px; font-weight: 600; font-size: 14.5px; border: none; cursor: pointer; transition: background 0.18s, box-shadow 0.18s; }
 .import-users-button-primary { background: #39A900; color: #ffffff; }
@@ -61,4 +88,11 @@
   .import-users-card { padding: 24px 20px 26px; }
   .import-users-form-grid { grid-template-columns: 1fr; }
   .import-users-summary { flex-direction: column; }
+  .import-users-card-header { flex-direction: column; align-items: stretch; }
+  .import-users-header-actions { flex-wrap: wrap; }
+  .import-users-table { min-width: 600px; }
+  .import-users-table th, .import-users-table td { padding: 10px 12px; }
+  .import-users-actions { flex-wrap: wrap; }
+  .import-users-stat { min-width: 0; }
+  .import-users-toast { left: 14px; right: 14px; bottom: 14px; }
 }

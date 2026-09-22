@@ -171,10 +171,10 @@ async function eliminarDiaFestivo(id) {
 }
 
 function motivoBadge(motivo) {
-  if (motivo === 'Festivo') return 'badge-primary'
-  if (motivo === 'Inhabilitado Institucional' || motivo === 'Inhabilitado') return 'badge-danger'
-  if (motivo === 'Jornada Pedagogica' || motivo === 'Jornada Pedagógica') return 'badge-warning'
-  return 'badge-ficha'
+  if (motivo === 'Festivo') return 'holidays-badge-primary'
+  if (motivo === 'Inhabilitado Institucional' || motivo === 'Inhabilitado') return 'holidays-badge-danger'
+  if (motivo === 'Jornada Pedagogica' || motivo === 'Jornada Pedagógica') return 'holidays-badge-warning'
+  return 'holidays-badge-special'
 }
 
 function getFichasNombres(dia) {
@@ -199,56 +199,56 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
 </script>
 
 <template>
-  <div class="page-header">
+  <div class="holidays-page-header">
     <h1>Días Festivos e Inhabilitados</h1>
     <p>Inhabilita automáticamente las clases de la institución por festivos, jornadas o fichas seleccionadas</p>
   </div>
 
-  <div class="card">
-    <div class="card-header">
+  <div class="holidays-card">
+    <div class="holidays-card-header">
       <h3>Calendario de Días No Laborables / Inhabilitados</h3>
-      <div class="btn-group">
-        <button class="btn btn-outline" @click="sincronizarAPI" :disabled="sincronizandoAPI" title="Sincronizar Festivos">
+      <div class="holidays-button-group">
+        <button class="holidays-button holidays-button-outline" @click="sincronizarAPI" :disabled="sincronizandoAPI" title="Sincronizar Festivos">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </button>
-        <button class="btn btn-primary" @click="openCreate" title="Agregar Día Festivo">
+        <button class="holidays-button holidays-button-primary" @click="openCreate" title="Agregar Día Festivo">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
     </div>
 
-    <div v-if="diasOrdenados.length === 0" class="empty-state">
+    <div v-if="diasOrdenados.length === 0" class="holidays-empty-state">
       <p>No hay días festivos ni inhabilitaciones registradas.</p>
     </div>
 
     <div v-else>
-      <div v-if="diasFuturos.length > 0" style="margin-bottom: 24px;">
-        <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text);">Próximos Días Inhabilitados / Festivos</h4>
-        <div class="festivos-grid">
-          <div v-for="d in diasFuturos" :key="d._id" class="festivo-card" :class="{ 'festivo-hoy': esHoy(d.fecha) }">
-            <div class="festivo-fecha">
-              <span class="festivo-dia">{{ d.fecha.slice(8) }}</span>
-              <span class="festivo-mes">{{ new Date(d.fecha + 'T00:00:00').toLocaleDateString('es-CO', { month: 'short' }) }}</span>
+      <div v-if="diasFuturos.length > 0" class="holidays-upcoming-section">
+        <h4 class="holidays-section-title">Próximos Días Inhabilitados / Festivos</h4>
+        <div class="holidays-grid">
+          <div v-for="d in diasFuturos" :key="d._id" class="holidays-card-item" :class="{ 'holidays-card-today': esHoy(d.fecha) }">
+            <div class="holidays-date-box">
+              <span class="holidays-date-day">{{ d.fecha.slice(8) }}</span>
+              <span class="holidays-date-month">{{ new Date(d.fecha + 'T00:00:00').toLocaleDateString('es-CO', { month: 'short' }) }}</span>
             </div>
             <div class="holidays-item-info">
               <strong>{{ d.descripcion || d.motivo }}</strong>
-              <div style="display: flex; gap: 6px; align-items: center; margin-top: 2px;">
-                <span class="badge" :class="motivoBadge(d.motivo)">{{ d.motivo }}</span>
+              <div class="holidays-badge-row">
+                <span class="holidays-badge" :class="motivoBadge(d.motivo)">{{ d.motivo }}</span>
               </div>
-              <span style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">{{ getFichasNombres(d) }}</span>
+              <span class="holidays-item-fiches">{{ getFichasNombres(d) }}</span>
             </div>
-            <div class="btn-group">
-              <button class="btn btn-outline btn-sm" @click="openEdit(d)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-              <button class="btn btn-danger btn-sm" @click="eliminarDiaFestivo(d._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+            <div class="holidays-button-group">
+              <button class="holidays-button holidays-button-outline holidays-button-small" @click="openEdit(d)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+              <button class="holidays-button holidays-button-danger holidays-button-small" @click="eliminarDiaFestivo(d._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
           </div>
         </div>
       </div>
 
       <div v-if="diasPasados.length > 0">
-        <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);">Días Anteriores ({{ diasPasados.length }})</h4>
-        <div class="table-container">
-          <table>
+        <h4 class="holidays-section-title holidays-section-title-past">Días Anteriores ({{ diasPasados.length }})</h4>
+        <div class="holidays-table-container">
+          <table class="holidays-table">
             <thead><tr><th>Fecha</th><th>Motivo</th><th>Descripción</th><th>Alcance</th><th>Acciones</th></tr></thead>
             <tbody>
               <tr v-for="d in diasPasados" :key="d._id">
@@ -257,9 +257,9 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
                 <td>{{ d.descripcion || '—' }}</td>
                 <td class="holidays-fiches-cell">{{ getFichasNombres(d) }}</td>
                 <td>
-                  <div class="btn-group">
-                    <button class="btn btn-outline btn-sm" @click="openEdit(d)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-                    <button class="btn btn-danger btn-sm" @click="eliminarDiaFestivo(d._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                  <div class="holidays-button-group">
+                    <button class="holidays-button holidays-button-outline holidays-button-small" @click="openEdit(d)" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                    <button class="holidays-button holidays-button-danger holidays-button-small" @click="eliminarDiaFestivo(d._id)" title="Eliminar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                   </div>
                 </td>
               </tr>
@@ -270,12 +270,12 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
     </div>
   </div>
 
-  <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-    <div class="modal">
+  <div v-if="showModal" class="holidays-modal-overlay" @click.self="closeModal">
+    <div class="holidays-modal">
       <h2>{{ editingId ? 'Editar' : 'Registrar' }} Día Festivo / Inhabilitación</h2>
-      <div class="form-grid">
-        <div class="form-group"><label>Fecha *</label><input v-model="diaFestivoForm.fecha" type="date" /></div>
-        <div class="form-group">
+      <div class="holidays-form-grid">
+        <div class="holidays-form-group"><label>Fecha *</label><input v-model="diaFestivoForm.fecha" type="date" /></div>
+        <div class="holidays-form-group">
           <label>Motivo *</label>
           <select v-model="diaFestivoForm.motivo">
             <option value="Festivo">Festivo Oficial</option>
@@ -285,8 +285,8 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
             <option value="Actividad Especial">Actividad Especial</option>
           </select>
         </div>
-        <div class="form-group"><label>Descripción (Opcional)</label><input v-model="diaFestivoForm.descripcion" type="text" placeholder="Ej: Día festivo nacional, Día cívico, Reunión..." /></div>
-        <div class="form-group">
+        <div class="holidays-form-group"><label>Descripción (Opcional)</label><input v-model="diaFestivoForm.descripcion" type="text" placeholder="Ej: Día festivo nacional, Día cívico, Reunión..." /></div>
+        <div class="holidays-form-group">
           <label>Inhabilitar Clases</label>
           <select v-model="diaFestivoForm.fichasAplicables">
             <option value="todas">Todas las clases y jornadas</option>
@@ -297,20 +297,20 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
       </div>
 
       <!-- Selección de Jornadas -->
-      <div v-if="diaFestivoForm.fichasAplicables === 'jornada'" style="margin-top: 16px;">
-        <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">
+      <div v-if="diaFestivoForm.fichasAplicables === 'jornada'" class="holidays-selection-section">
+        <label class="holidays-selection-label">
           Selecciona las jornadas a inhabilitar
         </label>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <label class="ficha-check-item" style="cursor: pointer;">
+        <div class="holidays-jornadas-row">
+          <label class="holidays-fiche-check-item">
             <input type="checkbox" :checked="diaFestivoForm.jornadasSeleccionadas.includes('Mañana')" @change="toggleJornada('Mañana')" />
             <span>Mañana</span>
           </label>
-          <label class="ficha-check-item" style="cursor: pointer;">
+          <label class="holidays-fiche-check-item">
             <input type="checkbox" :checked="diaFestivoForm.jornadasSeleccionadas.includes('Tarde')" @change="toggleJornada('Tarde')" />
             <span>Tarde</span>
           </label>
-          <label class="ficha-check-item" style="cursor: pointer;">
+          <label class="holidays-fiche-check-item">
             <input type="checkbox" :checked="diaFestivoForm.jornadasSeleccionadas.includes('Noche')" @change="toggleJornada('Noche')" />
             <span>Noche</span>
           </label>
@@ -318,25 +318,25 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
       </div>
 
       <!-- Selección de Fichas Específicas -->
-      <div v-if="diaFestivoForm.fichasAplicables === 'especificas'" style="margin-top: 16px;">
-        <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">
+      <div v-if="diaFestivoForm.fichasAplicables === 'especificas'" class="holidays-selection-section">
+        <label class="holidays-selection-label">
           Selecciona las fichas a inhabilitar
         </label>
-        <div class="fichas-check-grid">
-          <label v-for="f in fichasList" :key="f._id" class="ficha-check-item">
+        <div class="holidays-fiches-check-grid">
+          <label v-for="f in fichasList" :key="f._id" class="holidays-fiche-check-item">
             <input type="checkbox" :checked="diaFestivoForm.fichasSeleccionadas.includes(f._id)" @change="toggleFicha(f._id)" />
             <span>{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</span>
           </label>
         </div>
       </div>
 
-      <div style="margin-top: 16px; padding: 10px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af;">
+      <div class="holidays-info-note">
         ℹ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
       </div>
 
-      <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
-        <button class="btn btn-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-primary" @click="guardarDiaFestivo" :disabled="loading" title="Guardar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+      <div class="holidays-modal-actions">
+        <button class="holidays-button holidays-button-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button class="holidays-button holidays-button-primary" @click="guardarDiaFestivo" :disabled="loading" title="Guardar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
       </div>
     </div>
   </div>
@@ -344,24 +344,3 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
   <div v-if="toast.show" class="holidays-toast" :class="'holidays-toast-' + toast.type">{{ toast.message }}</div>
 </template>
 
-<style scoped>
-.page-header { margin-bottom: 34px; }
-.page-header h1 { font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: #16210F; }
-.page-header p { color: #7C857A; font-size: 14.5px; margin-top: 6px; }
-.card { background: #ffffff; border-radius: 20px; padding: 32px 36px 34px; box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09); margin-bottom: 22px; }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
-.card-header h3 { font-size: 16.5px; font-weight: 600; color: #16210F; }
-.btn-group { display: flex; gap: 8px; flex-wrap: nowrap; align-items: center; }
-.festivos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.festivo-card { display: flex; align-items: center; gap: 14px; padding: 14px; background: #F7F9F5; border-radius: 12px; border: 1px solid #E2E6DE; }
-.festivo-hoy { border-color: #39A900; background: #F2F9ED; }
-.festivo-fecha { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50px; height: 50px; background: #E8F5E0; color: #1F5C00; border-radius: 8px; border: none; flex-shrink: 0; }
-.festivo-dia { font-size: 20px; font-weight: 700; color: #1F5C00; line-height: 1; }
-.festivo-mes { font-size: 10px; color: #1F5C00; text-transform: uppercase; font-weight: 600; }
-.festivo-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.fichas-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; max-height: 180px; overflow-y: auto; padding: 8px; background: #F7F9F5; border: 1px solid #E2E6DE; border-radius: 8px; }
-.ficha-check-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid #E2E6DE; border-radius: 6px; background: #fff; font-size: 13px; }
-.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-weight: 600; color: white; z-index: 9999; box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08); }
-.toast-success { background: #2F8C00; }
-.toast-error { background: #C4432B; }
-</style>

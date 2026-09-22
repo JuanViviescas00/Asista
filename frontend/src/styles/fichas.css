@@ -1,6 +1,33 @@
-.fichas-page-header { margin-bottom: 34px; }
-.fichas-page-header h1 { font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: #16210F; }
-.fichas-page-header p { color: #7C857A; font-size: 14.5px; margin-top: 6px; }
+.fichas-page-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-bottom: 34px;
+  padding: 108px 40px 26px;
+  min-height: 150px;
+  border-radius: 20px;
+  background: #F7F9F5;
+  box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09);
+  text-align: center;
+}
+.fichas-page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%201440%20200%22%20preserveAspectRatio%3D%22none%22%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C58%20C1325%2C112%201080%2C18%20878%2C52%20C677%2C86%20605%2C128%20446%2C110%20C288%2C92%20245%2C46%20144%2C70%20C72%2C84%200%2C64%200%2C84%20Z%22%20fill%3D%22%231F5C00%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C28%20C1267%2C78%20979%2C4%20792%2C26%20C605%2C48%20547%2C92%20389%2C78%20C230%2C64%20187%2C18%2086%2C32%20C43%2C38%200%2C26%200%2C44%20Z%22%20fill%3D%22%2339A900%22/%3E%0A%3Cpath%20d%3D%22M0%2C0%20L1440%2C0%20L1440%2C10%20C1181%2C48%20864%2C-6%20691%2C10%20C518%2C26%20461%2C58%20317%2C48%20C173%2C38%20144%2C8%2058%2C16%20C29%2C20%200%2C10%200%2C20%20Z%22%20fill%3D%22%238BD457%22/%3E%0A%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: 100% 122px;
+  pointer-events: none;
+}
+.fichas-page-header > * { position: relative; z-index: 1; }
+.fichas-page-header h1 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; color: #1F5C00; text-align: center; }
+.fichas-page-header p { color: #4A5344; font-size: 14.5px; margin-top: 8px; text-align: center; }
+@media (max-width: 640px) {
+  .fichas-page-header { padding: 96px 24px 22px; }
+  .fichas-page-header h1 { font-size: 24px; }
+}
 .fichas-card { background: #ffffff; border-radius: 20px; padding: 32px 36px 34px; box-shadow: 0 1px 2px rgba(22,33,15,.04), 0 8px 32px rgba(57,169,0,.09); margin-bottom: 22px; }
 .fichas-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
 .fichas-card-header h3 { font-size: 16.5px; font-weight: 600; color: #16210F; }
@@ -12,25 +39,40 @@
 .fichas-button-outline:hover { background: #F2F9ED; border-color: #39A900; }
 .fichas-button-danger { background: #C4432B; color: #ffffff; }
 .fichas-button-danger:hover { background: #A8371F; }
+.fichas-button-warning { background: #B9791A; color: #ffffff; }
+.fichas-button-warning:hover { background: #9C6414; }
 .fichas-button-small { padding: 9px 16px; font-size: 13.5px; }
 .fichas-button:disabled { opacity: 0.6; cursor: not-allowed; }
-.fichas-empty-state { text-align: center; padding: 56px 24px 48px; color: #7C857A; }
+.fichas-empty-state { padding: 56px 24px 48px; color: #7C857A; }
 .fichas-empty-state svg { width: 52px; height: 52px; margin-bottom: 16px; opacity: 0.55; }
 .fichas-empty-state p { font-size: 15px; }
 .fichas-table-container { overflow: auto; max-height: 70vh; }
-.fichas-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.fichas-table th, .fichas-table td { text-align: left; padding: 15px 14px; border-bottom: 1px solid #E2E6DE; }
+.fichas-table { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+.fichas-table .col-codigo { width: 13%; }
+.fichas-table .col-ficha { width: 24%; }
+.fichas-table .col-docente { width: 45%; }
+.fichas-table .col-acciones { width: 18%; }
+.fichas-table th, .fichas-table td { text-align: left; padding: 15px 14px; border-bottom: 1px solid #E2E6DE; overflow: hidden; text-overflow: ellipsis; }
 .fichas-table th { font-size: 12px; font-weight: 600; color: #7C857A; background: transparent; padding-bottom: 12px; }
-.fichas-table th:last-child, .fichas-table td:last-child { white-space: nowrap; }
+.fichas-table th:last-child, .fichas-table td:last-child { white-space: nowrap; overflow: visible; }
 .fichas-table tbody tr:hover { background: #F2F9ED; }
 .fichas-badge { display: inline-block; padding: 5px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
 .fichas-badge-primary { background: #E8F5E0; color: #1F5C00; }
 .fichas-badge-warning { background: #FBF1E1; color: #B9791A; }
 .fichas-badge-success { background: #E8F5E0; color: #1F5C00; }
+.fichas-badge-inactive { background: #FBE5E0; color: #A8371F; }
+.fichas-row-inactiva td { opacity: 0.6; }
+.fichas-row-inactiva td:last-child { opacity: 1; }
+.fichas-badge-ficha { background: var(--azul-suave, #E8EEFB); color: var(--azul, #2F5BC4); font-size: 12px; white-space: nowrap; }
 .fichas-badge-leader { background: #E8F5E0; color: #1F5C00; font-weight: 700; }
 .fichas-common-text { font-size: 12px; color: #4A5344; }
 .fichas-modal-overlay { position: fixed; inset: 0; background: rgba(22,33,15,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .fichas-modal { background: #ffffff; border-radius: 20px; box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08); padding: 32px; max-height: 90vh; overflow-y: auto; }
+.fichas-modal-small { max-width: 520px; width: 95vw; }
+.fichas-modal-text { color: #7C857A; font-size: 15px; line-height: 1.5; margin-bottom: 16px; }
+.fichas-modal-text strong { color: #16210F; }
+.fichas-form-group textarea { padding: 13px 15px; border: 1px solid #E2E6DE; border-radius: 8px; font-size: 15px; font-family: 'Work Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #ffffff; color: #16210F; resize: vertical; width: 100%; box-sizing: border-box; }
+.fichas-form-group textarea:focus { outline: none; border-color: #39A900; box-shadow: 0 0 0 3px rgba(57,169,0,0.14); }
 .fichas-modal-large { max-width: 650px; width: 95vw; }
 .fichas-modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #16210F; }
 .fichas-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px 22px; }
@@ -48,7 +90,7 @@
 .fichas-instructor-check-item:hover:not(.is-disabled) { border-color: #39A900; background: #F2F9ED; }
 .fichas-instructor-check-item.is-disabled { opacity: 0.6; cursor: not-allowed; background: #EEF0EC; }
 .fichas-leader-note { color: #2F8C00; font-weight: 700; }
-.fichas-no-instructors { padding: 12px; color: #7C857A; font-size: 13px; text-align: center; }
+.fichas-no-instructors { padding: 12px; color: #7C857A; font-size: 13px; }
 .fichas-warning-text { font-size: 12px; color: #B9791A; background: #FBF1E1; border: 1px solid #F3DFB8; padding: 8px 12px; border-radius: 6px; margin-top: 6px; }
 .fichas-modal-actions { display: flex; gap: 8px; margin-top: 24px; justify-content: flex-end; }
 .fichas-toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-weight: 600; color: #ffffff; z-index: 9999; box-shadow: 0 2px 4px rgba(22,33,15,.03), 0 18px 48px rgba(22,33,15,.08); }
@@ -58,4 +100,18 @@
   .fichas-card { padding: 24px 20px 26px; }
   .fichas-form-grid { grid-template-columns: 1fr; }
   .fichas-form-group-wide { grid-column: auto; }
+  .fichas-card-header { flex-direction: column; align-items: stretch; }
+  .fichas-button-group { flex-wrap: wrap; }
+  .fichas-table { min-width: 560px; }
+  .fichas-table th, .fichas-table td { padding: 12px 10px; }
+  .fichas-modal { padding: 22px 18px; }
+  .fichas-modal-actions { flex-wrap: wrap; }
+  .fichas-detalle { grid-template-columns: 1fr; gap: 12px 16px; padding: 16px; }
 }
+.fichas-toggle svg { transition: transform .2s ease; }
+.fichas-toggle-abierto svg { transform: rotate(180deg); }
+.fichas-table .fichas-detalle-fila td { padding: 0; background: #F2F9ED; white-space: normal; }
+.fichas-table tbody tr.fichas-detalle-fila:hover { background: #F2F9ED; }
+.fichas-detalle { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px 24px; padding: 18px 20px; }
+.fichas-detalle-item { display: flex; flex-direction: column; gap: 6px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.fichas-detalle-label { font-size: 12px; font-weight: 600; color: #7C857A; }
