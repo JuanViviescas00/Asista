@@ -175,10 +175,18 @@ export async function eliminar(req, res) {
       return res.status(404).json({ error: 'Dispositivo no encontrado' })
     }
 
-    // Rechazar = eliminar el documento completo (el dispositivo podrá re-registrarse).
+    // 1. Si está conectado actualmente, desconectarlo
+    if (dispositivo.deviceId) {
+      desconectarDispositivo(dispositivo.deviceId)
+    }
+
+    // 2. Liberar cualquier ficha que tuviera asociada
+    await Ficha.updateMany({ dispositivoId: id }, { $set: { dispositivoId: null } })
+
+    // 3. Eliminar el documento completo (el dispositivo podrá re-registrarse si lo desea).
     await Dispositivo.deleteOne({ _id: id })
 
-    res.json({ ok: true, message: 'Dispositivo rechazado y eliminado.' })
+    res.json({ ok: true, message: 'Dispositivo eliminado correctamente.' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

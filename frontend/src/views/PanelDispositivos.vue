@@ -201,6 +201,22 @@ async function rechazarDispositivo(device) {
   }
 }
 
+async function eliminarDispositivo(device) {
+  if (!confirm(`¿Eliminar definitivamente "${deviceLabel(device)}"?\n\nEsta acción borrará el registro del dispositivo de la base de datos y liberará cualquier ficha asignada.`)) {
+    return
+  }
+  savingId.value = device._id
+  try {
+    await api.dispositivos.eliminar(device._id)
+    showToast('Dispositivo eliminado correctamente')
+    await loadDispositivos()
+  } catch (e) {
+    showToast('Error: ' + (e.message || 'No se pudo eliminar'), 'error')
+  } finally {
+    savingId.value = null
+  }
+}
+
 function formatFecha(iso) {
   if (!iso) return '—'
   try {
@@ -270,6 +286,9 @@ function formatFecha(iso) {
             <button class="btn btn-danger btn-sm" :disabled="savingId === d._id" @click="deshabilitarDispositivo(d)" title="Deshabilitar">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
             </button>
+            <button class="btn btn-danger btn-sm btn-eliminar" :disabled="savingId === d._id" @click="eliminarDispositivo(d)" title="Eliminar definitivamente">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
           </div>
         </div>
 
@@ -319,6 +338,9 @@ function formatFecha(iso) {
           <div class="card-actions">
             <button class="btn btn-success btn-sm" :disabled="savingId === d._id" @click="reactivarDispositivo(d)" title="Reactivar">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button class="btn btn-danger btn-sm btn-eliminar" :disabled="savingId === d._id" @click="eliminarDispositivo(d)" title="Eliminar definitivamente">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
           </div>
         </div>
