@@ -32,6 +32,7 @@ export function setOnEnrolarProgreso(cb) {
 
 export function cancelarEnrolamiento() {
   enrolamientoCancelado = true
+  cancelarCapturaEnCurso()
 }
 
 export function cancelarCapturaEnCurso() {
@@ -585,11 +586,20 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, s
       try {
         captura = await capturarHuella()
       } catch (err) {
+        console.error(`[engine] Fallo en capturarHuella() (intento fallido #${fallosConsecutivos + 1}/${MAX_FALLOS_CONSECUTIVOS}):`, err.message || err)
+        if (enrolamientoCancelado) {
+          console.warn('[engine] Enrolamiento cancelado por el usuario tras fallo de captura.')
+          fingerprint.cancelSession(sessionId)
+          notificarProgresoEnrolamiento({ fase: 'cancelado', actual, total, mensaje: 'Enrolamiento cancelado' })
+          return { ok: false, error: 'Enrolamiento cancelado' }
+        }
+
         fallosConsecutivos++
         const motivo = err.message || 'No se pudo capturar la huella'
         notificarProgresoEnrolamiento({ fase: 'captura_fallida', actual, total, mensaje: `${motivo} — reintentando` })
 
         if (fallosConsecutivos >= MAX_FALLOS_CONSECUTIVOS) {
+          console.error(`[engine] Se alcanzaron los ${MAX_FALLOS_CONSECUTIVOS} fallos consecutivos en enrolamiento. Cancelando sesión. Último error: ${motivo}`)
           fingerprint.cancelSession(sessionId)
           notificarProgresoEnrolamiento({ fase: 'cancelado', actual, total, mensaje: 'Enrolamiento cancelado por fallos consecutivos' })
           return { ok: false, error: `No se pudo capturar una huella válida: ${motivo}` }

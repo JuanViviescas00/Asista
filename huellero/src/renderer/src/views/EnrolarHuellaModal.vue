@@ -212,6 +212,8 @@ function elegirSlot(n) {
 }
 
 function cancelar() {
+  estadoCaptura.value = 'idle'
+  mensajeCaptura.value = 'Enrolamiento cancelado'
   window.huellero.cancelarEnrolamiento()
 }
 

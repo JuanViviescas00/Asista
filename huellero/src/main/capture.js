@@ -271,11 +271,15 @@ function obtenerDispositivos() {
   const rc1 = dpfpdd_query_devices(countBuf, null)
   const count = countBuf.readUInt32LE(0)
 
+  console.log(`[capture] dpfpdd_query_devices() -> rc1=${rc1} (${describirError(rc1)}), count=${count}`)
+
   if (count === 0) {
+    console.warn('[capture] No se encontraron lectores de huella conectados (count = 0).')
     return []
   }
 
   if (rc1 !== DPFPDD_SUCCESS && rc1 !== DPFPDD_E_MORE_DATA) {
+    console.error(`[capture] dpfpdd_query_devices() falló: rc1=${rc1} (${describirError(rc1)})`)
     throw new Error(`dpfpdd_query_devices() falló: ${describirError(rc1)}`)
   }
 
@@ -288,21 +292,28 @@ function obtenerDispositivos() {
   countBuf.writeUInt32LE(count, 0)
   const rc2 = dpfpdd_query_devices(countBuf, devBuf)
   if (rc2 !== DPFPDD_SUCCESS) {
+    console.error(`[capture] dpfpdd_query_devices() (2ª llamada) falló: rc2=${rc2} (${describirError(rc2)})`)
     throw new Error(`dpfpdd_query_devices() (2ª llamada) falló: ${describirError(rc2)}`)
   }
 
-  return koffi.decode(devBuf, DPFPDD_DEV_INFO, count)
+  const decoded = koffi.decode(devBuf, DPFPDD_DEV_INFO, count)
+  console.log(`[capture] ${count} dispositivo(s) detectado(s):`, decoded.map((d) => d.name || 'Sin nombre'))
+  return decoded
 }
 
 function abrirDispositivo(devName) {
+  console.log(`[capture] Abriendo dispositivo: "${devName}"...`)
   const outDev = [null]
   const rc = dpfpdd_open(devName, outDev)
   if (rc !== DPFPDD_SUCCESS) {
+    console.error(`[capture] dpfpdd_open("${devName}") falló con código ${rc}: ${describirError(rc)}`)
     throw new Error(`dpfpdd_open() falló: ${describirError(rc)}`)
   }
   if (!outDev[0]) {
+    console.error('[capture] dpfpdd_open() devolvió un manejador de lector nulo')
     throw new Error('dpfpdd_open() devolvió un manejador de lector nulo')
   }
+  console.log('[capture] Dispositivo abierto exitosamente.')
   return outDev[0]
 }
 
@@ -312,6 +323,8 @@ function cerrarDispositivo(dev) {
     const rc = dpfpdd_close(dev)
     if (rc !== DPFPDD_SUCCESS) {
       console.warn(`[capture] dpfpdd_close() devolvió: ${describirError(rc)}`)
+    } else {
+      console.log('[capture] Dispositivo cerrado exitosamente.')
     }
   } catch (err) {
     console.warn(`[capture] Error al cerrar el lector: ${err.message}`)
@@ -359,33 +372,40 @@ async function capturarImagen(dev, timeoutMs, dpi) {
   sizeBuf.writeUInt32LE(MAX_IMAGE_SIZE, 0) // [in] tamaño del buffer imageBuf asignado
   const imageBuf = Buffer.alloc(MAX_IMAGE_SIZE)
 
+  console.log(`[capture] Iniciando dpfpdd_capture() (timeout=${timeoutMs}ms, dpi=${dpi})...`)
   const rc = await new Promise((resolve, reject) => {
     dpfpdd_capture.async(dev, captureParam, timeoutMs, captureResult, sizeBuf, imageBuf, (err, rc) => {
       if (err) reject(err)
       else resolve(rc)
     })
   })
+  console.log(`[capture] dpfpdd_capture() finalizó: rc=${rc} (${describirError(rc)}), success=${captureResult.success}, quality=${captureResult.quality}, score=${captureResult.score}`)
   if (rc !== DPFPDD_SUCCESS) {
+    console.error(`[capture] dpfpdd_capture() falló: rc=${rc} (${describirError(rc)})`)
     throw new Error(`dpfpdd_capture() falló: ${describirError(rc)}`)
   }
 
   const { success, quality, score, info } = captureResult
 
   if (success !== 1) {
-    throw new Error(describirCalidad(quality))
+    const errorCalidad = describirCalidad(quality)
+    console.warn(`[capture] Captura no exitosa: success=${success}, quality=${quality} (${errorCalidad})`)
+    throw new Error(errorCalidad)
   }
 
   if (info.bpp !== 8) {
+    console.error(`[capture] Formato bpp inesperado: ${info.bpp}`)
     throw new Error(`Formato de imagen inesperado: bpp=${info.bpp} (solo se soporta 8 bits por píxel en escala de grises)`)
   }
 
   const numPixels = info.width * info.height
   const imageSize = sizeBuf.readUInt32LE(0)
   if (imageSize < numPixels) {
+    console.error(`[capture] Tamaño de imagen insuficiente: numPixels=${numPixels}, imageSize=${imageSize}`)
     throw new Error(`Tamaño de imagen insuficiente: se esperaban ${numPixels} bytes, se recibieron ${imageSize}`)
   }
 
-  console.log(`[capture] Huella capturada: ${info.width}x${info.height} @ ${info.res} dpi, bpp=${info.bpp}, score=${score}`)
+  console.log(`[capture] Huella capturada exitosamente: ${info.width}x${info.height} @ ${info.res} dpi, bpp=${info.bpp}, score=${score}`)
 
   return { gray: imageBuf.subarray(0, numPixels), width: info.width, height: info.height }
 }
@@ -414,12 +434,15 @@ function grayscaleToPngBase64(gray, width, height) {
  *                 el lector está ocupado, expira el tiempo o la calidad es mala.
  */
 export async function capturarHuella(timeoutMs = TIMEOUT_CAPTURA_MS) {
+  console.log('[capture] capturarHuella() llamado.')
   if (!inicializarCaptura()) {
+    console.error('[capture] inicializarCaptura() falló:', errorInicializacion)
     throw new Error(errorInicializacion || 'No se pudo inicializar el lector de huellas')
   }
 
   const dispositivos = obtenerDispositivos()
   if (dispositivos.length === 0) {
+    console.error('[capture] capturarHuella() falló: no se detectó ningún lector de huellas conectado')
     throw new Error('No se detectó ningún lector de huellas conectado')
   }
 
