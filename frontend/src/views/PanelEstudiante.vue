@@ -125,14 +125,10 @@ async function radicarExcusa() {
 
 <template>
   <div class="student-portal-page">
-    <div class="student-portal-header">
-      <div>
-        <h2>Portal del Aprendiz SENA</h2>
-        <p class="student-portal-subtitle">Consulta de Asistencias, Fichas e Inasistencias Justificadas</p>
-      </div>
-      <div style="display: flex; gap: 12px; align-items: center;">
-        <span class="student-portal-role">Aprendiz</span>
-      </div>
+    <div class="page-header">
+      <h1>Portal del Aprendiz SENA</h1>
+      <p>Consulta de Asistencias, Fichas e Inasistencias Justificadas</p>
+      <div class="student-portal-role-pill">Aprendiz</div>
     </div>
 
     <div v-if="loading" class="student-portal-loading">

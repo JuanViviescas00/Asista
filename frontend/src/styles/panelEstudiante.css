@@ -1,4 +1,5 @@
-.student-portal-page { padding: 24px; }
+.student-portal-page { padding: 0 0 24px; }
+.student-portal-role-pill { display: inline-block; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
 .student-portal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
 .student-portal-subtitle { color: #64748b; font-size: 14px; }
 .student-portal-role { background: rgba(59,130,246,0.15); color: #2563eb; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 13px; }
@@ -48,7 +49,7 @@
   .student-portal-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .student-portal-page { padding: 20px 16px; }
+  .student-portal-page { padding: 0 0 16px; }
   .student-portal-header { align-items: flex-start; gap: 16px; flex-direction: column; }
   .student-portal-header h2 { font-size: 20px; }
   .student-portal-profile-card,

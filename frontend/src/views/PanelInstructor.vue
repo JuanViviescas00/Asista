@@ -1192,15 +1192,10 @@ function descargarExcel(data, nombreArchivo) {
     </Transition>
 
     <!-- Encabezado del Instructor -->
-    <div class="instructor-header">
-      <div>
-        <h2>Bienvenido, {{ usuario.nombre }}</h2>
-        <p class="subtitle">Panel de Control de Instructor SENA</p>
-      </div>
-
-      <div class="user-badge" style="display: flex; gap: 12px; align-items: center;">
-        <span class="role-pill">Docente</span>
-      </div>
+    <div class="page-header">
+      <h1>Bienvenido, {{ usuario.nombre }}</h1>
+      <p>Panel de Control de Instructor SENA</p>
+      <div class="header-role-pill">Docente</div>
     </div>
 
     <div v-if="loading" class="loading-box">
@@ -1304,10 +1299,6 @@ function descargarExcel(data, nombreArchivo) {
                 <div class="remote-status-badge" :class="sesionRemotaActiva ? 'badge-live' : 'badge-idle'">
                   <span class="live-dot" :class="{ 'live-dot-pulsing': sesionRemotaActiva }"></span>
                   <span>{{ sesionRemotaActiva ? 'CLASE EN VIVO (PASE DE LISTA REMOTO ACTIVO)' : 'PASE DE LISTA REMOTO EN ESPERA' }}</span>
-                </div>
-                <div class="remote-device-status" :class="dispositivoOnline ? 'device-online' : 'device-offline'">
-                  <span class="device-dot"></span>
-                  {{ dispositivoOnline ? 'Lector del aula conectado' : 'Lector del aula desconectado' }}
                 </div>
                 <p class="remote-desc">
                   {{ sesionRemotaActiva 
@@ -2021,8 +2012,20 @@ function descargarExcel(data, nombreArchivo) {
 
 <style scoped>
 .panel-instructor {
-  padding: 24px;
+  padding: 0 0 24px;
   position: relative;
+}
+
+.header-role-pill {
+  display: inline-block;
+  margin-top: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* Toast */
@@ -3021,7 +3024,7 @@ function descargarExcel(data, nombreArchivo) {
 
 @media (max-width: 768px) {
   .panel-instructor {
-    padding: 10px 8px;
+    padding: 0 0 12px;
   }
 
   .instructor-header {
