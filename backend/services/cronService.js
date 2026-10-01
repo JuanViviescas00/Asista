@@ -3,9 +3,10 @@ import Asistencia from '../models/Asistencia.js'
 import Instructor from '../models/Instructor.js'
 import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'
+import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
 import { getHoyString } from './asistenciaService.js'
-import { emitirDesactivacion, emitirClaseDesactivada } from './socketService.js'
+import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 
 /**
  * Cierra automáticamente las clases que lleven más de 3 horas activas.
@@ -149,6 +150,23 @@ export function iniciarCronJobs() {
   })
 
   console.log(`[CRON] Programador nocturno listo (${schedule} - ${timezone}) - Agrupación por Docente`)
+
+  // 3. Cron diario de detección de fallas/excusas para Sofía Plus (4:00 AM Bogotá)
+  cron.schedule('0 4 * * *', async () => {
+    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión de fallas para Sofía Plus...`)
+    try {
+      const encolado = await revisarYEncolarSofiaPlus()
+      console.log(`[CRON] SofiaPlus: ${encolado.encolados} encolados, ${encolado.omitidosYaExistentes} ya existentes, ${encolado.enEsperaDiasHabiles} en espera de días hábiles.`)
+      const alertas = await revisarAlertasSofiaPlus()
+      console.log(`[CRON] SofiaPlus: ${alertas.alertasEmitidas} alertas emitidas.`)
+    } catch (err) {
+      console.error('[CRON] ❌ Error en revisión de Sofía Plus:', err.message)
+    }
+  }, {
+    timezone: 'America/Bogota'
+  })
+
+  console.log('[CRON] Revisión diaria Sofía Plus a las 4:00 AM (America/Bogota) activa')
 }
 
 /**
@@ -260,4 +278,125 @@ export async function sincronizarSqlitePorDocente() {
     totalElegiblesSubida,
     archivosGenerados
   }
+}
+
+/**
+ * Revisa las asistencias con estado 'Falta' o 'Excusada' y las encola en la
+ * colección SofiaPlusSync para que otro proceso (RPA) las suba a Sofía Plus.
+ * - 'Excusada' se encola de inmediato, sin esperar días hábiles.
+ * - 'Falta' solo se encola cuando hayan transcurrido >= 3 días hábiles desde la
+ *   fecha de la inasistencia (misma regla de la ventana de excusas).
+ * - No duplica: si ya existe un SofiaPlusSync para una asistencia, la omite.
+ */
+async function revisarYEncolarSofiaPlus() {
+  const hoyStr = getHoyString()
+
+  // 1. Cargar conjunto de días festivos para cálculo de días hábiles
+  const festivosDocs = await DiaFestivo.find().select('fecha')
+  const festivosSet = new Set(festivosDocs.map(f => f.fecha))
+
+  // 2. Obtener asistencias relevantes (fallas y excusadas)
+  const asistencias = await Asistencia.find({ estado: { $in: ['Falta', 'Excusada'] } })
+    .populate('fichaId', 'jornada instructorLiderId')
+
+  if (!asistencias || asistencias.length === 0) {
+    return { encolados: 0, omitidosYaExistentes: 0, enEsperaDiasHabiles: 0 }
+  }
+
+  // 3. IDs de asistencias que ya tienen un SofiaPlusSync (para no duplicar)
+  const yaEncolados = new Set(
+    (await SofiaPlusSync.find({ asistenciaId: { $in: asistencias.map(a => a._id) } }).select('asistenciaId'))
+      .map(s => String(s.asistenciaId))
+  )
+
+  const aEncolar = []
+  let omitidosYaExistentes = 0
+  let enEsperaDiasHabiles = 0
+
+  for (const a of asistencias) {
+    if (!a.fichaId) continue
+
+    if (yaEncolados.has(String(a._id))) {
+      omitidosYaExistentes++
+      continue
+    }
+
+    const instructorId = a.instructorId || (a.fichaId.instructorLiderId || null)
+
+    if (a.estado === 'Excusada') {
+      aEncolar.push({
+        asistenciaId: a._id,
+        estudianteId: a.estudianteId,
+        fichaId: a.fichaId._id || a.fichaId,
+        instructorId,
+        fecha: a.fecha,
+        resultado: 'Excusada',
+      })
+      continue
+    }
+
+    // estado === 'Falta'
+    const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId.jornada || '')
+    if (diasHabiles >= 4) {
+      aEncolar.push({
+        asistenciaId: a._id,
+        estudianteId: a.estudianteId,
+        fichaId: a.fichaId._id || a.fichaId,
+        instructorId,
+        fecha: a.fecha,
+        resultado: 'Falta',
+      })
+    } else {
+      enEsperaDiasHabiles++
+    }
+  }
+
+  if (aEncolar.length > 0) {
+    try {
+      await SofiaPlusSync.insertMany(aEncolar, { ordered: false })
+    } catch (err) {
+      if (err.code !== 11000) {
+        console.error('[SofiaPlus] Error al encolar registros:', err.message)
+      }
+    }
+  }
+
+  console.log(`[SofiaPlus] Encolados: ${aEncolar.length}, ya existentes: ${omitidosYaExistentes}, en espera de días hábiles: ${enEsperaDiasHabiles}`)
+
+  return { encolados: aEncolar.length, omitidosYaExistentes, enEsperaDiasHabiles }
+}
+
+/**
+ * Revisa los SofiaPlusSync en estado 'error' con intentos >= 3 y sin alerta
+ * enviada, emite una alerta por WebSocket y marca alertaEnviada = true.
+ */
+async function revisarAlertasSofiaPlus() {
+  const errores = await SofiaPlusSync.find({
+    estadoSync: 'error',
+    intentos: { $gte: 3 },
+    alertaEnviada: false,
+  })
+
+  let alertasEmitidas = 0
+  for (const s of errores) {
+    const emitido = emitirAlertaSofiaPlus({
+      type: 'ALERTA_SOFIA_PLUS',
+      syncId: String(s._id),
+      asistenciaId: String(s.asistenciaId),
+      estudianteId: String(s.estudianteId),
+      fichaId: String(s.fichaId),
+      fecha: s.fecha,
+      resultado: s.resultado,
+      intentos: s.intentos,
+      ultimoError: s.ultimoError,
+    })
+
+    if (emitido) {
+      s.alertaEnviada = true
+      await s.save()
+      alertasEmitidas++
+    }
+  }
+
+  return { alertasEmitidas }
 }
