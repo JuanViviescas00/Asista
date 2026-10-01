@@ -55,7 +55,7 @@ const fichaSeleccionada = computed(() => fichasList.value.find(f => f._id === fi
 
 const horasPorJornada = computed(() => {
   const j = (fichaSeleccionada.value?.jornada || '').toLowerCase()
-  if (j.includes('noche') || j.includes('nocturna')) return 4
+  if (j.includes('noche') || j.includes('nocturna')) return 5
   return 6 // Mañana, Tarde o Mixta estándar 6 horas
 })
 

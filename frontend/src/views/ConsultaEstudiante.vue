@@ -40,7 +40,7 @@ async function seleccionarEstudiante(est) {
       api.asistencias.getAll({ estudianteId: est._id }),
       api.excusas.getAll({ estudianteId: est._id })
     ])
-    asistenciasEstudiante.value = asis
+    asistenciasEstudiante.value = (asis || []).filter(a => String(a.estudianteId?._id || a.estudianteId) === String(est._id))
     excusasEstudiante.value = exc
   } catch (e) {
     console.error('Error al cargar reporte de estudiante:', e)

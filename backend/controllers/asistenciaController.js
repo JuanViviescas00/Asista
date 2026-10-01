@@ -16,8 +16,11 @@ import {
 
 export async function getAsistencias(req, res) {
   try {
-    const { fichaId, fecha, fechaDesde, fechaHasta } = req.query
+    const { fichaId, estudianteId, fecha, fechaDesde, fechaHasta } = req.query
     const filter = {}
+    if (estudianteId) {
+      filter.estudianteId = estudianteId
+    }
     if (fichaId) {
       const idsBuscar = await getFichaIdList(fichaId)
       filter.fichaId = { $in: idsBuscar }

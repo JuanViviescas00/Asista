@@ -197,7 +197,7 @@ async function procesarCambioPassword() {
 
 <template>
   <div class="admin-profile-page-header">
-    <h1>{{ esInstructor ? '‍ Perfil del Instructor / Maestro' : 'Perfil del Administrador' }}</h1>
+    <h1>{{ esInstructor ? 'Perfil Instructor' : 'Perfil del Administrador' }}</h1>
     <p>{{ esInstructor ? 'Información personal y académica del docente' : 'Gestiona tu información personal y seguridad de la cuenta' }}</p>
   </div>
 

@@ -10,6 +10,10 @@ const loading = ref(false)
 const savingId = ref(null)
 const toast = ref({ show: false, message: '', type: '' })
 
+// Selector de fichas (menú desplegable + buscador) por dispositivo.
+const menuAbierto = reactive({})   // { [deviceId]: boolean }
+const busquedas = reactive({})     // { [deviceId]: string }
+
 // Estado online por deviceId (UUID), alimentado por DEVICE_CONNECTED/DISCONNECTED.
 const onlineMap = reactive({})
 
@@ -31,6 +35,8 @@ onMounted(async () => {
     loading.value = false
   }
 
+  document.addEventListener('click', cerrarMenusFuera)
+
   socket.on('connect', unirseAdmin)
   if (socket.connected) unirseAdmin()
   socket.on('DEVICES_STATUS', onDevicesStatus)
@@ -40,6 +46,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('click', cerrarMenusFuera)
   socket.off('connect', unirseAdmin)
   socket.off('DEVICES_STATUS', onDevicesStatus)
   socket.off('DEVICE_CONNECTED', onDeviceConnected)
@@ -106,6 +113,41 @@ function toggleFicha(deviceId, fichaId) {
   const i = arr.indexOf(fichaId)
   if (i > -1) arr.splice(i, 1)
   else arr.push(fichaId)
+}
+
+// Quita tildes y pasa a minúsculas para que "analisis" encuentre "Análisis".
+function normalizar(texto) {
+  return String(texto ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function fichasFiltradas(deviceId) {
+  const q = normalizar(busquedas[deviceId])
+  if (!q) return fichas.value
+  return fichas.value.filter((f) =>
+    normalizar(`${f.codigoFicha} ${f.nombrePrograma}`).includes(q)
+  )
+}
+
+function toggleMenu(deviceId) {
+  menuAbierto[deviceId] = !menuAbierto[deviceId]
+}
+
+function abrirMenu(deviceId) {
+  menuAbierto[deviceId] = true
+}
+
+function limpiarBusqueda(deviceId) {
+  busquedas[deviceId] = ''
+}
+
+// Cierra todos los menús al hacer clic fuera de un selector.
+function cerrarMenusFuera(e) {
+  if (e.target.closest?.('.ficha-selector')) return
+  for (const id of Object.keys(menuAbierto)) menuAbierto[id] = false
 }
 
 function getDispositivoDeFicha(fichaId) {
@@ -229,7 +271,7 @@ function formatFecha(iso) {
 
 <template>
   <div class="page-header">
-    <h1>Dispositivos / Huelleros</h1>
+    <h1>Dispositivos</h1>
     <p>Asocia fichas a cada lector físico. Una ficha solo puede estar asociada a un dispositivo a la vez.</p>
   </div>
 
@@ -303,24 +345,69 @@ function formatFecha(iso) {
       </div>
 
       <div class="selector-label">Selecciona las fichas que debe atender este dispositivo:</div>
-      <div class="dispositivo-fichas-grid">
-        <label v-for="f in fichas" :key="f._id" class="dispositivo-ficha-item">
-          <input
-            type="checkbox"
-            :checked="selecciones[d._id].includes(f._id)"
-            @change="toggleFicha(d._id, f._id)"
-          />
-          <span>
-            {{ f.codigoFicha }} · {{ f.nombrePrograma }}
-            <small
-              v-if="getDispositivoDeFicha(f._id) && getDispositivoDeFicha(f._id)._id !== d._id"
-              class="move-hint"
-              :class="{ 'move-active': selecciones[d._id].includes(f._id) }"
-            >
-              {{ selecciones[d._id].includes(f._id) ? ' se moverá desde' : 'en' }} {{ deviceLabel(getDispositivoDeFicha(f._id)) }}
-            </small>
-          </span>
-        </label>
+      <div class="ficha-selector">
+        <div class="ficha-selector-bar">
+          <button
+            type="button"
+            class="ficha-selector-toggle"
+            :class="{ abierto: menuAbierto[d._id] }"
+            :aria-expanded="!!menuAbierto[d._id]"
+            @click="toggleMenu(d._id)"
+          >
+            <span class="ficha-selector-toggle-text">
+              {{ (selecciones[d._id] || []).length > 0
+                ? `${selecciones[d._id].length} ficha(s) seleccionada(s)`
+                : 'Seleccionar fichas' }}
+            </span>
+            <svg class="ficha-selector-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+
+          <div class="ficha-selector-search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              type="text"
+              v-model="busquedas[d._id]"
+              placeholder="Buscar ficha o programa…"
+              autocomplete="off"
+              @focus="abrirMenu(d._id)"
+              @input="abrirMenu(d._id)"
+            />
+            <button
+              v-if="busquedas[d._id]"
+              type="button"
+              class="ficha-selector-clear"
+              title="Limpiar búsqueda"
+              @click="limpiarBusqueda(d._id)"
+            >✕</button>
+          </div>
+        </div>
+
+        <div v-if="menuAbierto[d._id]" class="ficha-selector-menu">
+          <div v-if="fichasFiltradas(d._id).length === 0" class="ficha-selector-empty">
+            No se encontraron fichas para "{{ busquedas[d._id] }}".
+          </div>
+          <label
+            v-for="f in fichasFiltradas(d._id)"
+            :key="f._id"
+            class="dispositivo-ficha-item"
+          >
+            <input
+              type="checkbox"
+              :checked="selecciones[d._id].includes(f._id)"
+              @change="toggleFicha(d._id, f._id)"
+            />
+            <span>
+              {{ f.codigoFicha }} · {{ f.nombrePrograma }}
+              <small
+                v-if="getDispositivoDeFicha(f._id) && getDispositivoDeFicha(f._id)._id !== d._id"
+                class="move-hint"
+                :class="{ 'move-active': selecciones[d._id].includes(f._id) }"
+              >
+                {{ selecciones[d._id].includes(f._id) ? ' se moverá desde' : 'en' }} {{ deviceLabel(getDispositivoDeFicha(f._id)) }}
+              </small>
+            </span>
+          </label>
+        </div>
       </div>
     </div>
     </div>
@@ -424,10 +511,124 @@ function formatFecha(iso) {
   margin-bottom: 8px;
 }
 
-.dispositivo-fichas-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+.ficha-selector {
+  position: relative;
+}
+
+.ficha-selector-bar {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ficha-selector-toggle {
+  flex: 0 1 260px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  padding: 10px 14px;
+  background: var(--blanco, #fff);
+  border: 1px solid var(--borde, #e2e6de);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--tinta, #16210f);
+  cursor: pointer;
+  transition: border-color .18s, box-shadow .18s;
+}
+
+.ficha-selector-toggle:hover {
+  border-color: #cbd3c6;
+}
+
+.ficha-selector-toggle.abierto {
+  border-color: var(--verde, #39a900);
+  box-shadow: 0 0 0 3px rgba(57, 169, 0, .14);
+}
+
+.ficha-selector-toggle-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ficha-selector-chevron {
+  flex: 0 0 auto;
+  transition: transform .18s;
+}
+
+.ficha-selector-toggle.abierto .ficha-selector-chevron {
+  transform: rotate(180deg);
+}
+
+.ficha-selector-search {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--blanco, #fff);
+  border: 1px solid var(--borde, #e2e6de);
+  border-radius: 8px;
+  color: var(--text-secondary, #7c857a);
+  transition: border-color .18s, box-shadow .18s;
+}
+
+.ficha-selector-search:focus-within {
+  border-color: var(--verde, #39a900);
+  box-shadow: 0 0 0 3px rgba(57, 169, 0, .14);
+}
+
+.ficha-selector-search svg {
+  flex: 0 0 auto;
+}
+
+.ficha-selector-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--tinta, #16210f);
+}
+
+.ficha-selector-clear {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #7c857a);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px;
+}
+
+.ficha-selector-menu {
+  margin-top: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--blanco, #fff);
+  border: 1px solid var(--borde, #e2e6de);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(22, 33, 15, .10);
+  overscroll-behavior: contain;
+}
+
+.ficha-selector-empty {
+  padding: 14px 10px;
+  font-size: 13px;
+  color: var(--text-secondary, #7c857a);
+  text-align: center;
 }
 
 .dispositivo-ficha-item {
@@ -489,8 +690,17 @@ function formatFecha(iso) {
     font-size: 15px;
   }
 
-  .dispositivo-fichas-grid {
-    grid-template-columns: 1fr;
+  .ficha-selector-bar {
+    flex-direction: column;
+  }
+
+  .ficha-selector-toggle {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .ficha-selector-menu {
+    max-height: 260px;
   }
 
   .fichas-asociadas {

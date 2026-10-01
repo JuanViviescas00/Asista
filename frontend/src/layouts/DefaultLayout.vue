@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useQuasar } from 'quasar'
 import { useAuth } from '../composables/useAuth.js'
 import { useSistemaEstado } from '../composables/useSistemaEstado.js'
 import { getCurrentView, navigate, viewsForRole, currentComponentFor } from '../router/index.js'
 import senaLogo from '../assets/sena-logo.png'
+import instructorAvatar from '../assets/instructor-avatar.png'
 
 const $q = useQuasar()
 const { usuario, headerTitulo, headerSubtitulo, cerrarSesion } = useAuth()
@@ -17,7 +18,23 @@ const drawerMini = ref(false)
 
 const currentView = getCurrentView()
 
-const viewsDisponibles = computed(() => viewsForRole(usuario.value?.rol || 'Administrador', usuario.value?.esLider))
+const rolActual = computed(() => usuario.value?.rol || 'Administrador')
+
+// Instructores (incluido el instructor líder) ven un avatar en lugar del logo SENA.
+const esInstructor = computed(() => rolActual.value === 'Instructor')
+const vistasDelRol = computed(() => viewsForRole(rolActual.value, usuario.value?.esLider))
+
+// "Perfil" ya no aparece como ítem del menú: se abre al pulsar el logo SENA.
+const viewsDisponibles = computed(() => {
+  const { perfil, ...resto } = vistasDelRol.value
+  return resto
+})
+const tienePerfil = computed(() => !!vistasDelRol.value.perfil)
+
+// El modo mini (solo íconos) existe únicamente en escritorio. En móvil el
+// drawer siempre se muestra completo para no perder los textos del menú.
+const esMovil = computed(() => $q.screen.lt.md)
+const miniEfectivo = computed(() => drawerMini.value && !esMovil.value)
 const currentComponent = computed(() => currentComponentFor(usuario.value?.rol || 'Administrador'))
 
 // Ícono (Material Icons, vía Quasar) asociado a cada vista del menú.
@@ -46,23 +63,44 @@ function toggleDrawer() {
 }
 
 function toggleMini() {
+  if (esMovil.value) return
   drawerMini.value = !drawerMini.value
 }
 
-// Clic sobre cualquier parte del sidebar (fuera de los enlaces) alterna
-// entre expandido y contraído. Solo en escritorio; en móvil el drawer es
-// un overlay que se controla con el botón hamburguesa.
-function onSidebarClick() {
-  if ($q.screen.gt.sm) {
-    toggleMini()
+// Clic en el logo SENA: abre el layout de Perfil.
+function abrirPerfil() {
+  if (!tienePerfil.value) return
+  navigate('perfil')
+  if (esMovil.value) {
+    drawerOpen.value = false
   }
 }
+
+// Clic dentro del sidebar: si está contraído (mini) lo expande; si ya está
+// expandido no hace nada (ya no se cierra al presionarlo por dentro).
+function onSidebarClick() {
+  if (!esMovil.value && drawerMini.value) {
+    drawerMini.value = false
+  }
+}
+
+// Clic fuera del menú: lo cierra.
+// - Escritorio: lo contrae al modo mini.
+// - Móvil: el overlay de Quasar ya se cierra al tocar el fondo oscuro.
+function onClickFuera(e) {
+  if (esMovil.value || drawerMini.value) return
+  if (e.target.closest?.('.app-sidebar')) return
+  drawerMini.value = true
+}
+
+onMounted(() => document.addEventListener('click', onClickFuera))
+onBeforeUnmount(() => document.removeEventListener('click', onClickFuera))
 
 function irA(key) {
   navigate(key)
   // Solo cerramos el overlay en móvil; en escritorio el menú
   // permanece tal cual estaba (abierto o mini), sin cerrarse.
-  if ($q.screen.lt.md) {
+  if (esMovil.value) {
     drawerOpen.value = false
   }
 }
@@ -72,7 +110,7 @@ function irA(key) {
   <q-layout view="hhh lpr fff" class="app-shell">
     <q-drawer
       v-model="drawerOpen"
-      :mini="drawerMini"
+      :mini="miniEfectivo"
       show-if-above
       mini-to-overlay
       :width="272"
@@ -85,14 +123,21 @@ function irA(key) {
             <button
               type="button"
               class="sidebar-logo-btn"
-              @click.stop="toggleMini"
-              :title="drawerMini ? 'Expandir menú' : 'Contraer menú'"
+              :class="{ active: currentView === 'perfil' }"
+              @click.stop="abrirPerfil"
+              :title="tienePerfil ? 'Ir a Perfil' : null"
             >
-              <img :src="senaLogo" alt="Logo SENA" />
+              <img
+                v-if="esInstructor"
+                :src="instructorAvatar"
+                alt="Instructor"
+                class="sidebar-avatar-img"
+              />
+              <img v-else :src="senaLogo" alt="Logo SENA" />
             </button>
           </div>
 
-          <template v-if="!drawerMini">
+          <template v-if="!miniEfectivo">
             <h2 class="sidebar-title">{{ tituloPrincipal }} <span>{{ tituloResaltado }}</span></h2>
             <p class="sidebar-subtitle">{{ headerSubtitulo }}</p>
           </template>
@@ -104,32 +149,32 @@ function irA(key) {
             :key="key"
             class="nav-item"
             :class="{ active: currentView === key }"
-            :title="drawerMini ? view.label : null"
+            :title="miniEfectivo ? view.label : null"
             @click.stop="irA(key)"
           >
             <span class="nav-item-icon">
               <q-icon :name="iconosPorVista[key] || 'circle'" size="20px" />
             </span>
-            <span v-if="!drawerMini" class="nav-item-label">{{ view.label }}</span>
-            <q-icon v-if="!drawerMini && currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />
+            <span v-if="!miniEfectivo" class="nav-item-label">{{ view.label }}</span>
+            <q-icon v-if="!miniEfectivo && currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />
           </a>
 
           <a
             class="nav-item nav-item-logout"
-            :title="drawerMini ? 'Cerrar Sesión' : null"
+            :title="miniEfectivo ? 'Cerrar Sesión' : null"
             @click.stop="cerrarSesion"
           >
             <span class="nav-item-icon">
               <q-icon name="logout" size="20px" />
             </span>
-            <span v-if="!drawerMini" class="nav-item-label">Cerrar Sesión</span>
+            <span v-if="!miniEfectivo" class="nav-item-label">Cerrar Sesión</span>
           </a>
         </nav>
 
         <div class="sidebar-status" :class="colorEstadoClass(estadoSistema.colorEstado)">
-          <span v-if="!drawerMini" class="estado-dot"></span>
+          <span v-if="!miniEfectivo" class="estado-dot"></span>
           <span class="estado-icon"><q-icon name="fingerprint" size="18px" /></span>
-          <span v-if="!drawerMini" class="status-title">{{ textoEstado }}</span>
+          <span v-if="!miniEfectivo" class="status-title">{{ textoEstado }}</span>
         </div>
       </div>
     </q-drawer>
