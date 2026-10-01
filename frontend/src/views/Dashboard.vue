@@ -111,7 +111,10 @@ const analisisEstudiantes = computed(() => {
       }
       if (consecutivasActual > maxConsecutivas) maxConsecutivas = consecutivasActual
     }
-    const horasFalladas = totalFallas * HORAS_POR_DIA
+    const fichaEst = fichasList.value.find(f => String(f._id) === String(est.fichaId))
+    const jNorm = (fichaEst?.jornada || '').toLowerCase()
+    const hPorDia = (jNorm.includes('noche') || jNorm.includes('nocturna')) ? 5 : 6
+    const horasFalladas = totalFallas * hPorDia
     const alertaDesercion = maxConsecutivas >= 3 || horasFalladas >= 18
     return { estudiante: est, totalRegistros, totalPresentes, totalTardanzas, totalFallas, totalExcusadas, porcentaje, maxConsecutivas, horasFalladas, alertaDesercion }
   }).sort((a, b) => a.porcentaje - b.porcentaje)

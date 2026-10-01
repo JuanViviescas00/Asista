@@ -53,6 +53,15 @@ function showToastFn(message, type = 'success') {
   setTimeout(() => { toast.value.show = false }, 3000)
 }
 
+function onEstudianteChange() {
+  const est = getEstudianteById(excusaForm.estudianteId)
+  if (est && est.fichaId) {
+    const f = getFichaById(est.fichaId)
+    const jNorm = (f?.jornada || '').toLowerCase()
+    excusaForm.horasDescontar = (jNorm.includes('noche') || jNorm.includes('nocturna')) ? 5 : 6
+  }
+}
+
 function openCreate() {
   Object.assign(excusaForm, {
     estudianteId: null, fechaInasistencia: '', tipoExcusa: 'Medica',
@@ -216,7 +225,7 @@ function estadoBadge(estado) {
       <div class="form-grid">
         <div class="form-group">
           <label>Estudiante</label>
-          <select v-model="excusaForm.estudianteId">
+          <select v-model="excusaForm.estudianteId" @change="onEstudianteChange">
             <option :value="null" disabled>Selecciona un estudiante</option>
             <option v-for="e in todosEstudiantes" :key="e._id" :value="e._id">{{ e.nombres }} {{ e.apellidos }} - {{ e.numeroDocumento }}</option>
           </select>

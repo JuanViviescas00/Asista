@@ -380,18 +380,18 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
   if (!horaMarcacionStr) return { horas: 0, texto: '0 horas' }
 
   // Horarios de inicio oficial:
-  // Mañana: 6:00 AM (360 min) -> Tolerancia hasta 6:15 AM (375 min)
-  // Tarde: 12:30 PM (750 min) -> Tolerancia hasta 12:45 PM (765 min)
-  // Noche: 6:30 PM / 18:30 (1110 min) -> Tolerancia hasta 6:45 PM (1125 min)
-  let inicioMin = 360 // 6:00 AM por defecto
-  let limiteTolerancia = 375 // 6:15 AM
+  // Mañana: 6:30 AM (390 min) -> Tolerancia 10 min hasta 6:40 AM (400 min)
+  // Tarde: 12:30 PM (750 min) -> Tolerancia 10 min hasta 12:40 PM (760 min)
+  // Noche: 6:30 PM / 18:30 (1110 min) -> Tolerancia 10 min hasta 6:40 PM (1120 min)
+  let inicioMin = 390 // 6:30 AM por defecto
+  let limiteTolerancia = 400 // 6:40 AM
 
   if (jornada === 'Tarde') {
     inicioMin = 750 // 12:30 PM
-    limiteTolerancia = 765 // 12:45 PM
+    limiteTolerancia = 760 // 12:40 PM
   } else if (jornada === 'Noche') {
     inicioMin = 1110 // 6:30 PM (18:30)
-    limiteTolerancia = 1125 // 6:45 PM
+    limiteTolerancia = 1120 // 6:40 PM
   }
 
   let minutosMarcacion = 0
@@ -1513,7 +1513,7 @@ function descargarExcel(data, nombreArchivo) {
 
           <div v-if="!jornadaInhabilitada" class="info-alert-bar" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 8px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
-            <span><strong>Cálculo Automático de Tardanza:</strong> Al marcar a un aprendiz como <strong>Presente</strong>, se captura la hora exacta. Si supera los 15 minutos de inicio de jornada ({{ fichaSeleccionada.jornada }}), se asignará automáticamente como <strong>Tardanza</strong>. Quienes queden sin marcar se registrarán como <strong>Falta</strong> al finalizar la jornada.</span>
+            <span><strong>Cálculo Automático de Tardanza:</strong> Al marcar a un aprendiz como <strong>Presente</strong>, se captura la hora exacta. Si supera los 10 minutos de inicio de jornada ({{ fichaSeleccionada.jornada }}), se asignará automáticamente como <strong>Tardanza</strong>. Quienes queden sin marcar se registrarán como <strong>Falta</strong> al finalizar la jornada.</span>
           </div>
 
           <!-- Contenedor de la Tabla con estilo Disabled/Overlay si la jornada está inhabilitada -->

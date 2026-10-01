@@ -53,13 +53,13 @@ export async function getFichaIdList(fichaId) {
 
 // Umbrales de tardanza medidos en MINUTOS desde la hora de inicio de la clase.
 // Regla del negocio:
-//   0 a 5 min  -> Presente (a tiempo)
-//   5 a 65 min -> Tardanza de 1 hora
-//   65 a 125 min -> Tardanza de 2 horas
-//   más de 125 min -> Falta (asistencia fallida)
-export const TOLERANCIA_MINUTOS = 5
-export const LIMITE_TARDANZA_1_HORA = 65
-export const LIMITE_TARDANZA_2_HORAS = 125
+//   0 a 10 min  -> Presente (tolerancia oficial de 10 min tras inicio de clase)
+//   10 a 70 min -> Tardanza de 1 hora
+//   70 a 130 min -> Tardanza de 2 horas
+//   más de 130 min (2h tarde) -> Falta (asistencia fallida)
+export const TOLERANCIA_MINUTOS = 10
+export const LIMITE_TARDANZA_1_HORA = 70
+export const LIMITE_TARDANZA_2_HORAS = 130
 
 /**
  * Calcula el estado de una marcación (Presente / Tardanza / Falta) según los
@@ -89,19 +89,19 @@ export function calcularEstadoAsistencia(inicioClase, fechaHora = new Date()) {
 }
 
 /**
- * Horarios de inicio de jornada (minutos desde medianoche) — fuente de verdad única.
- * Mañana: 06:00 · Tarde: 12:00 · Noche: 18:00
+ * Horarios de inicio de jornada fijos (minutos desde medianoche) — fallback si no hay clase activa.
+ * Mañana: 06:30 (390 min) · Tarde: 12:30 (750 min) · Noche: 18:30 (1110 min)
  */
 export const HORARIOS_JORNADA = {
-  'Mañana': 360,
-  'Tarde': 720,
-  'Noche': 1080,
+  'Mañana': 390,
+  'Tarde': 750,
+  'Noche': 1110,
 }
 
 // Escala escalonada de penalización por tardanza (helper compartido del fallback).
 // Usa los MISMOS umbrales que calcularEstadoAsistencia (5 / 65 / 125) para no
 // generar resultados distintos según la fuente del inicio.
-function escalaDesdeMinutos(minutosTardanza) {
+function escalaDesdeMinutos(minutosTardanza, jornada = '') {
   if (minutosTardanza <= TOLERANCIA_MINUTOS) {
     return { estado: 'Presente', horas: 0 }
   }
@@ -111,7 +111,9 @@ function escalaDesdeMinutos(minutosTardanza) {
   if (minutosTardanza <= LIMITE_TARDANZA_2_HORAS) {
     return { estado: 'Tardanza', horas: 2 }
   }
-  return { estado: 'Falta', horas: 6 }
+  const j = String(jornada || '').toLowerCase()
+  const horasFalta = (j.includes('noche') || j.includes('nocturn')) ? 5 : 6
+  return { estado: 'Falta', horas: horasFalta }
 }
 
 /**
@@ -138,7 +140,7 @@ export function calcularTardanzaEscalonada(jornada, fechaHora = new Date()) {
   if (jornada === 'Noche' && minutosTardanza < 0) {
     minutosTardanza += 1440
   }
-  return { ...escalaDesdeMinutos(minutosTardanza), minutosTardanza }
+  return { ...escalaDesdeMinutos(minutosTardanza, jornada), minutosTardanza }
 }
 
 /**
