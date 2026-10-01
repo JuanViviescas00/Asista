@@ -284,4 +284,5 @@ export async function enviarCodigoRecuperacion(correoDestino, codigo) {
   return true
 }
 
+export { api }
 export default api

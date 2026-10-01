@@ -317,8 +317,7 @@ flowchart TB
 * **Archivos Modificados:**
   - [`backend/controllers/asistenciaController.js`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/backend/controllers/asistenciaController.js#L17-L24)
   - [`frontend/src/views/PanelEstudiante.vue`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/frontend/src/views/PanelEstudiante.vue#L43-L45)
-  - [`frontend/src/components/PanelEstudiante.vue`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/frontend/src/components/PanelEstudiante.vue#L51-L53)
-  - [`frontend/src/components/ConsultaEstudiante.vue`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/frontend/src/components/ConsultaEstudiante.vue#L40-L44)
+  - [`frontend/src/views/ConsultaEstudiante.vue`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/frontend/src/views/ConsultaEstudiante.vue#L40-L44)
 
 ---
 
@@ -344,6 +343,11 @@ flowchart TB
    - Estados mini (80px) y expandido (290px) con colapso fluido.
 2. **Control de Acceso por Roles (RBAC):**
    - Meta-atributo `soloLider: true` en el router de Vue para restringir funciones críticas (ej. importación masiva de aprendices) a los instructores líderes de la ficha.
+3. **Refactorización Integral y Desacoplamiento Frontend (30 de Septiembre de 2026):**
+   - **Limpieza de Vistas Duplicadas en `frontend/src/components/`:** Se eliminaron 12 componentes obsoletos que duplicaban a las vistas activas en `frontend/src/views/` (`AdminPerfil.vue`, `Dashboard.vue`, `DiasFestivos.vue`, `Estudiantes.vue`, `Fichas.vue`, `ImportarUsuarios.vue`, `Instructores.vue`, `Login.vue`, `PanelDispositivos.vue`, `PanelEstudiante.vue`, `PanelInstructor.vue`, `Reportes.vue`) así como sus estilos `.css` redundantes. Se reubicaron `ConsultaEstudiante.vue` y `Excusas.vue` en `views/`, garantizando que `components/` solo contenga componentes de presentación reutilizables (`StatCard.vue`).
+   - **Unificación de Servicios:** Se consolidó `frontend/src/services/` utilizando `index.js` como única fuente de verdad para HTTP REST, WebSockets (`socket.io-client`) y servicio de correo. `api.js` y `socket.js` se convirtieron en re-exportadores transparentes para garantizar retrocompatibilidad sin duplicar conexiones ni divergir lógica.
+   - **Modularización de Estilos en Panel del Instructor:** Se extrajo el bloque `<style scoped>` de 1,300 líneas en `PanelInstructor.vue` hacia `frontend/src/styles/panelInstructor.css`, reduciendo el archivo Vue de 3,315 a 2,013 líneas.
+   - **Saneamiento del Root del Repositorio:** Se eliminó la carpeta huérfana `dist/` en la raíz del proyecto, manteniendo el flujo limpio hacia `backend/public/`.
 
 ### 3.3 Configuración, Despliegue y Seguridad
 1. **Adopción de Arquitectura Single-Service en Docker:**
