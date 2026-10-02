@@ -43,6 +43,7 @@ onMounted(async () => {
   socket.on('DEVICE_CONNECTED', onDeviceConnected)
   socket.on('DEVICE_DISCONNECTED', onDeviceDisconnected)
   socket.on('NUEVO_DISPOSITIVO', onNuevoDispositivo)
+  socket.on('ALERTA_SOFIA_PLUS', onAlertaSofiaPlus)
 })
 
 onUnmounted(() => {
@@ -52,6 +53,7 @@ onUnmounted(() => {
   socket.off('DEVICE_CONNECTED', onDeviceConnected)
   socket.off('DEVICE_DISCONNECTED', onDeviceDisconnected)
   socket.off('NUEVO_DISPOSITIVO', onNuevoDispositivo)
+  socket.off('ALERTA_SOFIA_PLUS', onAlertaSofiaPlus)
 })
 
 function esAdmin() {
@@ -84,6 +86,13 @@ function onNuevoDispositivo(data) {
   loadDispositivos()
   const nombre = data?.hostname || data?.nombre || data?.deviceId || ''
   showToast(`Nuevo dispositivo "${nombre}" registrado. Pendiente de aprobación.`)
+}
+
+function onAlertaSofiaPlus(data) {
+  const fecha = data?.fecha || '—'
+  const resultado = data?.resultado || 'sin resultado'
+  const intentos = data?.intentos ?? 0
+  showToast(`No se pudo subir a Sofía Plus un registro de ${resultado} del ${fecha} tras ${intentos} intentos. Revisa el panel de sincronización.`, 'error')
 }
 
 async function loadDispositivos() {
