@@ -357,6 +357,11 @@ flowchart TB
 3. **Optimización de Índices en MongoDB:**
    - Índice único compuesto `{ estudianteId: 1, fichaId: 1, fecha: 1 }` en `Asistencia` para erradicar condiciones de carrera en marcaciones concurrentes.
    - Índice parcial único `{ deviceId: 1 }` con filtro `{ estado: 'Activa' }` en `Clase`.
+4. **Firma Digital y Certificado de Confianza SENA (2 de Octubre de 2026):**
+   - Generación de certificado criptográfico de firma de código digital oficial `CN=SENA - Sistema de Control Biometrico, O=Servicio Nacional de Aprendizaje SENA, C=CO`.
+   - Firma digital de los binarios ejecutables (`Huellero SENA.exe`) con huella digital `3C4D79784D995F9118658C02BDBBE032511E71A7`.
+   - Incorporación de auto-instalación del certificado `.cer` en el script del instalador NSIS (`installer.nsh`) con `certutil.exe -addstore -f "Root" ...`.
+   - Creación de `Instalar_Certificado.bat` para el registro asistido en equipos cliente.
 
 ---
 
