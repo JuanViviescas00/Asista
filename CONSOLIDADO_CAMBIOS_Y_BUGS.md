@@ -349,6 +349,8 @@ flowchart TB
      - `GET /api/instructores/:id/credenciales-sofia`: Retorna `tipoDocumento`, `numeroDocumento` y la contraseña descifrada para el robot por ID del instructor.
      - `GET /api/instructores/documento/:documento/credenciales-sofia`: Permite al script de automatización consultar credenciales descifradas por número de documento.
      - Rutas protegidas mediante `autenticarJWT` y `verificarRol(['Administrador', 'Instructor'])`.
+     - GET /api/instructores/documento/:documento/inasistencias-rpa: Consulta las inasistencias consolidadas (aprendiz, documento, ficha, horas y justificacion) para la ejecucion autonoma 1 por 1 del robot.
+   - **Robot RPA en Node.js (Practica_RPA/bot_inasistencias_sofia.js):** Script 100% en Node.js + Playwright para automatizar el ingreso a Sofia Plus con rol Instructor, navegacion a Gestion de Tiempos y reporte 1 por 1 de inasistencias con evidencias graficas.
    - **Frontend Web:**
      - `frontend/src/views/Instructores.vue`: Campo de contraseña Sofia Plus con botón toggle de visibilidad (mostrar/ocultar) en el modal y estado de configuración en la fila expandible.
      - `frontend/src/views/AdminPerfil.vue`: Módulo en el perfil del docente para autoservicio de su clave Sofia Plus.

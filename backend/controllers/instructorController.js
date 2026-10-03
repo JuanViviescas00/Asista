@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
+import Asistencia from '../models/Asistencia.js'
 import { hashPassword } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
 
@@ -270,3 +271,80 @@ export async function getCredencialesSofiaPorDocumento(req, res) {
     res.status(500).json({ ok: false, error: err.message })
   }
 }
+
+// Obtener listado de inasistencias para el robot RPA de Sofia Plus
+export async function getInasistenciasParaRPA(req, res) {
+  try {
+    const { documento } = req.params
+    const { fecha, fichaId } = req.query
+
+    const instructor = await Instructor.findOne({ numeroDocumento: String(documento).trim() })
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
+    }
+
+    // Fichas donde el instructor es líder o instructor de apoyo
+    const fichas = await Ficha.find({
+      $or: [
+        { instructorLiderId: instructor._id },
+        { instructores: instructor._id }
+      ]
+    })
+    const fichaIds = fichas.map(f => f._id)
+
+    const filter = {
+      fichaId: fichaId ? fichaId : { $in: fichaIds },
+      estado: { $in: ['Falta', 'Tardanza'] }
+    }
+    if (fecha) filter.fecha = fecha
+
+    const asistencias = await Asistencia.find(filter)
+      .populate('estudianteId')
+      .populate('fichaId')
+      .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
+
+    const inasistencias = asistencias
+      .filter(a => a.estudianteId && a.fichaId)
+      .map(a => {
+        const horas = a.horasTardanza || (a.estado === 'Falta' ? 6 : 1)
+        return {
+          asistenciaId: a._id,
+          fecha: a.fecha,
+          estado: a.estado,
+          horas,
+          ficha: {
+            id: a.fichaId._id,
+            codigo: a.fichaId.codigoFicha || '',
+            nombre: a.fichaId.nombre || ''
+          },
+          aprendiz: {
+            id: a.estudianteId._id,
+            tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
+            numeroDocumento: a.estudianteId.numeroDocumento || '',
+            nombres: a.estudianteId.nombres || '',
+            apellidos: a.estudianteId.apellidos || '',
+            nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
+          },
+          justificacion: a.estado === 'Falta'
+            ? `Inasistencia sin excusa a formación el ${a.fecha}`
+            : `Tardanza injustificada de ${horas} hora(s) el ${a.fecha}`
+        }
+      })
+
+    res.json({
+      ok: true,
+      instructor: {
+        id: instructor._id,
+        nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
+        tipoDocumento: instructor.tipoDocumento || 'CC',
+        numeroDocumento: instructor.numeroDocumento,
+        passwordSofiaPlus: decrypt(instructor.passwordSofiaPlus)
+      },
+      total: inasistencias.length,
+      inasistencias
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
