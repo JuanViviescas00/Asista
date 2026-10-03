@@ -31,7 +31,10 @@ const instructorForm = reactive({
   correo: '',
   telefono: '',
   especialidad: '',
+  passwordSofiaPlus: '',
 })
+
+const showPassSofia = ref(false)
 
 const instructores = ref([])
 
@@ -104,30 +107,38 @@ function showToastFn(message, type = 'success') {
 
 function openCreate() {
   editingId.value = null
+  showPassSofia.value = false
   Object.assign(instructorForm, {
     nombres: '', apellidos: '', tipoDocumento: 'CC', numeroDocumento: '',
-    correo: '', telefono: '', especialidad: '',
+    correo: '', telefono: '', especialidad: '', passwordSofiaPlus: '',
   })
   showModal.value = true
 }
 
 function openEdit(instructor) {
   editingId.value = instructor._id
-  Object.assign(instructorForm, instructor)
+  showPassSofia.value = false
+  Object.assign(instructorForm, {
+    ...instructor,
+    passwordSofiaPlus: instructor.passwordSofiaPlus || '',
+  })
   showModal.value = true
 }
 
 function closeModal() { showModal.value = false }
 
 async function guardarInstructor() {
-  const { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad } = instructorForm
+  const { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad, passwordSofiaPlus } = instructorForm
   if (!nombres || !apellidos || !numeroDocumento || !correo || !telefono || !especialidad) {
     showToastFn('Completa todos los campos obligatorios', 'error')
     return
   }
   loading.value = true
   try {
-    const body = { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad }
+    const body = {
+      nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad,
+      passwordSofiaPlus: passwordSofiaPlus || ''
+    }
     if (editingId.value) {
       await api.instructores.update(editingId.value, body)
       showToastFn('Instructor actualizado correctamente')
@@ -349,6 +360,12 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
                   <div class="instr-detalle-item"><span class="instr-detalle-label">Documento</span><span :title="`${i.tipoDocumento} ${i.numeroDocumento}`"><span class="doc-tipo">{{ i.tipoDocumento }}</span> {{ formatearNumeroDocumento(i.numeroDocumento) }}</span></div>
                   <div class="instr-detalle-item"><span class="instr-detalle-label">Correo</span><span :title="i.correo">{{ i.correo || '—' }}</span></div>
                   <div class="instr-detalle-item"><span class="instr-detalle-label">Teléfono</span><span>{{ i.telefono || '—' }}</span></div>
+                  <div class="instr-detalle-item">
+                    <span class="instr-detalle-label">Sofia Plus (RPA)</span>
+                    <span :style="{ color: i.passwordSofiaPlus ? '#15803d' : '#94a3b8', fontWeight: 600 }">
+                      {{ i.passwordSofiaPlus ? '•••••••• (Configurada)' : 'Sin configurar' }}
+                    </span>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -405,6 +422,35 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
         <div class="form-group"><label>Correo Electronico</label><input v-model="instructorForm.correo" type="email" placeholder="correo@ejemplo.com" /></div>
         <div class="form-group"><label>Telefono</label><input v-model="instructorForm.telefono" type="tel" placeholder="+57 300 000 0000" /></div>
         <div class="form-group"><label>Especialidad</label><input v-model="instructorForm.especialidad" type="text" placeholder="Ej: Desarrollo de Software" /></div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label>Contraseña Sofia Plus (Automatización RPA)</label>
+          <div style="position: relative; display: flex; align-items: center;">
+            <input
+              v-model="instructorForm.passwordSofiaPlus"
+              :type="showPassSofia ? 'text' : 'password'"
+              placeholder="Contraseña del instructor en Sofia Plus (para el bot RPA)"
+              style="width: 100%; padding-right: 40px;"
+            />
+            <button
+              type="button"
+              @click="showPassSofia = !showPassSofia"
+              style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; padding: 4px;"
+              :title="showPassSofia ? 'Ocultar contraseña' : 'Ver contraseña'"
+            >
+              <svg v-if="!showPassSofia" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
+          <small style="color: var(--text-secondary); font-size: 11.5px; margin-top: 4px; display: block;">
+            Utilizada por el bot Playwright para el inicio de sesión y sincronización con senasofiaplus.edu.co.
+          </small>
+        </div>
       </div>
       <div v-if="!editingId" style="margin-top: 16px; padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af;">
         <strong>Cuenta de Acceso Automática:</strong> Se creará una cuenta para iniciar sesión. Su usuario será <strong>{{ instructorForm.correo || 'el correo ingresado' }}</strong> y su contraseña estándar inicial será <strong>sena2026</strong> (el docente podrá cambiarla desde su Perfil).

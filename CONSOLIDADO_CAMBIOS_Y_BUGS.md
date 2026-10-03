@@ -336,6 +336,17 @@ flowchart TB
    - Acumulación en banco de horas de inasistencia (cada 6 horas = 1 día de falla).
 4. **Exportación y Sincronización Nocturna por Docente:**
    - Generación de archivos SQLite independientes por instructor a la medianoche con los últimos 3 días hábiles (considerando días festivos institucionales).
+5. **Gestión de Credenciales Sofia Plus para Automatización RPA (2 de Octubre de 2026):**
+   - **Propósito:** Permitir al robot RPA (`Practica_RPA/bot_sofia_login.py`) autenticarse automáticamente en la plataforma Sofia Plus (`senasofiaplus.edu.co`) a nombre del instructor para el reporte y sincronización de novedades.
+   - **Modelo de Datos:** Incorporación de `passwordSofiaPlus` (`String`, default `''`) en el esquema de Mongoose `backend/models/Instructor.js`.
+   - **Endpoints Backend:**
+     - `GET /api/instructores/:id/credenciales-sofia`: Retorna `tipoDocumento`, `numeroDocumento` y `passwordSofiaPlus` por ID del instructor.
+     - `GET /api/instructores/documento/:documento/credenciales-sofia`: Permite al script de automatización consultar credenciales directamente por documento.
+     - Rutas protegidas mediante `autenticarJWT` y `verificarRol(['Administrador', 'Instructor'])`.
+   - **Frontend Web:**
+     - `frontend/src/views/Instructores.vue`: Campo de contraseña Sofia Plus con botón toggle de visibilidad en el modal y estado de configuración en la fila expandible.
+     - `frontend/src/views/AdminPerfil.vue`: Módulo en el perfil del docente para autoservicio de su clave Sofia Plus.
+     - `frontend/src/services/index.js`: Métodos `getCredencialesSofia` y `getCredencialesSofiaPorDocumento`.
 
 ### 3.2 Refactorizaciones y UI/UX
 1. **Rediseño del Sidebar Principal:**

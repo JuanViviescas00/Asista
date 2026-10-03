@@ -23,8 +23,10 @@ const perfil = reactive({
   especialidad: '',
   rol: '',
   estado: 'Activo',
+  passwordSofiaPlus: '',
 })
 
+const showPassSofia = ref(false)
 const esLiderCalculado = ref(false)
 
 // Estado del Modal de Cambio de Contraseña
@@ -68,6 +70,7 @@ onMounted(async () => {
         perfil.telefono = inst.telefono || ''
         perfil.especialidad = inst.especialidad || 'Docente SENA'
         perfil.estado = inst.estado || 'Activo'
+        perfil.passwordSofiaPlus = inst.passwordSofiaPlus || ''
 
         const esLiderEnFicha = misFichas.some(f => f.esLider || String(f.instructorLiderId?._id || f.instructorLiderId) === String(inst._id))
         esLiderCalculado.value = !!(inst.esLider || esLiderEnFicha || usuarioSesion.value?.esLider)
@@ -105,6 +108,7 @@ async function guardarPerfil() {
         telefono: perfil.telefono,
         correo: perfil.correo,
         especialidad: perfil.especialidad,
+        passwordSofiaPlus: perfil.passwordSofiaPlus || '',
       }
 
       await api.instructores.update(perfil.id, body)
@@ -239,6 +243,35 @@ async function procesarCambioPassword() {
         <label>Número de Teléfono</label>
         <input v-model="perfil.telefono" type="tel" placeholder="+57 300 000 0000" />
       </div>
+      <div class="admin-profile-form-group" style="grid-column: 1 / -1;">
+        <label>Contraseña Sofia Plus (Automatización RPA)</label>
+        <div style="position: relative; display: flex; align-items: center;">
+          <input
+            v-model="perfil.passwordSofiaPlus"
+            :type="showPassSofia ? 'text' : 'password'"
+            placeholder="Ingresa tu contraseña del portal senasofiaplus.edu.co"
+            style="width: 100%; padding-right: 40px;"
+          />
+          <button
+            type="button"
+            @click="showPassSofia = !showPassSofia"
+            style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary, #64748b); display: flex; align-items: center; justify-content: center; padding: 4px;"
+            :title="showPassSofia ? 'Ocultar contraseña' : 'Ver contraseña'"
+          >
+            <svg v-if="!showPassSofia" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+              <line x1="1" y1="1" x2="23" y2="23"/>
+            </svg>
+          </button>
+        </div>
+        <small style="color: var(--text-secondary, #64748b); font-size: 11.5px; margin-top: 4px; display: block;">
+          Requerida para la sincronización automática de asistencias y acceso RPA con senasofiaplus.edu.co.
+        </small>
+      </div>
     </div>
     <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
       <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading" title="Guardar Cambios"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
@@ -313,6 +346,14 @@ async function procesarCambioPassword() {
       <div class="admin-profile-field">
         <label>Correo Electrónico</label>
         <div class="admin-profile-value">{{ perfil.correo || '—' }}</div>
+      </div>
+      <div class="admin-profile-field" v-if="esInstructor">
+        <label>Credencial Sofia Plus (RPA)</label>
+        <div class="admin-profile-value">
+          <span :style="{ color: perfil.passwordSofiaPlus ? '#15803d' : '#94a3b8', fontWeight: 600 }">
+            {{ perfil.passwordSofiaPlus ? '•••••••• (Configurada)' : 'Sin configurar' }}
+          </span>
+        </div>
       </div>
     </div>
   </div>

@@ -35,4 +35,8 @@ router.post('/importar',
   instructorController.importarInstructores
 )
 
+// Credenciales de Sofia Plus para automatización / RPA
+router.get('/:id/credenciales-sofia', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getCredencialesSofia)
+router.get('/documento/:documento/credenciales-sofia', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getCredencialesSofiaPorDocumento)
+
 export default router

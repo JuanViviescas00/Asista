@@ -188,3 +188,60 @@ export async function importarInstructores(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+// Obtener credenciales para bot RPA de Sofia Plus por ID
+export async function getCredencialesSofia(req, res) {
+  try {
+    const instructor = await Instructor.findById(req.params.id)
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado' })
+    }
+
+    if (!instructor.passwordSofiaPlus) {
+      return res.status(400).json({
+        ok: false,
+        error: 'El instructor no tiene configurada su contraseña de Sofia Plus en el sistema'
+      })
+    }
+
+    res.json({
+      ok: true,
+      instructorId: instructor._id,
+      nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
+      tipoDocumento: instructor.tipoDocumento || 'CC',
+      numeroDocumento: instructor.numeroDocumento,
+      passwordSofiaPlus: instructor.passwordSofiaPlus
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
+// Obtener credenciales para bot RPA de Sofia Plus por número de documento
+export async function getCredencialesSofiaPorDocumento(req, res) {
+  try {
+    const { documento } = req.params
+    const instructor = await Instructor.findOne({ numeroDocumento: String(documento).trim() })
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
+    }
+
+    if (!instructor.passwordSofiaPlus) {
+      return res.status(400).json({
+        ok: false,
+        error: `El instructor ${instructor.nombres} ${instructor.apellidos} no tiene configurada su contraseña de Sofia Plus`
+      })
+    }
+
+    res.json({
+      ok: true,
+      instructorId: instructor._id,
+      nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
+      tipoDocumento: instructor.tipoDocumento || 'CC',
+      numeroDocumento: instructor.numeroDocumento,
+      passwordSofiaPlus: instructor.passwordSofiaPlus
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
