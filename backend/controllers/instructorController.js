@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
 import { hashPassword } from '../services/passwordService.js'
+import { encrypt, decrypt } from '../services/cryptoService.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -28,6 +29,9 @@ export async function getInstructores(req, res) {
     const resultado = instructores.map(inst => {
       const obj = inst.toObject()
       delete obj.password // No exponer el hash en la respuesta
+      if (obj.passwordSofiaPlus) {
+        obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
+      }
       const esLiderEnFicha = idsLideres.has(String(inst._id))
       return {
         ...obj,
@@ -47,11 +51,18 @@ export async function createInstructor(req, res) {
     const clavePlana = data.password || 'sena2026'
     data.password = await hashPassword(clavePlana)
 
+    if (data.passwordSofiaPlus) {
+      data.passwordSofiaPlus = encrypt(data.passwordSofiaPlus)
+    }
+
     const instructor = new Instructor(data)
     await instructor.save()
 
     const obj = instructor.toObject()
     delete obj.password
+    if (obj.passwordSofiaPlus) {
+      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
+    }
     res.status(201).json(obj)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -67,11 +78,18 @@ export async function updateInstructor(req, res) {
       delete data.password
     }
 
+    if (data.passwordSofiaPlus !== undefined) {
+      data.passwordSofiaPlus = encrypt(data.passwordSofiaPlus)
+    }
+
     const instructor = await Instructor.findByIdAndUpdate(req.params.id, data, { new: true })
     if (!instructor) return res.status(404).json({ error: 'Instructor no encontrado' })
 
     const obj = instructor.toObject()
     delete obj.password
+    if (obj.passwordSofiaPlus) {
+      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
+    }
     res.json(obj)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -145,15 +163,22 @@ export async function importarInstructores(req, res) {
         if (!existe) {
           const clavePlana = password || 'sena2026'
           const passwordHash = await hashPassword(clavePlana)
-          instructor = await Instructor.create({
+          const datosCrear = {
             ...rest,
             password: passwordHash
-          })
+          }
+          if (datosCrear.passwordSofiaPlus) {
+            datosCrear.passwordSofiaPlus = encrypt(datosCrear.passwordSofiaPlus)
+          }
+          instructor = await Instructor.create(datosCrear)
           creados++
         } else {
           const datos = { ...rest }
           if (password) {
             datos.password = await hashPassword(password)
+          }
+          if (datos.passwordSofiaPlus !== undefined) {
+            datos.passwordSofiaPlus = encrypt(datos.passwordSofiaPlus)
           }
           instructor = await Instructor.findByIdAndUpdate(existe._id, datos, { new: true })
           actualizados++
@@ -210,7 +235,7 @@ export async function getCredencialesSofia(req, res) {
       nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
       tipoDocumento: instructor.tipoDocumento || 'CC',
       numeroDocumento: instructor.numeroDocumento,
-      passwordSofiaPlus: instructor.passwordSofiaPlus
+      passwordSofiaPlus: decrypt(instructor.passwordSofiaPlus)
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
@@ -239,7 +264,7 @@ export async function getCredencialesSofiaPorDocumento(req, res) {
       nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
       tipoDocumento: instructor.tipoDocumento || 'CC',
       numeroDocumento: instructor.numeroDocumento,
-      passwordSofiaPlus: instructor.passwordSofiaPlus
+      passwordSofiaPlus: decrypt(instructor.passwordSofiaPlus)
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })

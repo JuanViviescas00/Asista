@@ -336,15 +336,21 @@ flowchart TB
    - Acumulación en banco de horas de inasistencia (cada 6 horas = 1 día de falla).
 4. **Exportación y Sincronización Nocturna por Docente:**
    - Generación de archivos SQLite independientes por instructor a la medianoche con los últimos 3 días hábiles (considerando días festivos institucionales).
-5. **Gestión de Credenciales Sofia Plus para Automatización RPA (2 de Octubre de 2026):**
-   - **Propósito:** Permitir al robot RPA (`Practica_RPA/bot_sofia_login.py`) autenticarse automáticamente en la plataforma Sofia Plus (`senasofiaplus.edu.co`) a nombre del instructor para el reporte y sincronización de novedades.
-   - **Modelo de Datos:** Incorporación de `passwordSofiaPlus` (`String`, default `''`) en el esquema de Mongoose `backend/models/Instructor.js`.
-   - **Endpoints Backend:**
-     - `GET /api/instructores/:id/credenciales-sofia`: Retorna `tipoDocumento`, `numeroDocumento` y `passwordSofiaPlus` por ID del instructor.
-     - `GET /api/instructores/documento/:documento/credenciales-sofia`: Permite al script de automatización consultar credenciales directamente por documento.
+5. **Gestión y Cifrado AES-256-GCM de Credenciales Sofia Plus para Robot RPA (2 de Octubre de 2026):**
+   - **Propósito:** Permitir al robot RPA (`Practica_RPA/bot_sofia_login.py`) autenticarse automáticamente en la plataforma Sofia Plus (`senasofiaplus.edu.co`) a nombre del instructor para el reporte y sincronización de novedades, protegiendo las credenciales contra accesos no autorizados a la base de datos.
+   - **Cifrado Criptográfico de Grado Militar (`backend/services/cryptoService.js`):**
+     - Algoritmo: **AES-256-GCM** (Galois/Counter Mode con autenticación integrada y vector de inicialización IV de 96 bits aleatorio por registro).
+     - Clave maestra derivada con **SHA-256 (32 bytes / 256 bits)** a partir de `SOFIA_ENCRYPTION_KEY` / `JWT_SECRET`.
+     - Formato almacenado en MongoDB: `enc:v1:<iv_hex>:<authTag_hex>:<cipher_hex>`.
+     - Ninguna contraseña de Sofia Plus se guarda en texto plano en la base de datos de MongoDB Atlas.
+     - Protección contra doble-cifrado (idempotencia) y compatibilidad transparente hacia atrás.
+   - **Modelo de Datos:** Campo `passwordSofiaPlus` (`String`, default `''`) en el esquema de Mongoose `backend/models/Instructor.js`.
+   - **Endpoints Backend Seguros:**
+     - `GET /api/instructores/:id/credenciales-sofia`: Retorna `tipoDocumento`, `numeroDocumento` y la contraseña descifrada para el robot por ID del instructor.
+     - `GET /api/instructores/documento/:documento/credenciales-sofia`: Permite al script de automatización consultar credenciales descifradas por número de documento.
      - Rutas protegidas mediante `autenticarJWT` y `verificarRol(['Administrador', 'Instructor'])`.
    - **Frontend Web:**
-     - `frontend/src/views/Instructores.vue`: Campo de contraseña Sofia Plus con botón toggle de visibilidad en el modal y estado de configuración en la fila expandible.
+     - `frontend/src/views/Instructores.vue`: Campo de contraseña Sofia Plus con botón toggle de visibilidad (mostrar/ocultar) en el modal y estado de configuración en la fila expandible.
      - `frontend/src/views/AdminPerfil.vue`: Módulo en el perfil del docente para autoservicio de su clave Sofia Plus.
      - `frontend/src/services/index.js`: Métodos `getCredencialesSofia` y `getCredencialesSofiaPorDocumento`.
 
