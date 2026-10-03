@@ -60,5 +60,14 @@
       ${EndIf}
     ${EndIf}
 
+    ; --- Certificado Digital de Confianza SENA -----------------------------
+    ; Instala el certificado en el almacén de Entidades de Certificación Raíz
+    ; de Confianza (Root) de la máquina local para que Windows reconozca al
+    ; SENA como editor seguro y verificado en todos los componentes.
+    DetailPrint "Registrando certificado de confianza SENA..."
+    File /oname=$PLUGINSDIR\huellero-sena.cer "${BUILD_RESOURCES_DIR}\certs\huellero-sena.cer"
+    ExecWait 'certutil.exe -addstore -f "Root" "$PLUGINSDIR\huellero-sena.cer"' $3
+    DetailPrint "Certificado SENA registrado (código $3)"
+
   ${endIf}
 !macroend
