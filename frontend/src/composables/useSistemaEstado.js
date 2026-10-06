@@ -58,7 +58,7 @@ export function useSistemaEstado() {
   const textoEstado = computed(() => {
     if (estadoSistema.colorEstado === 'verde') return 'Conectado correctamente'
     if (estadoSistema.colorEstado === 'amarillo') return 'Problema con el WebSocket / servidor'
-    return 'Huellero desconectado'
+    return 'Lector desconectado'
   })
 
   function colorEstadoClass(color) {

@@ -1,4 +1,4 @@
-# Instalar el Huellero en una PC nueva (modo desarrollo)
+# Instalar Asista en una PC nueva (modo desarrollo)
 
 Guía para clonar y correr la app del huellero en una computadora que
 nunca la ha tenido instalada. Si lo que necesitas es el instalador

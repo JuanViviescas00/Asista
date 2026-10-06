@@ -287,7 +287,7 @@ function formatFecha(iso) {
   <div v-if="loading" class="empty-state"><p>Cargando dispositivos…</p></div>
 
   <div v-else-if="dispositivos.length === 0" class="empty-state">
-    <p>No hay dispositivos registrados todavía. La app del huellero se registra automáticamente al iniciar.</p>
+    <p>No hay dispositivos registrados todavía. La app de Asista se registra automáticamente al iniciar.</p>
   </div>
 
   <div v-else>

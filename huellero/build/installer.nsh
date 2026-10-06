@@ -104,7 +104,7 @@
           DetailPrint "Visual C++ Redistributable x64: instalado; requiere reiniciar el equipo."
         ${Else}
           DetailPrint "Visual C++ Redistributable x64: falló con código $2."
-          MessageBox MB_ICONEXCLAMATION|MB_OK "No se pudo instalar el Visual C++ Redistributable x64 (código $2). La app del huellero puede no funcionar hasta que se instale correctamente." /SD IDOK
+          MessageBox MB_ICONEXCLAMATION|MB_OK "No se pudo instalar el Visual C++ Redistributable x64 (código $2). La app de Asista puede no funcionar hasta que se instale correctamente." /SD IDOK
         ${EndIf}
       ${EndIf}
     ${EndIf}

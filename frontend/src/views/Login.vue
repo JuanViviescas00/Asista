@@ -225,7 +225,7 @@ async function restablecerPassword() {
         <div class="login-brand-icon">
           <img :src="senaLogo" alt="Logo SENA" />
         </div>
-        <h2>Sistema Huellero SENA</h2>
+        <h2>Sistema Asista SENA</h2>
         <p>Control y Gestión de Asistencias</p>
       </div>
 

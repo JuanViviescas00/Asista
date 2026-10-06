@@ -99,3 +99,10 @@ Para iniciar el servidor y la interfaz web en la misma máquina o en red local:
 | **`backend/` (Node.js 22)** | Base de datos Atlas, reglas de negocio, WebSocket | Docker / Linux / Windows / Nube |
 | **`frontend/` (Vue 3)** | Dashboard del Administrador e Instructores | Cualquier navegador web |
 
+---
+
+## ⚠️ Nota sobre el instalador de Asista (`Asista-Setup-1.0.0.exe`)
+
+- El instalador **no está firmado**: Windows SmartScreen puede mostrar un aviso. Para continuar, pulsa **"Más información"** y luego **"Ejecutar de todas formas"**.
+- El instalador instala automáticamente, además de la app, el **driver del lector** y el **SDK U.are.U 3.2.0.89** (solo si aún no están presentes en el equipo).
+
