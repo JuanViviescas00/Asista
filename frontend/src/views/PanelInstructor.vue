@@ -6,6 +6,11 @@ import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 import '../styles/panelInstructor.css'
 
+// Flag de control: el enrolamiento/captura de huellas por SDK del navegador
+// (Fingerprint.WebApi + endpoints /estudiantes/fingerprint-*) está reemplazado
+// por la app de escritorio Asista. Con `true` se restaura el flujo anterior.
+const ENROLAMIENTO_EN_PANEL = false
+
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
 
@@ -608,6 +613,7 @@ const verificandoHuella = ref(false)
 const ultimaVerificacion = ref(null)
 
 async function verificarConexionServidor() {
+  if (!ENROLAMIENTO_EN_PANEL) return
   try {
     const res = await api.estudiantes.fingerprint.status()
     wsConectado.value = true
@@ -619,6 +625,7 @@ async function verificarConexionServidor() {
 }
 
 function verificarEstadoLectorUSB() {
+  if (!ENROLAMIENTO_EN_PANEL) return
   if (!fpSdk || capturing || enrolando.value) return // No consultar durante captura o enrolamiento para no interrumpir la transmisión de datos
 
   fpSdk.enumerateDevices().then(function (readers) {
@@ -641,6 +648,7 @@ function verificarEstadoLectorUSB() {
 }
 
 function initFingerprintSDK() {
+  if (!ENROLAMIENTO_EN_PANEL) return
   sdkInitIntentos++
   console.log('[FP SDK] Intento', sdkInitIntentos, '- verificando Fingerprint global...')
 
@@ -785,6 +793,7 @@ function detenerCapturaSDK() {
 // VERIFICACIÓN BIOMÉTRICA PARA ASISTENCIA
 // =============================================
 function iniciarVerificacionHuella() {
+  if (!ENROLAMIENTO_EN_PANEL) return
   if (!fpSdk || !lectorConectado.value) {
     showToast('El lector de huellas no está conectado.', 'error')
     return
@@ -904,6 +913,7 @@ const DEDOS = [
 ]
 
 function abrirModalEnrolamiento(estudiante) {
+  if (!ENROLAMIENTO_EN_PANEL) return
   estudianteTarget.value = estudiante
   pasoEnrolamiento.value = 1
   capturasCompletadas.value = 0
@@ -1482,7 +1492,7 @@ function descargarExcel(data, nombreArchivo) {
           </div>
 
           <!-- Panel de verificación biométrica activa (Solo si la sesión no está inhabilitada) -->
-          <div v-if="verificandoHuella && !jornadaInhabilitada" class="biometric-panel">
+          <div v-if="ENROLAMIENTO_EN_PANEL && verificandoHuella && !jornadaInhabilitada" class="biometric-panel">
             <div class="biometric-pulse-icon"></div>
             <div class="biometric-panel-text">
               <strong>Lector biométrico activo</strong>
