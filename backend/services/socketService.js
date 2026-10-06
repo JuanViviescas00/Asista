@@ -401,3 +401,9 @@ export function emitirNuevoDispositivo(payload) {
   io.to('admins').emit('NUEVO_DISPOSITIVO', payload)
   return true
 }
+
+export function emitirAlertaSofiaPlus(payload) {
+  if (!io) return false
+  io.to('admins').emit('ALERTA_SOFIA_PLUS', payload)
+  return true
+}

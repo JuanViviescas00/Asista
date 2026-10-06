@@ -292,8 +292,14 @@ export async function getInasistenciasParaRPA(req, res) {
     })
     const fichaIds = fichas.map(f => f._id)
 
+    let targetFichaIds = fichaIds
+    if (fichaId) {
+      const fichaDoc = await resolverFicha(fichaId)
+      targetFichaIds = fichaDoc ? [fichaDoc._id] : []
+    }
+
     const filter = {
-      fichaId: fichaId ? fichaId : { $in: fichaIds },
+      fichaId: { $in: targetFichaIds },
       estado: { $in: ['Falta', 'Tardanza'] }
     }
     if (fecha) filter.fecha = fecha
@@ -306,7 +312,10 @@ export async function getInasistenciasParaRPA(req, res) {
     const inasistencias = asistencias
       .filter(a => a.estudianteId && a.fichaId)
       .map(a => {
-        const horas = a.horasTardanza || (a.estado === 'Falta' ? 6 : 1)
+        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
+        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
+        const horasJornada = esNoche ? 5 : 6
+        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
         return {
           asistenciaId: a._id,
           fecha: a.fecha,
@@ -315,7 +324,8 @@ export async function getInasistenciasParaRPA(req, res) {
           ficha: {
             id: a.fichaId._id,
             codigo: a.fichaId.codigoFicha || '',
-            nombre: a.fichaId.nombre || ''
+            nombre: a.fichaId.nombre || '',
+            jornada: a.fichaId.jornada || ''
           },
           aprendiz: {
             id: a.estudianteId._id,
@@ -325,9 +335,11 @@ export async function getInasistenciasParaRPA(req, res) {
             apellidos: a.estudianteId.apellidos || '',
             nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
           },
-          justificacion: a.estado === 'Falta'
-            ? `Inasistencia sin excusa a formación el ${a.fecha}`
-            : `Tardanza injustificada de ${horas} hora(s) el ${a.fecha}`
+          justificacion: a.estado === 'Excusada'
+            ? 'Falla justificada'
+            : (a.estado === 'Falta'
+                ? 'Falla injustificada'
+                : 'Tardanza injustificada')
         }
       })
 
@@ -347,4 +359,121 @@ export async function getInasistenciasParaRPA(req, res) {
     res.status(500).json({ ok: false, error: err.message })
   }
 }
+
+// Obtener consolidado de todos los instructores con credenciales Sofia Plus y sus inasistencias pendientes
+export async function getTodosInasistenciasParaRPA(req, res) {
+  try {
+    const { fecha } = req.query
+
+    // 1. Buscar todos los instructores que tengan contraseña de Sofia Plus configurada
+    const instructores = await Instructor.find({
+      passwordSofiaPlus: { $exists: true, $ne: '' }
+    })
+
+    if (!instructores || instructores.length === 0) {
+      return res.json({
+        ok: true,
+        totalInstructores: 0,
+        totalInasistencias: 0,
+        instructores: []
+      })
+    }
+
+    const resultadoInstructores = []
+    let granTotalInasistencias = 0
+
+    for (const inst of instructores) {
+      // Fichas donde el instructor es líder o instructor de apoyo
+      const fichas = await Ficha.find({
+        $or: [
+          { instructorLiderId: inst._id },
+          { instructores: inst._id }
+        ]
+      })
+
+      if (!fichas || fichas.length === 0) continue
+
+      const fichaIds = fichas.map(f => f._id)
+
+      const filter = {
+        fichaId: { $in: fichaIds },
+        estado: { $in: ['Falta', 'Tardanza'] }
+      }
+      if (fecha) filter.fecha = fecha
+
+      const asistencias = await Asistencia.find(filter)
+        .populate('estudianteId')
+        .populate('fichaId')
+        .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
+
+      const inasistenciasValidas = asistencias.filter(a => a.estudianteId && a.fichaId)
+
+      if (inasistenciasValidas.length === 0) continue
+
+      // Agrupar por ficha
+      const fichasMap = new Map()
+      inasistenciasValidas.forEach(a => {
+        const fCodigo = a.fichaId.codigoFicha || 'SIN_CODIGO'
+        if (!fichasMap.has(fCodigo)) {
+          fichasMap.set(fCodigo, {
+            id: a.fichaId._id,
+            codigo: fCodigo,
+            nombre: a.fichaId.nombre || '',
+            jornada: a.fichaId.jornada || '',
+            aprendices: []
+          })
+        }
+
+        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
+        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
+        const horasJornada = esNoche ? 5 : 6
+        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
+        fichasMap.get(fCodigo).aprendices.push({
+          asistenciaId: a._id,
+          fecha: a.fecha,
+          estado: a.estado,
+          horas,
+          aprendiz: {
+            id: a.estudianteId._id,
+            tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
+            numeroDocumento: a.estudianteId.numeroDocumento || '',
+            nombres: a.estudianteId.nombres || '',
+            apellidos: a.estudianteId.apellidos || '',
+            nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
+          },
+          justificacion: a.estado === 'Excusada'
+            ? 'Falla justificada'
+            : (a.estado === 'Falta'
+                ? 'Falla injustificada'
+                : 'Tardanza injustificada')
+        })
+      })
+
+      const fichasConNovedades = Array.from(fichasMap.values())
+      const totalDocente = inasistenciasValidas.length
+      granTotalInasistencias += totalDocente
+
+      resultadoInstructores.push({
+        id: inst._id,
+        nombreCompleto: `${inst.nombres} ${inst.apellidos}`.trim(),
+        tipoDocumento: inst.tipoDocumento || 'CC',
+        numeroDocumento: inst.numeroDocumento,
+        passwordSofiaPlus: decrypt(inst.passwordSofiaPlus),
+        totalInasistencias: totalDocente,
+        fichas: fichasConNovedades
+      })
+    }
+
+    res.json({
+      ok: true,
+      fecha: fecha || 'todas',
+      totalInstructores: resultadoInstructores.length,
+      totalInasistencias: granTotalInasistencias,
+      instructores: resultadoInstructores
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
 

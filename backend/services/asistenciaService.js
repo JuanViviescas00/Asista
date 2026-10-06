@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
+import Estudiante from '../models/Estudiante.js'
 
 /**
  * Retorna la fecha actual en zona horaria de Colombia (America/Bogota) en formato YYYY-MM-DD
@@ -157,7 +158,7 @@ export function calcularTardanzaEscalonada(jornada, fechaHora = new Date()) {
  *   por fecha (clases consecutivas; los días sin registro no rompen la racha).
  * - critico: rachaConsecutivaActual >= 3 || diasFallaTotales >= 5.
  */
-export function calcularResumenDesdeAsistencias(asistencias = []) {
+export function calcularResumenDesdeAsistencias(asistencias = [], jornada = '') {
   const ordenadas = [...asistencias].sort((a, b) => {
     if (a.fecha < b.fecha) return -1
     if (a.fecha > b.fecha) return 1
@@ -174,8 +175,12 @@ export function calcularResumenDesdeAsistencias(asistencias = []) {
     }
   }
 
-  const diasFallaPorHoras = Math.floor(horasTardanzaAcumuladas / 6)
-  const horasPendientes = horasTardanzaAcumuladas % 6
+  const jNorm = String(jornada || '').toLowerCase()
+  const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
+  const divisorHoras = esNoche ? 5 : 6
+
+  const diasFallaPorHoras = Math.floor(horasTardanzaAcumuladas / divisorHoras)
+  const horasPendientes = horasTardanzaAcumuladas % divisorHoras
   const diasFallaTotales = diasFallaLiteral + diasFallaPorHoras
 
   let rachaConsecutivaActual = 0
@@ -199,9 +204,13 @@ export function calcularResumenDesdeAsistencias(asistencias = []) {
 
 /**
  * Resumen acumulado de un estudiante (consulta sus asistencias y delega en el
- * cálculo puro).
+ * cálculo puro, respetando las horas por jornada).
  */
 export async function calcularResumenAsistencia(estudianteId) {
-  const asistencias = await Asistencia.find({ estudianteId }).sort({ fecha: 1 })
-  return calcularResumenDesdeAsistencias(asistencias)
+  const [asistencias, estudiante] = await Promise.all([
+    Asistencia.find({ estudianteId }).sort({ fecha: 1 }),
+    Estudiante.findById(estudianteId).populate('fichaId', 'jornada')
+  ])
+  const jornada = estudiante?.fichaId?.jornada || ''
+  return calcularResumenDesdeAsistencias(asistencias, jornada)
 }

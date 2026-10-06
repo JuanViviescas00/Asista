@@ -8,9 +8,6 @@ const dllFolder = path.resolve(__dirname, '../dll')
 
 // Agregar la carpeta ./dll al PATH del proceso de Windows para que se encuentren las dependencias secundarias (dpfpdd.dll)
 process.env.PATH = `${dllFolder};${process.env.PATH}`
-if (process.resourcesPath) {
-  process.env.PATH = `${path.join(process.resourcesPath, 'dll')};${process.env.PATH}`
-}
 
 const DPFJ_SUCCESS = 0
 const DPFJ_E_MORE_DATA = 0x05BA000D
@@ -43,13 +40,7 @@ let dpfj = null
 // Pre-cargar dpfpdd.dll si existe en ./dll para resolver dependencias
 try {
   koffi.load(path.join(dllFolder, 'dpfpdd.dll'))
-} catch (_) {
-  if (process.resourcesPath) {
-    try {
-      koffi.load(path.join(process.resourcesPath, 'dll', 'dpfpdd.dll'))
-    } catch (_) {}
-  }
-}
+} catch (_) {}
 
 const searchPaths = [
   path.join(dllFolder, 'dpfj.dll'),
@@ -376,6 +367,36 @@ export function verifyFingerprint(imageBase64, enrolledStudents, dpi = 500) {
   }
 
   return { match: false, bestScore: bestScore !== 0xFFFFFFFF ? bestScore : null }
+}
+
+export function checkDuplicateOwnTemplate(newTemplateBase64, ownTemplate1, ownTemplate2, targetSlot) {
+  if (!newTemplateBase64) return { isDuplicate: false }
+
+  const otherSlot = targetSlot === 1 ? 2 : 1
+  const otherTemplate = otherSlot === 1 ? ownTemplate1 : ownTemplate2
+  if (!otherTemplate) return { isDuplicate: false }
+
+  let newTemplateBytes
+  try {
+    newTemplateBytes = bufFromBase64(newTemplateBase64)
+  } catch (e) {
+    return { isDuplicate: false }
+  }
+
+  let existingBytes
+  try {
+    existingBytes = bufFromBase64(otherTemplate)
+  } catch (e) {
+    return { isDuplicate: false }
+  }
+
+  const { ok, score } = compareFmds(newTemplateBytes, existingBytes)
+  if (ok && score <= MATCH_THRESHOLD) {
+    console.log(`[fingerprint] ⚠️ DUPLICADO PROPIO: la huella coincide con la Huella ${otherSlot} del mismo estudiante (score=${score})`)
+    return { isDuplicate: true, otherSlot, score }
+  }
+
+  return { isDuplicate: false }
 }
 
 export function checkDuplicateFingerprint(newTemplateBase64, enrolledStudents, currentStudentId) {

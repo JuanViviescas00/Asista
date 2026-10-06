@@ -666,6 +666,22 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, s
       return { ok: false, error: mensaje }
     }
 
+    // Chequeo ADICIONAL contra el OTRO slot del MISMO estudiante: el propósito de las
+    // 2 huellas es tener 2 dedos distintos de respaldo, no el mismo dedo repetido.
+    const propio = plantillasMapeadas.find((p) => String(p._id) === String(estudianteId))
+    const duplicadoPropio = fingerprint.checkDuplicateOwnTemplate(
+      completo.template,
+      propio?.huellaTemplate || '',
+      propio?.huellaTemplate2 || '',
+      slot
+    )
+    if (duplicadoPropio.isDuplicate) {
+      const mensaje = `Este dedo ya está registrado como Huella ${duplicadoPropio.otherSlot} de este mismo estudiante. Usa un dedo diferente para la Huella ${slot}.`
+      console.error(`[engine] Enrolamiento abortado: mismo dedo en Huella ${slot} y Huella ${duplicadoPropio.otherSlot} del mismo estudiante (score=${duplicadoPropio.score})`)
+      notificarProgresoEnrolamiento({ fase: 'cancelado', actual, total, mensaje })
+      return { ok: false, error: mensaje }
+    }
+
     notificarProgresoEnrolamiento({ fase: 'guardando', actual, total, mensaje: 'Guardando huella…' })
     const guardado = await guardarTemplate({ estudianteId, fichaId, dedo, template: completo.template, slot })
 
