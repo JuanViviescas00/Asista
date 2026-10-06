@@ -35,6 +35,7 @@ backend/data/*
 huellero/out/
 huellero/release/
 huellero/release-app/
+huellero/data/
 
 # Config local del dispositivo (contiene deviceId + token)
 huellero/config.json
