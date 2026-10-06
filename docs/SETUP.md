@@ -4,11 +4,12 @@ Guía para clonar y correr la app del huellero en una computadora que
 nunca la ha tenido instalada. Si lo que necesitas es el instalador
 `.exe` empaquetado para un aula real, consulta la sección de
 Empaquetado en `CONTEXTO_HUELLERO.md` — esta guía es para desarrollo/
-pruebas con `npm run dev`.
+pruebas con `npm run dev`. Si solo necesitas instalar la app en un
+aula, usa la Parte A de `GUIA_INSTALACION.md`.
 
 ## Prerrequisitos
 
-1. **Node.js** (versión LTS reciente) — https://nodejs.org
+1. **Node.js** 22 o superior — https://nodejs.org
 2. **Git**
 
 ## Pasos
@@ -20,25 +21,27 @@ git clone https://github.com/ivanrene86/HuelleroActualizado.git
 cd HuelleroActualizado
 ```
 
-### 2. Instalar el driver del lector y el Visual C++ Redistributable
+### 2. Instalar el driver del lector, el SDK U.are.U y el Visual C++ Redistributable
 
-**Importante**: el instalador `.exe` empaquetado hace esto
-automáticamente y en silencio. En modo desarrollo (`npm run dev`) hay
-que hacerlo a mano, porque ese paso solo corre dentro del instalador
-final.
+**Importante**: el instalador `.exe` empaquetado hace esto automáticamente y en silencio. En modo desarrollo (`npm run dev`) hay que hacerlo a mano, porque ese paso solo corre dentro del instalador final.
 
-Ambos archivos ya están dentro del repo:
+Los tres archivos ya están dentro del repo:
 
-huellero/build/driver/setup-x64.msi ← driver del lector (HID Global)
-huellero/build/vcredist/vc_redist.x64.exe ← Visual C++ Redistributable
+```text
+huellero/build/driver/setup-x64.msi        ← driver del lector (U.are.U 4500 Driver 4.1.0.217)
+huellero/build/sdk/setup.msi               ← SDK U.are.U 3.2.0.89 (necesita Data1.cab y los .ini de esa carpeta)
+huellero/build/vcredist/vc_redist.x64.exe  ← Visual C++ Redistributable
+```
 
-
-Instálalos (doble clic, o desde consola):
+Instálalos como **administrador** (PowerShell como administrador):
 
 ```powershell
 msiexec /i "huellero\build\driver\setup-x64.msi"
+msiexec /i "huellero\build\sdk\setup.msi"
 huellero\build\vcredist\vc_redist.x64.exe
 ```
+
+No muevas `setup.msi` fuera de su carpeta: necesita `Data1.cab`, `Setup.ini` y `0x0409.ini` junto a él. Si el SDK no está instalado, el lector no se detecta aunque el driver esté bien.
 
 ### 3. Instalar las dependencias del huellero
 
@@ -92,6 +95,10 @@ enciende y captura correctamente.
 Casi siempre significa que falta el **Visual C++ Redistributable x64**
 (paso 2) — instálalo y reinicia la app. El mensaje de error del propio
 código ya lo indica directamente.
+
+### "No se detectó ningún lector" aunque el lector está conectado y con luz
+
+Casi siempre falta el **SDK U.are.U 3.2.0.89** (paso 2). Sin él, la llamada de detección devuelve el error `0x05BA000B` y 0 dispositivos (más detalle en `docs/CODIGO_ERROR_DPFPDD_05BA000B.md`). Compruébalo en *Configuración → Aplicaciones*. Si en su lugar solo aparece otro SDK de DigitalPersona (por ejemplo *One Touch for Windows SDK*), instala el de `huellero/build/sdk/`.
 
 ### "HELLO rechazado: PENDING_APPROVAL" en bucle
 
