@@ -4,8 +4,8 @@
 // ("ojito") del panel lateral.
 //
 // Colores del indicador:
-//   verde    -> conectado al servidor
-//   amarillo -> sin conexión o reconectando al servidor
+//   verde    -> sistema conectado
+//   amarillo -> sin conexión con el sistema
 //
 // NOTA: desde el navegador NO es posible conocer el estado del
 // lector físico (vive en la app de escritorio del kiosco), por lo
@@ -24,8 +24,8 @@ export function useSistemaEstado() {
   }
 
   const textoEstado = computed(() => {
-    if (estadoSistema.colorEstado === 'verde') return 'Conectado al servidor'
-    return 'Sin conexión con el servidor'
+    if (estadoSistema.colorEstado === 'verde') return 'Sistema conectado'
+    return 'Sin conexión con el sistema'
   })
 
   function colorEstadoClass(color) {
