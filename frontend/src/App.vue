@@ -1,7 +1,7 @@
 <script setup>
 import { watch, onMounted } from 'vue'
 import { useAuth, initAuth } from './composables/useAuth.js'
-import { setViewForRole } from './router/index.js'
+import { setViewForRole, actualizarTituloPestana } from './router/index.js'
 import DefaultLayout from './layouts/DefaultLayout.vue'
 import Login from './views/Login.vue'
 
@@ -12,6 +12,19 @@ watch(
   () => usuario.value?.rol,
   (rol) => {
     if (autenticado.value && rol) setViewForRole(rol)
+  },
+  { immediate: true }
+)
+
+// Título de pestaña: login (sin sesión) vs vista activa (con sesión).
+watch(
+  autenticado,
+  (tieneSesion) => {
+    if (tieneSesion) {
+      actualizarTituloPestana()
+    } else {
+      document.title = 'Iniciar sesión · Asista'
+    }
   },
   { immediate: true }
 )
