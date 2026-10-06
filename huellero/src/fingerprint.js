@@ -342,14 +342,11 @@ export function verifyFingerprint(imageBase64, enrolledStudents, dpi = 500) {
         continue
       }
 
-      console.log(`[fingerprint]   comparando con ${student._doc ? JSON.stringify({ nombres: student.nombres, apellidos: student.apellidos }) : 'estudiante'} (template ${enrolledBytes.length} bytes)`)
-
       const { ok, score } = compareFmds(probeFmd, enrolledBytes)
 
       if (ok && score < bestScore) {
         bestScore = score
         bestStudent = student
-        console.log(`[fingerprint]   NUEVO MEJOR: ${bestStudent.nombres} score=${score}`)
       }
     }
   }

@@ -16,12 +16,6 @@ let plantillasRetryTimer = null
 let plantillasFichaActual = null
 let descargandoPlantillas = false
 
-// Registro en memoria de la última asistencia registrada por (claveClase, estudianteId).
-// Sobrevive a la sincronización (a diferencia de la cola de pendientes, que se limpia
-// tras el sync), para dar feedback correcto de duplicado dentro de la ventana de 2 min.
-// La garantía dura de "un registro por estudiante/ficha/día" está en el backend (sync).
-const ultimasAsistencias = new Map()
-
 export function setOnEstadoChange(cb) {
   onEstadoChange = cb
 }
@@ -237,35 +231,12 @@ export async function capturarYVerificar() {
   return resultado
 }
 
-// Ventana anti-duplicado: evita registrar dos veces al mismo estudiante en la
-// misma clase en un lapso corto (p. ej. el estudiante coloca el dedo dos veces).
-const VENTANA_DEDUP_MS = 2 * 60 * 1000
-
 function registrarAsistenciaLocal(clase, resultado, timestamp) {
   const estudianteId = String(resultado.studentId)
-  // La clase se identifica por claseId; si aún no llega (backend no lo envía), por fichaId.
-  const claveClase = clase.claseId != null ? String(clase.claseId) : String(clase.fichaId)
+  const fichaId = clase.fichaId != null ? String(clase.fichaId) : null
 
-  const claveEstudiante = `${claveClase}:${estudianteId}`
-
-  // 1. Cola local no sincronizada (sobrevive a reinicio, pero se limpia al sincronizar).
-  const pendientes = store.getPendientes()
-  const yaMarcadoPendiente = pendientes.some((p) => {
-    const pClaveClase = p.claseId != null ? String(p.claseId) : String(p.fichaId)
-    return (
-      String(p.estudianteId) === estudianteId &&
-      pClaveClase === claveClase &&
-      p.timestamp != null &&
-      timestamp - p.timestamp <= VENTANA_DEDUP_MS
-    )
-  })
-
-  // 2. Registro en memoria (sobrevive a la sincronización, no al reinicio).
-  const ultimo = ultimasAsistencias.get(claveEstudiante)
-  const yaMarcadoReciente = ultimo != null && (timestamp - ultimo <= VENTANA_DEDUP_MS)
-
-  if (yaMarcadoPendiente || yaMarcadoReciente) {
-    console.log(`[engine] Asistencia ya registrada para ${estudianteId} en esta clase; se omite duplicado.`)
+  if (fichaId && store.yaTieneAsistenciaHoy(fichaId, estudianteId, timestamp)) {
+    console.log(`[engine] Asistencia ya registrada hoy para ${estudianteId} en la ficha ${fichaId}; se omite duplicado.`)
     return true
   }
 
@@ -280,7 +251,9 @@ function registrarAsistenciaLocal(clase, resultado, timestamp) {
   }
 
   store.guardarPendiente(asistencia)
-  ultimasAsistencias.set(claveEstudiante, timestamp)
+  if (fichaId) {
+    store.marcarAsistenciaHoy(fichaId, estudianteId, timestamp)
+  }
   console.log(`[engine] Asistencia guardada localmente: ${asistencia.uuid} (estudiante ${estudianteId})`)
 
   // Avisa al scheduler para intentar sincronizar pronto (sin esperar al polling).
