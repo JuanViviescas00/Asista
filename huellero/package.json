@@ -33,6 +33,7 @@
   "build": {
     "appId": "co.sena.huellero",
     "productName": "Asista",
+    "publish": null,
     "artifactName": "Asista-Setup-${version}.${ext}",
     "directories": {
       "output": "release-app"

@@ -41,9 +41,6 @@ jobs:
         run: |
           cd huellero
           npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine artifact filename
         id: set_artifact_filename

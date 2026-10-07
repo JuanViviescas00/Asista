@@ -2,6 +2,11 @@
   "name": "huellero-actualizado",
   "version": "1.0.0",
   "private": true,
+  "author": "SENA ADSO",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ivanrene86/HuelleroActualizado.git"
+  },
   "type": "module",
   "workspaces": [
     "backend",
