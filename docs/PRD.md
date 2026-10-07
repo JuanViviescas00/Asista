@@ -31,6 +31,7 @@
 8. [Métricas de Éxito e Indicadores Clave (KPIs)](#8-métricas-de-éxito-e-indicadores-clave-kpis)
 9. [Matriz de Riesgos y Mitigaciones](#9-matriz-de-riesgos-y-mitigaciones)
 10. [Hoja de Ruta y Próximos Pasos (Roadmap)](#10-hoja-de-ruta-y-próximos-pasos-roadmap)
+11. [Cuentas y Credenciales de Prueba (QA & Evaluación)](#11-cuentas-y-credenciales-de-prueba-qa--evaluación)
 
 ---
 
@@ -355,6 +356,89 @@ timeline
                         : Notificaciones automáticas por correo al aprendiz
                         : Extensión a lector facial complementario
 ```
+
+---
+
+## 11. CUENTAS Y CREDENCIALES DE PRUEBA (QA & EVALUACIÓN)
+
+Para facilitar la evaluación técnica, auditoría de roles (RBAC) y pruebas de usuario, el sistema cuenta con los siguientes perfiles activos y verificados en la base de datos de pruebas (MongoDB Atlas):
+
+### 11.1. Cuenta de Administrador del Sistema
+* **Propósito:** Gestión global de instructores, fichas, aprobación de dispositivos/huelleros por dirección física, calendario de festivos y reportes consolidados.
+* **Correo / Usuario:** `senahuellero@gmail.com`
+* **Contraseña:** `sena2026ADSO`
+* **Rol en el Sistema:** `Administrador`
+* **URL de Acceso:** Panel Web `/` o modal de login.
+
+---
+
+### 11.2. Cuentas de Instructores
+
+Los instructores pueden iniciar sesión ingresando su **correo institucional** O su **número de documento** junto con la contraseña.
+
+#### A. Instructor Líder de Ficha (Jornada Noche - 5 horas)
+* **Nombre:** Silvia López
+* **Documento:** `1100959620`
+* **Correo:** `silvia@gmail.com`
+* **Contraseña ASISTA:** `sena2026`
+* **Rol:** `Instructor Líder`
+* **Ficha Asignada:** `3139319` — Análisis y Desarrollo de Software (Jornada Noche, 5 horas por inasistencia)
+* **Capacidades para probar:**
+  - Apertura y cierre de clases en vivo para la ficha `3139319`.
+  - Enrolamiento de huellas de aprendices de su ficha.
+  - Aprobación y rechazo de excusas de aprendices.
+  - Credenciales Sofia Plus configuradas y cifradas con AES-256-GCM para automatización RPA.
+
+#### B. Instructor Líder de Ficha (Jornada Mañana - 6 horas)
+* **Nombre:** Carlos Alberto Mendoza Pérez
+* **Documento:** `1055443301`
+* **Correo:** `carlos.mendoza@sena.edu.co`
+* **Contraseña ASISTA:** `sena2026`
+* **Rol:** `Instructor Líder`
+* **Ficha Asignada:** `2670123` — Análisis y Desarrollo de Software (Jornada Mañana, 6 horas por inasistencia)
+* **Capacidades para probar:** Apertura de clase diurna, verificación de banco de tardanzas (divisor 6).
+
+#### C. Instructor Líder de Ficha (Jornada Tarde - 6 horas)
+* **Nombre:** Patricia Elena Jaramillo Morales
+* **Documento:** `1055443302`
+* **Correo:** `patricia.jaramillo@sena.edu.co`
+* **Contraseña ASISTA:** `sena2026`
+* **Rol:** `Instructor Líder`
+* **Ficha Asignada:** `2891234` — Gestión de Redes de Datos (Jornada Tarde, 6 horas)
+
+#### D. Instructor de Apoyo / Común
+* **Nombre:** María Fernanda Suárez Castro
+* **Documento:** `1055443304`
+* **Correo:** `maria.suarez@sena.edu.co`
+* **Contraseña ASISTA:** `sena2026`
+* **Rol:** `Instructor de Apoyo`
+* **Capacidades para probar:** Apertura y toma de asistencia en clases asignadas, sin permisos de enrolamiento biométrico de fichas ajenas (cumplimiento RBAC).
+
+---
+
+### 11.3. Cuentas de Aprendices / Estudiantes (Portal de Consulta)
+
+Los aprendices acceden de manera directa e intuitiva ingresando su **Número de Documento** en el portal web (no requieren contraseña memorizada para consulta y radicación de excusas):
+
+| Nombre del Aprendiz | Número de Documento (Usuario) | Correo Registrado | Ficha Vinculada | Jornada | Estado | Casos de Prueba Recomendados |
+|---|:---:|---|:---:|:---:|:---:|---|
+| **Erick Sebastián Amaya Guio** | `1030572927` | `amayaerick030@gmail.com` | `3139319` | Noche | `Activo` | Consulta de asistencias, historial de marcación en vivo. |
+| **Óscar Andrés Arciniegas Arenas** | `1100950378` | `OSCARANDRESARENAS12@GMAIL.COM` | `3139319` | Noche | `Activo` | Radicación de excusa médica con archivo adjunto y motivo. |
+| **Nicolás Alberto Arias Muñoz** | `1100953722` | `nicolasarias1709@gmail.com` | `3139319` | Noche | `Activo` | Verificación de banco de tardanzas y cálculo de inasistencias. |
+| **Paula Valentina Rache Fonseca** | `1049605228` | — | `3139319` | Noche | `Activo` | Validación de sincronización Sofia Plus (caso probado en robot RPA). |
+| **María Juliana Saavedra** | `1101261073` | `liaawer.gv@gmail.com` | `3139318` | Noche | `Activo` | Verificación de paginación en modal de aprendices de Sofia Plus. |
+
+---
+
+### 11.4. Matriz Resumen de Credenciales para Pruebas Rápidas
+
+| Rol a Evaluar | Identificador (Login) | Contraseña | Vista / Permisos Esperados |
+|---|---|---|---|
+| **Administrador** | `senahuellero@gmail.com` | `sena2026ADSO` | Control total del sistema, instructores, festivos, huelleros y métricas globales. |
+| **Instructor Líder (Noche)** | `1100959620` o `silvia@gmail.com` | `sena2026` | Enrolamiento de huella, gestión de excusas, clase activa Ficha 3139319 (5h). |
+| **Instructor Líder (Mañana)** | `1055443301` o `carlos.mendoza@sena.edu.co` | `sena2026` | Clase activa Ficha 2670123 (6h), enrolamiento y reportes. |
+| **Instructor de Apoyo** | `1055443304` o `maria.suarez@sena.edu.co` | `sena2026` | Apertura de clase y asistencia en vivo, sin permisos de enrolamiento dactilar. |
+| **Aprendiz SENA** | `1030572927` *(solo documento)* | *(No requerida)* | Panel del aprendiz, consulta de fallas acumuladas y radicación de excusas. |
 
 ---
 
