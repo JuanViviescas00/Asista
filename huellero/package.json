@@ -4,13 +4,18 @@
   "private": true,
   "type": "module",
   "description": "Aplicación local de Asista: sistema de asistencia con huella (DigitalPersona U.are.U 4500, SENA)",
+  "author": "SENA ADSO",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ivanrene86/HuelleroActualizado.git"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "dist": "electron-vite build && electron-builder",
-    "build:win": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --publish never",
+    "build:win": "electron-vite build && electron-builder --win --publish never"
   },
   "dependencies": {
     "koffi": "^2.9.0",

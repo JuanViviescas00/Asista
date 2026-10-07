@@ -59,7 +59,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v1.0.0-build.{0}', github.run_number) }}
           name: SENA-ASISTA-${{ github.ref_name }}
           draft: false
           prerelease: false
