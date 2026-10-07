@@ -1,46 +1,66 @@
-name: Compilar y Publicar Instalador (Asista Desktop)
+name: Build/release
 
-on:
+on: 
   push:
     tags:
-      - 'v*' # Se activa al crear etiquetas como v1.0.0, v1.0.1
-  workflow_dispatch: # Permite ejecutarlo manualmente con un clic en GitHub Actions
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write # Permite a GitHub crear el Release y subir los instaladores
+  contents: write
 
 jobs:
   build_and_release:
-    name: Compilar Instalador Windows x64
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [windows-latest]
 
     steps:
-      - name: Descargar código del repositorio
+      - name: Debug GH_TOKEN
+        run: echo "GH_TOKEN status check (disponible en repositorio)"
+
+      - name: checkout code
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js
+      - name: Server setup
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: huellero/package-lock.json
 
-      - name: Instalar dependencias del Huellero
+      - name: Install dependencies
         run: |
           cd huellero
           npm install
 
-      - name: Compilar ejecutable e instalador NSIS
+      - name: Package Electron app for Windows
+        if: matrix.os == 'windows-latest'
         run: |
           cd huellero
-          npm run dist
+          npm run build:win
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Crear Release y Subir Instalador Oficial
+      - name: Determine artifact filename
+        id: set_artifact_filename
+        run: |
+          echo "filename=huellero/release-app/Asista-Setup-*.exe" >> $GITHUB_OUTPUT
+          echo "appName=Asista-Setup-1.0.0.exe" >> $GITHUB_OUTPUT
+        shell: bash
+
+      # Publish Build
+      - name: Create Release
+        id: create_release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         with:
-          name: Asista Huellero Biométrico ${{ github.ref_name }}
+          tag_name: ${{ github.ref }}
+          name: SENA-ASISTA-${{ github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -49,5 +69,3 @@ jobs:
             huellero/release-app/Asista-Setup-*.exe.blockmap
             huellero/build/certs/huellero-sena.cer
             huellero/build/certs/Instalar_Certificado.bat
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
