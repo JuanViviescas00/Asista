@@ -1,0 +1,53 @@
+name: Compilar y Publicar Instalador (Asista Desktop)
+
+on:
+  push:
+    tags:
+      - 'v*' # Se activa al crear etiquetas como v1.0.0, v1.0.1
+  workflow_dispatch: # Permite ejecutarlo manualmente con un clic en GitHub Actions
+
+permissions:
+  contents: write # Permite a GitHub crear el Release y subir los instaladores
+
+jobs:
+  build_and_release:
+    name: Compilar Instalador Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Descargar código del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: huellero/package-lock.json
+
+      - name: Instalar dependencias del Huellero
+        run: |
+          cd huellero
+          npm install
+
+      - name: Compilar ejecutable e instalador NSIS
+        run: |
+          cd huellero
+          npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Crear Release y Subir Instalador Oficial
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Asista Huellero Biométrico ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            huellero/release-app/Asista-Setup-*.exe
+            huellero/release-app/Asista-Setup-*.exe.blockmap
+            huellero/build/certs/huellero-sena.cer
+            huellero/build/certs/Instalar_Certificado.bat
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
