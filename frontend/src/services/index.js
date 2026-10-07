@@ -105,6 +105,8 @@ const api = {
     update(id, body) { return request(`/instructores/${id}`, { method: 'PUT', body: JSON.stringify(body) }) },
     delete(id) { return request(`/instructores/${id}`, { method: 'DELETE' }) },
     importar(instructores) { return request('/instructores/importar', { method: 'POST', body: JSON.stringify({ instructores }) }) },
+    getCredencialesSofia(id) { return request(`/instructores/${id}/credenciales-sofia`) },
+    getCredencialesSofiaPorDocumento(documento) { return request(`/instructores/documento/${documento}/credenciales-sofia`) },
   },
 
   fichas: {

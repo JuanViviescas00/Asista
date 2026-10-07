@@ -336,6 +336,25 @@ flowchart TB
    - Acumulación en banco de horas de inasistencia (cada 6 horas = 1 día de falla).
 4. **Exportación y Sincronización Nocturna por Docente:**
    - Generación de archivos SQLite independientes por instructor a la medianoche con los últimos 3 días hábiles (considerando días festivos institucionales).
+5. **Gestión y Cifrado AES-256-GCM de Credenciales Sofia Plus para Robot RPA (2 de Octubre de 2026):**
+   - **Propósito:** Permitir al robot RPA (`Practica_RPA/bot_sofia_login.py`) autenticarse automáticamente en la plataforma Sofia Plus (`senasofiaplus.edu.co`) a nombre del instructor para el reporte y sincronización de novedades, protegiendo las credenciales contra accesos no autorizados a la base de datos.
+   - **Cifrado Criptográfico de Grado Militar (`backend/services/cryptoService.js`):**
+     - Algoritmo: **AES-256-GCM** (Galois/Counter Mode con autenticación integrada y vector de inicialización IV de 96 bits aleatorio por registro).
+     - Clave maestra derivada con **SHA-256 (32 bytes / 256 bits)** a partir de `SOFIA_ENCRYPTION_KEY` / `JWT_SECRET`.
+     - Formato almacenado en MongoDB: `enc:v1:<iv_hex>:<authTag_hex>:<cipher_hex>`.
+     - Ninguna contraseña de Sofia Plus se guarda en texto plano en la base de datos de MongoDB Atlas.
+     - Protección contra doble-cifrado (idempotencia) y compatibilidad transparente hacia atrás.
+   - **Modelo de Datos:** Campo `passwordSofiaPlus` (`String`, default `''`) en el esquema de Mongoose `backend/models/Instructor.js`.
+   - **Endpoints Backend Seguros:**
+     - `GET /api/instructores/:id/credenciales-sofia`: Retorna `tipoDocumento`, `numeroDocumento` y la contraseña descifrada para el robot por ID del instructor.
+     - `GET /api/instructores/documento/:documento/credenciales-sofia`: Permite al script de automatización consultar credenciales descifradas por número de documento.
+     - Rutas protegidas mediante `autenticarJWT` y `verificarRol(['Administrador', 'Instructor'])`.
+     - GET /api/instructores/documento/:documento/inasistencias-rpa: Consulta las inasistencias consolidadas (aprendiz, documento, ficha, horas y justificacion) para la ejecucion autonoma 1 por 1 del robot.
+   - **Robot RPA en Node.js (Practica_RPA/bot_inasistencias_sofia.js):** Script 100% en Node.js + Playwright para automatizar el ingreso a Sofia Plus con rol Instructor, navegacion a Gestion de Tiempos y reporte 1 por 1 de inasistencias con evidencias graficas.
+   - **Frontend Web:**
+     - `frontend/src/views/Instructores.vue`: Campo de contraseña Sofia Plus con botón toggle de visibilidad (mostrar/ocultar) en el modal y estado de configuración en la fila expandible.
+     - `frontend/src/views/AdminPerfil.vue`: Módulo en el perfil del docente para autoservicio de su clave Sofia Plus.
+     - `frontend/src/services/index.js`: Métodos `getCredencialesSofia` y `getCredencialesSofiaPorDocumento`.
 
 ### 3.2 Refactorizaciones y UI/UX
 1. **Rediseño del Sidebar Principal:**
@@ -357,6 +376,11 @@ flowchart TB
 3. **Optimización de Índices en MongoDB:**
    - Índice único compuesto `{ estudianteId: 1, fichaId: 1, fecha: 1 }` en `Asistencia` para erradicar condiciones de carrera en marcaciones concurrentes.
    - Índice parcial único `{ deviceId: 1 }` con filtro `{ estado: 'Activa' }` en `Clase`.
+4. **Firma Digital y Certificado de Confianza SENA (2 de Octubre de 2026):**
+   - Generación de certificado criptográfico de firma de código digital oficial `CN=SENA - Sistema de Control Biometrico, O=Servicio Nacional de Aprendizaje SENA, C=CO`.
+   - Firma digital de los binarios ejecutables (`Huellero SENA.exe`) con huella digital `3C4D79784D995F9118658C02BDBBE032511E71A7`.
+   - Incorporación de auto-instalación del certificado `.cer` en el script del instalador NSIS (`installer.nsh`) con `certutil.exe -addstore -f "Root" ...`.
+   - Creación de `Instalar_Certificado.bat` para el registro asistido en equipos cliente.
 
 ---
 

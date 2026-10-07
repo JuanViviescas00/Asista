@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import * as instructorController from '../controllers/instructorController.js'
 import { validarCamposRequeridos, validarEmail } from '../middlewares/validator.js'
-import { autenticarJWT, verificarRol, verificarRolOLider } from '../middlewares/auth.js'
+import { autenticarJWT, verificarRol, verificarRolOLider, autenticarOpcional } from '../middlewares/auth.js'
 
 const router = Router()
 
@@ -34,5 +34,11 @@ router.post('/importar',
   verificarRolOLider(['Administrador']),
   instructorController.importarInstructores
 )
+
+// Credenciales y novedades de Sofia Plus para automatización / RPA
+router.get('/:id/credenciales-sofia', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getCredencialesSofia)
+router.get('/documento/:documento/credenciales-sofia', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getCredencialesSofiaPorDocumento)
+router.get('/todos-inasistencias-rpa', autenticarOpcional, instructorController.getTodosInasistenciasParaRPA)
+router.get('/documento/:documento/inasistencias-rpa', autenticarOpcional, instructorController.getInasistenciasParaRPA)
 
 export default router

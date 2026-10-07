@@ -11,6 +11,7 @@ const instructorSchema = new mongoose.Schema({
   password: { type: String, default: 'sena2026' },
   rol: { type: String, enum: ['Instructor'], default: 'Instructor' },
   esLider: { type: Boolean, default: false },
+  passwordSofiaPlus: { type: String, default: '' },
   estado: { type: String, enum: ['Activo', 'Inactivo'], default: 'Activo' },
   motivo: { type: String, default: '' },
 }, { timestamps: true, collection: 'instructores' })

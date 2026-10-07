@@ -151,9 +151,10 @@ export function iniciarCronJobs() {
 
   console.log(`[CRON] Programador nocturno listo (${schedule} - ${timezone}) - Agrupación por Docente`)
 
-  // 3. Cron diario de detección de fallas/excusas para Sofía Plus (4:00 AM Bogotá)
-  cron.schedule('0 4 * * *', async () => {
-    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión de fallas para Sofía Plus...`)
+  // 3. Cron semanal de detección de fallas/excusas para Sofía Plus (Cada Sábado a las 12:00 AM Bogotá)
+  const scheduleSofia = process.env.CRON_SOFIA_SCHEDULE || '0 0 * * 6'
+  cron.schedule(scheduleSofia, async () => {
+    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas para Sofía Plus (Sábado 12:00 AM)...`)
     try {
       const encolado = await revisarYEncolarSofiaPlus()
       console.log(`[CRON] SofiaPlus: ${encolado.encolados} encolados, ${encolado.omitidosYaExistentes} ya existentes, ${encolado.enEsperaDiasHabiles} en espera de días hábiles.`)
@@ -166,7 +167,7 @@ export function iniciarCronJobs() {
     timezone: 'America/Bogota'
   })
 
-  console.log('[CRON] Revisión diaria Sofía Plus a las 4:00 AM (America/Bogota) activa')
+  console.log(`[CRON] Revisión semanal Sofía Plus activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
 }
 
 /**
@@ -290,7 +291,7 @@ export async function sincronizarSqlitePorDocente() {
  *   vencida únicamente cuando el día 3 ya transcurrió por completo, no durante él.
  * - No duplica: si ya existe un SofiaPlusSync para una asistencia, la omite.
  */
-async function revisarYEncolarSofiaPlus() {
+export async function revisarYEncolarSofiaPlus() {
   const hoyStr = getHoyString()
 
   // 1. Cargar conjunto de días festivos para cálculo de días hábiles
@@ -372,7 +373,7 @@ async function revisarYEncolarSofiaPlus() {
  * Revisa los SofiaPlusSync en estado 'error' con intentos >= 3 y sin alerta
  * enviada, emite una alerta por WebSocket y marca alertaEnviada = true.
  */
-async function revisarAlertasSofiaPlus() {
+export async function revisarAlertasSofiaPlus() {
   const errores = await SofiaPlusSync.find({
     estadoSync: 'error',
     intentos: { $gte: 3 },
