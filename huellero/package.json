@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Aplicación local del huellero DigitalPersona U.are.U 4500 (SENA)",
+  "description": "Aplicación local de Asista: sistema de asistencia con huella (DigitalPersona U.are.U 4500, SENA)",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -26,7 +26,8 @@
   },
   "build": {
     "appId": "co.sena.huellero",
-    "productName": "Huellero SENA",
+    "productName": "Asista",
+    "artifactName": "Asista-Setup-${version}.${ext}",
     "directories": {
       "output": "release-app"
     },
@@ -37,17 +38,23 @@
       {
         "from": "dll",
         "to": "dll"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
       }
     ],
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "shortcutName": "Asista"
     }
   }
 }

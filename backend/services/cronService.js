@@ -403,4 +403,3 @@ export async function revisarAlertasSofiaPlus() {
 
   return { alertasEmitidas }
 }
-

@@ -198,11 +198,11 @@ Resumen de alto nivel de las tareas en seguimiento (detalle completo en [`docs/C
 - **Acks del protocolo WebSocket** (`ACTIVATED`/`DEACTIVATED`): diseñados, pendientes de validación en campo.
 - **Feed en vivo** (`ATTENDANCE_REGISTERED`): implementado y probado en backend/frontend; validar con múltiples marcaciones concurrentes.
 - **Índice único de asistencias:** en MongoDB `(estudianteId, fichaId, fecha)` para prevención estricta de duplicados en concurrencia.
-- **Empaquetado `.exe` del Huellero:** generación de instalador autónomo portable para Windows.
+- **Empaquetado `.exe` de Asista:** generación de instalador autónomo portable para Windows.
 - **Auditoría de dependencias en huellero:** actualización de dependencias de build de Electron.
 
 ---
 
 ## 📖 Documentación Adicional
 - 🛠️ [Guía de Instalación de Hardware y Drivers](./GUIA_INSTALACION.md)
-- 📋 [Contexto y Arquitectura del Huellero](./docs/CONTEXTO_HUELLERO.md)
+- 📋 [Contexto y Arquitectura de Asista](./docs/CONTEXTO_HUELLERO.md)

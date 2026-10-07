@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'fs'
 import { resolve } from 'path'
 import { app } from 'electron'
 
@@ -31,10 +31,12 @@ const DATA_DIR = getDataDir()
 const PLANTILLAS_PATH = resolve(DATA_DIR, 'plantillas.json')
 const PENDIENTES_PATH = resolve(DATA_DIR, 'pendientes.json')
 const ESTADO_PATH = resolve(DATA_DIR, 'estado.json')
+const ASISTENCIAS_DIA_PATH = resolve(DATA_DIR, 'asistencias-dia.json')
 
 let estado = { claseActiva: null }
 let plantillas = {}
 let pendientes = []
+let asistenciasDia = {}
 
 function asegurarDirectorio() {
   if (!existsSync(DATA_DIR)) {
@@ -51,8 +53,55 @@ function leerJSON(ruta, porDefecto) {
   }
 }
 
+function esperarSync(ms) {
+  const fin = Date.now() + ms
+  while (Date.now() < fin) {}
+}
+
 function escribirJSON(ruta, valor) {
-  writeFileSync(ruta, JSON.stringify(valor, null, 2), 'utf8')
+  const tmp = `${ruta}.tmp`
+  writeFileSync(tmp, JSON.stringify(valor, null, 2), 'utf8')
+
+  const reintentables = new Set(['EPERM', 'EBUSY', 'EACCES'])
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      renameSync(tmp, ruta)
+      return
+    } catch (err) {
+      const reintentable = reintentables.has(err.code)
+
+      if (reintentable && intento < 3) {
+        esperarSync(50)
+        continue
+      }
+
+      if (reintentable) {
+        if (existsSync(tmp)) {
+          try { unlinkSync(tmp) } catch (_) {}
+        }
+        writeFileSync(ruta, JSON.stringify(valor, null, 2), 'utf8')
+        return
+      }
+
+      if (existsSync(tmp)) {
+        try { unlinkSync(tmp) } catch (_) {}
+      }
+      throw err
+    }
+  }
+}
+
+function fechaColombia(timestamp) {
+  const d = timestamp != null ? new Date(timestamp) : new Date()
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(d)
+}
+
+function purgarAsistenciasDia(fecha) {
+  const limpio = {}
+  for (const f of Object.keys(asistenciasDia)) {
+    if (f === fecha) limpio[f] = asistenciasDia[f]
+  }
+  asistenciasDia = limpio
 }
 
 function persistirEstado() {
@@ -84,9 +133,13 @@ export async function init() {
   plantillas = leerJSON(PLANTILLAS_PATH, {}) || {}
   pendientes = leerJSON(PENDIENTES_PATH, [])
 
+  asistenciasDia = leerJSON(ASISTENCIAS_DIA_PATH, {}) || {}
+
   if (!Array.isArray(pendientes)) pendientes = []
   if (typeof plantillas !== 'object' || plantillas === null) plantillas = {}
   if (typeof estado !== 'object' || estado === null) estado = { claseActiva: null }
+  if (typeof asistenciasDia !== 'object' || asistenciasDia === null || Array.isArray(asistenciasDia)) asistenciasDia = {}
+  purgarAsistenciasDia(fechaColombia(Date.now()))
 }
 
 export function getClaseActiva() {
@@ -125,4 +178,30 @@ export function marcarSincronizadas(uuids) {
   const conjunto = new Set(uuids.map((u) => String(u)))
   pendientes = pendientes.filter((p) => !conjunto.has(String(p.uuid)))
   persistirPendientes()
+}
+
+export function yaTieneAsistenciaHoy(fichaId, estudianteId, timestamp) {
+  const fecha = fechaColombia(timestamp)
+  const porFecha = asistenciasDia[fecha]
+  if (!porFecha || typeof porFecha !== 'object') return false
+  const ids = porFecha[String(fichaId)]
+  return Array.isArray(ids) && ids.includes(String(estudianteId))
+}
+
+export function marcarAsistenciaHoy(fichaId, estudianteId, timestamp) {
+  const fecha = fechaColombia(timestamp)
+  purgarAsistenciasDia(fecha)
+
+  const claveFicha = String(fichaId)
+  if (!asistenciasDia[fecha] || typeof asistenciasDia[fecha] !== 'object') {
+    asistenciasDia[fecha] = {}
+  }
+  const porFecha = asistenciasDia[fecha]
+  if (!Array.isArray(porFecha[claveFicha])) porFecha[claveFicha] = []
+
+  const ids = porFecha[claveFicha]
+  const claveEst = String(estudianteId)
+  if (!ids.includes(claveEst)) ids.push(claveEst)
+
+  escribirJSON(ASISTENCIAS_DIA_PATH, asistenciasDia)
 }

@@ -293,13 +293,17 @@ function obtenerDispositivos() {
   }
 
   countBuf.writeUInt32LE(count, 0)
+  console.log(`[capture] Antes de dpfpdd_query_devices (2ª llamada): count=${count}, itemSize=${itemSize}`)
   const rc2 = dpfpdd_query_devices(countBuf, devBuf)
+  console.log(`[capture] Después de dpfpdd_query_devices (2ª llamada): rc2=0x${(rc2 >>> 0).toString(16).toUpperCase()}`)
   if (rc2 !== DPFPDD_SUCCESS) {
     console.error(`[capture] dpfpdd_query_devices() (2ª llamada) falló: rc2=${rc2} (${describirError(rc2)})`)
     throw new Error(`dpfpdd_query_devices() (2ª llamada) falló: ${describirError(rc2)}`)
   }
 
+  console.log(`[capture] Antes de koffi.decode: count=${count}, bytes=${devBuf.length}`)
   const decoded = koffi.decode(devBuf, DPFPDD_DEV_INFO, count)
+  console.log(`[capture] Después de koffi.decode: ${decoded.length} elemento(s) decodificado(s)`)
   console.log(`[capture] ${count} dispositivo(s) detectado(s):`, decoded.map((d) => d.name || 'Sin nombre'))
   return decoded
 }
@@ -307,7 +311,9 @@ function obtenerDispositivos() {
 function abrirDispositivo(devName) {
   console.log(`[capture] Abriendo dispositivo: "${devName}"...`)
   const outDev = [null]
+  console.log(`[capture] Antes de dpfpdd_open: name="${devName}"`)
   const rc = dpfpdd_open(devName, outDev)
+  console.log(`[capture] Después de dpfpdd_open: rc=0x${(rc >>> 0).toString(16).toUpperCase()}`)
   if (rc !== DPFPDD_SUCCESS) {
     console.error(`[capture] dpfpdd_open("${devName}") falló con código ${rc}: ${describirError(rc)}`)
     throw new Error(`dpfpdd_open() falló: ${describirError(rc)}`)
@@ -323,7 +329,9 @@ function abrirDispositivo(devName) {
 function cerrarDispositivo(dev) {
   if (!dev) return
   try {
+    console.log(`[capture] Antes de dpfpdd_close`)
     const rc = dpfpdd_close(dev)
+    console.log(`[capture] Después de dpfpdd_close: rc=0x${(rc >>> 0).toString(16).toUpperCase()}`)
     if (rc !== DPFPDD_SUCCESS) {
       console.warn(`[capture] dpfpdd_close() devolvió: ${describirError(rc)}`)
     } else {
@@ -340,7 +348,9 @@ function obtenerResolucion(dev) {
     const capBuf = Buffer.alloc(koffi.sizeof(DPFPDD_DEV_CAPS))
     capBuf.writeUInt32LE(koffi.sizeof(DPFPDD_DEV_CAPS), 0)
 
+    console.log(`[capture] Antes de dpfpdd_get_device_capabilities`)
     const rc = dpfpdd_get_device_capabilities(dev, capBuf)
+    console.log(`[capture] Después de dpfpdd_get_device_capabilities: rc=0x${(rc >>> 0).toString(16).toUpperCase()}`)
     if (rc !== DPFPDD_SUCCESS) {
       console.warn(`[capture] No se pudieron leer capacidades del lector (${describirError(rc)}). Usando resolución ${DPI_FALLBACK} DPI.`)
       return DPI_FALLBACK
@@ -376,12 +386,14 @@ async function capturarImagen(dev, timeoutMs, dpi) {
   const imageBuf = Buffer.alloc(MAX_IMAGE_SIZE)
 
   console.log(`[capture] Iniciando dpfpdd_capture() (timeout=${timeoutMs}ms, dpi=${dpi})...`)
+  console.log(`[capture] Antes de dpfpdd_capture: timeout=${timeoutMs}ms, dpi=${dpi}, image_res=${captureParam.image_res}`)
   const rc = await new Promise((resolve, reject) => {
     dpfpdd_capture.async(dev, captureParam, timeoutMs, captureResult, sizeBuf, imageBuf, (err, rc) => {
       if (err) reject(err)
       else resolve(rc)
     })
   })
+  console.log(`[capture] Después de dpfpdd_capture: rc=0x${(rc >>> 0).toString(16).toUpperCase()}`)
   console.log(`[capture] dpfpdd_capture() finalizó: rc=${rc} (${describirError(rc)}), success=${captureResult.success}, quality=${captureResult.quality}, score=${captureResult.score}`)
   if (rc !== DPFPDD_SUCCESS) {
     console.error(`[capture] dpfpdd_capture() falló: rc=${rc} (${describirError(rc)})`)

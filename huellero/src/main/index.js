@@ -1,3 +1,4 @@
+import './init-data.js'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
@@ -5,6 +6,10 @@ import * as engine from './engine.js'
 import { iniciarScheduler } from './scheduler.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+
+const iconPath = app.isPackaged
+  ? join(process.resourcesPath, 'icon.ico')
+  : join(__dirname, '../../build/icon.ico')
 
 let mainWindow = null
 
@@ -18,9 +23,12 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1024,
     height: 768,
+    title: 'Asista',
+    icon: iconPath,
     fullscreen: false,
     autoHideMenuBar: true,
     backgroundColor: '#0f172a',
+    show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
@@ -30,6 +38,20 @@ function createWindow() {
   })
 
   mainWindow.setMenuBarVisibility(false)
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+  })
+
+  const fallbackTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show()
+    }
+  }, 5000)
+
+  mainWindow.once('show', () => {
+    clearTimeout(fallbackTimer)
+  })
 
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
