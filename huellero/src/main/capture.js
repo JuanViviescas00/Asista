@@ -17,6 +17,9 @@ const dllFolder = path.resolve(__dirname, '../../dll')
 
 // Mismo patrón de dllFolder/PATH que fingerprint.js
 process.env.PATH = `${dllFolder};${process.env.PATH}`
+if (process.resourcesPath) {
+  process.env.PATH = `${path.join(process.resourcesPath, 'dll')};${process.env.PATH}`
+}
 
 // ---------------------------------------------------------------------------
 // Constantes (dpfpdd.h oficial — docs/sdk-reference/dpfpdd.h)

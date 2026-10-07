@@ -1,7 +1,9 @@
 import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
+import Asistencia from '../models/Asistencia.js'
 import { hashPassword } from '../services/passwordService.js'
+import { encrypt, decrypt } from '../services/cryptoService.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -28,6 +30,9 @@ export async function getInstructores(req, res) {
     const resultado = instructores.map(inst => {
       const obj = inst.toObject()
       delete obj.password // No exponer el hash en la respuesta
+      if (obj.passwordSofiaPlus) {
+        obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
+      }
       const esLiderEnFicha = idsLideres.has(String(inst._id))
       return {
         ...obj,
@@ -47,11 +52,18 @@ export async function createInstructor(req, res) {
     const clavePlana = data.password || 'sena2026'
     data.password = await hashPassword(clavePlana)
 
+    if (data.passwordSofiaPlus) {
+      data.passwordSofiaPlus = encrypt(data.passwordSofiaPlus)
+    }
+
     const instructor = new Instructor(data)
     await instructor.save()
 
     const obj = instructor.toObject()
     delete obj.password
+    if (obj.passwordSofiaPlus) {
+      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
+    }
     res.status(201).json(obj)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -67,11 +79,18 @@ export async function updateInstructor(req, res) {
       delete data.password
     }
 
+    if (data.passwordSofiaPlus !== undefined) {
+      data.passwordSofiaPlus = encrypt(data.passwordSofiaPlus)
+    }
+
     const instructor = await Instructor.findByIdAndUpdate(req.params.id, data, { new: true })
     if (!instructor) return res.status(404).json({ error: 'Instructor no encontrado' })
 
     const obj = instructor.toObject()
     delete obj.password
+    if (obj.passwordSofiaPlus) {
+      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
+    }
     res.json(obj)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -145,15 +164,22 @@ export async function importarInstructores(req, res) {
         if (!existe) {
           const clavePlana = password || 'sena2026'
           const passwordHash = await hashPassword(clavePlana)
-          instructor = await Instructor.create({
+          const datosCrear = {
             ...rest,
             password: passwordHash
-          })
+          }
+          if (datosCrear.passwordSofiaPlus) {
+            datosCrear.passwordSofiaPlus = encrypt(datosCrear.passwordSofiaPlus)
+          }
+          instructor = await Instructor.create(datosCrear)
           creados++
         } else {
           const datos = { ...rest }
           if (password) {
             datos.password = await hashPassword(password)
+          }
+          if (datos.passwordSofiaPlus !== undefined) {
+            datos.passwordSofiaPlus = encrypt(datos.passwordSofiaPlus)
           }
           instructor = await Instructor.findByIdAndUpdate(existe._id, datos, { new: true })
           actualizados++
@@ -188,3 +214,266 @@ export async function importarInstructores(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+// Obtener credenciales para bot RPA de Sofia Plus por ID
+export async function getCredencialesSofia(req, res) {
+  try {
+    const instructor = await Instructor.findById(req.params.id)
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado' })
+    }
+
+    if (!instructor.passwordSofiaPlus) {
+      return res.status(400).json({
+        ok: false,
+        error: 'El instructor no tiene configurada su contraseña de Sofia Plus en el sistema'
+      })
+    }
+
+    res.json({
+      ok: true,
+      instructorId: instructor._id,
+      nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
+      tipoDocumento: instructor.tipoDocumento || 'CC',
+      numeroDocumento: instructor.numeroDocumento,
+      passwordSofiaPlus: decrypt(instructor.passwordSofiaPlus)
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
+// Obtener credenciales para bot RPA de Sofia Plus por número de documento
+export async function getCredencialesSofiaPorDocumento(req, res) {
+  try {
+    const { documento } = req.params
+    const instructor = await Instructor.findOne({ numeroDocumento: String(documento).trim() })
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
+    }
+
+    if (!instructor.passwordSofiaPlus) {
+      return res.status(400).json({
+        ok: false,
+        error: `El instructor ${instructor.nombres} ${instructor.apellidos} no tiene configurada su contraseña de Sofia Plus`
+      })
+    }
+
+    res.json({
+      ok: true,
+      instructorId: instructor._id,
+      nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
+      tipoDocumento: instructor.tipoDocumento || 'CC',
+      numeroDocumento: instructor.numeroDocumento,
+      passwordSofiaPlus: decrypt(instructor.passwordSofiaPlus)
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
+// Obtener listado de inasistencias para el robot RPA de Sofia Plus
+export async function getInasistenciasParaRPA(req, res) {
+  try {
+    const { documento } = req.params
+    const { fecha, fichaId } = req.query
+
+    const instructor = await Instructor.findOne({ numeroDocumento: String(documento).trim() })
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
+    }
+
+    // Fichas donde el instructor es líder o instructor de apoyo
+    const fichas = await Ficha.find({
+      $or: [
+        { instructorLiderId: instructor._id },
+        { instructores: instructor._id }
+      ]
+    })
+    const fichaIds = fichas.map(f => f._id)
+
+    let targetFichaIds = fichaIds
+    if (fichaId) {
+      const fichaDoc = await resolverFicha(fichaId)
+      targetFichaIds = fichaDoc ? [fichaDoc._id] : []
+    }
+
+    const filter = {
+      fichaId: { $in: targetFichaIds },
+      estado: { $in: ['Falta', 'Tardanza'] }
+    }
+    if (fecha) filter.fecha = fecha
+
+    const asistencias = await Asistencia.find(filter)
+      .populate('estudianteId')
+      .populate('fichaId')
+      .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
+
+    const inasistencias = asistencias
+      .filter(a => a.estudianteId && a.fichaId)
+      .map(a => {
+        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
+        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
+        const horasJornada = esNoche ? 5 : 6
+        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
+        return {
+          asistenciaId: a._id,
+          fecha: a.fecha,
+          estado: a.estado,
+          horas,
+          ficha: {
+            id: a.fichaId._id,
+            codigo: a.fichaId.codigoFicha || '',
+            nombre: a.fichaId.nombre || '',
+            jornada: a.fichaId.jornada || ''
+          },
+          aprendiz: {
+            id: a.estudianteId._id,
+            tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
+            numeroDocumento: a.estudianteId.numeroDocumento || '',
+            nombres: a.estudianteId.nombres || '',
+            apellidos: a.estudianteId.apellidos || '',
+            nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
+          },
+          justificacion: a.estado === 'Excusada'
+            ? 'Falla justificada'
+            : (a.estado === 'Falta'
+                ? 'Falla injustificada'
+                : 'Tardanza injustificada')
+        }
+      })
+
+    res.json({
+      ok: true,
+      instructor: {
+        id: instructor._id,
+        nombreCompleto: `${instructor.nombres} ${instructor.apellidos}`.trim(),
+        tipoDocumento: instructor.tipoDocumento || 'CC',
+        numeroDocumento: instructor.numeroDocumento,
+        passwordSofiaPlus: decrypt(instructor.passwordSofiaPlus)
+      },
+      total: inasistencias.length,
+      inasistencias
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
+// Obtener consolidado de todos los instructores con credenciales Sofia Plus y sus inasistencias pendientes
+export async function getTodosInasistenciasParaRPA(req, res) {
+  try {
+    const { fecha } = req.query
+
+    // 1. Buscar todos los instructores que tengan contraseña de Sofia Plus configurada
+    const instructores = await Instructor.find({
+      passwordSofiaPlus: { $exists: true, $ne: '' }
+    })
+
+    if (!instructores || instructores.length === 0) {
+      return res.json({
+        ok: true,
+        totalInstructores: 0,
+        totalInasistencias: 0,
+        instructores: []
+      })
+    }
+
+    const resultadoInstructores = []
+    let granTotalInasistencias = 0
+
+    for (const inst of instructores) {
+      // Fichas donde el instructor es líder o instructor de apoyo
+      const fichas = await Ficha.find({
+        $or: [
+          { instructorLiderId: inst._id },
+          { instructores: inst._id }
+        ]
+      })
+
+      if (!fichas || fichas.length === 0) continue
+
+      const fichaIds = fichas.map(f => f._id)
+
+      const filter = {
+        fichaId: { $in: fichaIds },
+        estado: { $in: ['Falta', 'Tardanza'] }
+      }
+      if (fecha) filter.fecha = fecha
+
+      const asistencias = await Asistencia.find(filter)
+        .populate('estudianteId')
+        .populate('fichaId')
+        .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
+
+      const inasistenciasValidas = asistencias.filter(a => a.estudianteId && a.fichaId)
+
+      if (inasistenciasValidas.length === 0) continue
+
+      // Agrupar por ficha
+      const fichasMap = new Map()
+      inasistenciasValidas.forEach(a => {
+        const fCodigo = a.fichaId.codigoFicha || 'SIN_CODIGO'
+        if (!fichasMap.has(fCodigo)) {
+          fichasMap.set(fCodigo, {
+            id: a.fichaId._id,
+            codigo: fCodigo,
+            nombre: a.fichaId.nombre || '',
+            jornada: a.fichaId.jornada || '',
+            aprendices: []
+          })
+        }
+
+        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
+        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
+        const horasJornada = esNoche ? 5 : 6
+        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
+        fichasMap.get(fCodigo).aprendices.push({
+          asistenciaId: a._id,
+          fecha: a.fecha,
+          estado: a.estado,
+          horas,
+          aprendiz: {
+            id: a.estudianteId._id,
+            tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
+            numeroDocumento: a.estudianteId.numeroDocumento || '',
+            nombres: a.estudianteId.nombres || '',
+            apellidos: a.estudianteId.apellidos || '',
+            nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
+          },
+          justificacion: a.estado === 'Excusada'
+            ? 'Falla justificada'
+            : (a.estado === 'Falta'
+                ? 'Falla injustificada'
+                : 'Tardanza injustificada')
+        })
+      })
+
+      const fichasConNovedades = Array.from(fichasMap.values())
+      const totalDocente = inasistenciasValidas.length
+      granTotalInasistencias += totalDocente
+
+      resultadoInstructores.push({
+        id: inst._id,
+        nombreCompleto: `${inst.nombres} ${inst.apellidos}`.trim(),
+        tipoDocumento: inst.tipoDocumento || 'CC',
+        numeroDocumento: inst.numeroDocumento,
+        passwordSofiaPlus: decrypt(inst.passwordSofiaPlus),
+        totalInasistencias: totalDocente,
+        fichas: fichasConNovedades
+      })
+    }
+
+    res.json({
+      ok: true,
+      fecha: fecha || 'todas',
+      totalInstructores: resultadoInstructores.length,
+      totalInasistencias: granTotalInasistencias,
+      instructores: resultadoInstructores
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
+

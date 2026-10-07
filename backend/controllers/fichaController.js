@@ -160,7 +160,7 @@ export async function getTardanzasResumen(req, res) {
     const resumen = {}
     for (const est of estudiantes) {
       const key = String(est._id)
-      resumen[key] = calcularResumenDesdeAsistencias(porEstudiante.get(key) || [])
+      resumen[key] = calcularResumenDesdeAsistencias(porEstudiante.get(key) || [], fichaDoc?.jornada || '')
     }
 
     res.json({ ok: true, resumen })
