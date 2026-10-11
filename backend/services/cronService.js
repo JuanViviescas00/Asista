@@ -151,23 +151,24 @@ export function iniciarCronJobs() {
 
   console.log(`[CRON] Programador nocturno listo (${schedule} - ${timezone}) - Agrupación por Docente`)
 
-  // 3. Cron semanal de detección de fallas/excusas para Sofía Plus (Cada Sábado a las 12:00 AM Bogotá)
-  const scheduleSofia = process.env.CRON_SOFIA_SCHEDULE || '0 0 * * 6'
-  cron.schedule(scheduleSofia, async () => {
-    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas para Sofía Plus (Sábado 12:00 AM)...`)
-    try {
-      const encolado = await revisarYEncolarSofiaPlus()
-      console.log(`[CRON] SofiaPlus: ${encolado.encolados} encolados, ${encolado.omitidosYaExistentes} ya existentes, ${encolado.enEsperaDiasHabiles} en espera de días hábiles.`)
-      const alertas = await revisarAlertasSofiaPlus()
-      console.log(`[CRON] SofiaPlus: ${alertas.alertasEmitidas} alertas emitidas.`)
-    } catch (err) {
-      console.error('[CRON] ❌ Error en revisión de Sofía Plus:', err.message)
-    }
-  }, {
-    timezone: 'America/Bogota'
-  })
-
-  console.log(`[CRON] Revisión semanal Sofía Plus activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
+  // 3. Cron semanal de detección de fallas/excusas para Sofía Plus (desactivado por defecto; activar con ENABLE_SOFIA_SYNC=true)
+  if (process.env.ENABLE_SOFIA_SYNC === 'true') {
+    const scheduleSofia = process.env.CRON_SOFIA_SCHEDULE || '0 0 * * 6'
+    cron.schedule(scheduleSofia, async () => {
+      console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas para Sofía Plus (Sábado 12:00 AM)...`)
+      try {
+        const encolado = await revisarYEncolarSofiaPlus()
+        console.log(`[CRON] SofiaPlus: ${encolado.encolados} encolados, ${encolado.omitidosYaExistentes} ya existentes, ${encolado.enEsperaDiasHabiles} en espera de días hábiles.`)
+        const alertas = await revisarAlertasSofiaPlus()
+        console.log(`[CRON] SofiaPlus: ${alertas.alertasEmitidas} alertas emitidas.`)
+      } catch (err) {
+        console.error('[CRON] ❌ Error en revisión de Sofía Plus:', err.message)
+      }
+    }, {
+      timezone: 'America/Bogota'
+    })
+    console.log(`[CRON] Revisión semanal Sofía Plus activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
+  }
 }
 
 /**
