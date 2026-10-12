@@ -284,7 +284,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   <div class="page-header">
     <h1>Estudiantes</h1>
     <p v-if="esInstructor">
-      ‍ Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
+      Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
     </p>
     <p v-else>
       Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.

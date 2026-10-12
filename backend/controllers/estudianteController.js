@@ -26,6 +26,10 @@ async function resolverFicha(fichaId) {
 // flujo de enrolamiento real.
 const CAMPOS_PERMITIDOS_LIDER = ['nombres', 'apellidos', 'tipoDocumento', 'numeroDocumento', 'correo', 'telefono', 'genero', 'estado', 'motivo']
 
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export async function getEstudiantes(req, res) {
   try {
     const { fichaId, documento, nombres, estado, instructorId } = req.query
@@ -93,14 +97,17 @@ export async function getEstudiantes(req, res) {
     }
 
     if (estado) filter.estado = estado
-    if (documento) filter.numeroDocumento = { $regex: documento, $options: 'i' }
+    if (documento) filter.numeroDocumento = { $regex: escapeRegex(documento), $options: 'i' }
     if (nombres) {
+      const safeNombres = escapeRegex(nombres)
       filter.$or = [
-        { nombres: { $regex: nombres, $options: 'i' } },
-        { apellidos: { $regex: nombres, $options: 'i' } },
+        { nombres: { $regex: safeNombres, $options: 'i' } },
+        { apellidos: { $regex: safeNombres, $options: 'i' } },
       ]
     }
-    const estudiantes = await Estudiante.find(filter).sort({ createdAt: -1 })
+    const estudiantes = await Estudiante.find(filter)
+      .select('-huellaTemplate -huellaTemplate2')
+      .sort({ createdAt: -1 })
     res.json(estudiantes)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -122,10 +129,22 @@ export async function getAsistenciaResumen(req, res) {
 
 export async function createEstudiante(req, res) {
   try {
+    const { fichaId } = req.body
+    if (!fichaId) {
+      return res.status(400).json({ error: 'Debe especificar una ficha para el estudiante. Debe crear primero la ficha.' })
+    }
+    const fichaExiste = await resolverFicha(fichaId)
+    if (!fichaExiste) {
+      return res.status(400).json({ error: 'La ficha especificada no existe. Debe crear primero la ficha.' })
+    }
+    req.body.fichaId = fichaExiste._id
     const estudiante = new Estudiante(req.body)
     await estudiante.save()
     res.status(201).json(estudiante)
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Ya existe un estudiante registrado con este número de documento.' })
+    }
     res.status(500).json({ error: err.message })
   }
 }
@@ -163,6 +182,9 @@ export async function updateEstudiante(req, res) {
     if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado' })
     res.json(estudiante)
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Ya existe otro estudiante registrado con este número de documento.' })
+    }
     res.status(500).json({ error: err.message })
   }
 }
@@ -203,9 +225,34 @@ export async function importarEstudiantes(req, res) {
       }
     }
 
+    // Validar que cada estudiante tenga una ficha existente y resolver su _id
+    const fichasInexistentes = []
+    for (const e of estudiantes) {
+      if (!e.fichaId) {
+        fichasInexistentes.push(e.numeroDocumento || 'Estudiante sin ficha')
+        continue
+      }
+      const fichaDoc = await resolverFicha(e.fichaId)
+      if (!fichaDoc) {
+        fichasInexistentes.push(String(e.fichaId))
+      } else {
+        e.fichaId = fichaDoc._id
+      }
+    }
+
+    if (fichasInexistentes.length > 0) {
+      const unicas = [...new Set(fichasInexistentes)]
+      return res.status(400).json({
+        error: `No se pueden importar estudiantes porque las siguientes fichas no existen en el sistema: ${unicas.join(', ')}. Debe crear primero las fichas.`
+      })
+    }
+
     const result = await Estudiante.insertMany(estudiantes)
     res.status(201).json({ ok: true, count: result.length })
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Uno o más estudiantes ya están registrados con ese número de documento.' })
+    }
     res.status(500).json({ error: err.message })
   }
 }

@@ -491,16 +491,22 @@ export async function guardarTemplate({ estudianteId, fichaId, dedo, template, s
     return { ok: false, error: 'Faltan datos para guardar la huella' }
   }
 
-  const { backendUrl } = getConfig()
+  const { backendUrl, deviceId, token } = getConfig()
 
   const body = { estudianteId, fichaId, dedo, template }
   if (slot != null) body.slot = slot
+
+  const headers = { 'Content-Type': 'application/json', ...headersDocente() }
+  if (deviceId && token) {
+    headers['x-device-id'] = String(deviceId)
+    headers['x-device-token'] = String(token)
+  }
 
   let res
   try {
     res = await fetch(`${backendUrl}/api/enrolamiento/guardar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
     })

@@ -84,8 +84,11 @@ const instructoresFiltrados = computed(() => {
     lista = lista.filter(i => (i.especialidad || '').toLowerCase() === busqueda.especialidad.toLowerCase())
   }
   if (busqueda.documento.trim()) {
-    const doc = busqueda.documento.toLowerCase().trim()
-    lista = lista.filter(i => (i.numeroDocumento || '').toLowerCase().includes(doc))
+    const docLimpio = busqueda.documento.replace(/[\.\s-]/g, '').toLowerCase().trim()
+    lista = lista.filter(i => {
+      const targetLimpio = String(i.numeroDocumento || '').replace(/[\.\s-]/g, '').toLowerCase()
+      return targetLimpio.includes(docLimpio)
+    })
   }
   if (busqueda.nombres.trim()) {
     const nom = busqueda.nombres.toLowerCase().trim()

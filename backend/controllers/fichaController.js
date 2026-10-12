@@ -178,6 +178,9 @@ export async function createFicha(req, res) {
     await populated.populate('instructores', 'nombres apellidos correo')
     res.status(201).json(populated)
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Ya existe una ficha registrada con este código de ficha.' })
+    }
     res.status(500).json({ error: err.message })
   }
 }
@@ -190,6 +193,9 @@ export async function updateFicha(req, res) {
     if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
     res.json(ficha)
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Ya existe una ficha registrada con este código de ficha.' })
+    }
     res.status(500).json({ error: err.message })
   }
 }

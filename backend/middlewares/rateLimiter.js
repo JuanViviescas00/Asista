@@ -6,11 +6,7 @@ import rateLimit from 'express-rate-limit'
  */
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // Límite amplio para permitir suites de testing automatizado (TestSprite)
-  skip: (req) => {
-    const origin = req.headers.origin || req.headers.referer || req.headers['user-agent'] || ''
-    return /testsprite/i.test(origin)
-  },
+  max: 20, // Máximo 20 intentos por IP cada 15 minutos
   message: {
     error: 'Demasiados intentos de inicio de sesión desde esta conexión. Por seguridad, intente de nuevo en 15 minutos.'
   },

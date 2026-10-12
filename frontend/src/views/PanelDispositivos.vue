@@ -320,6 +320,7 @@ function formatFecha(iso) {
             <h3>{{ deviceLabel(d) }}</h3>
             <span class="device-id">{{ d.nombre ? d.deviceId : '' }}</span>
             <span v-if="d.hostname" class="muted">{{ d.hostname }}</span>
+            <span v-if="d.createdAt" class="muted">Registrado: {{ formatFecha(d.createdAt) }}</span>
             <span class="badge" :class="d.activo ? 'badge-success' : 'badge-danger'">
               {{ d.activo ? 'Activo' : 'Inactivo' }}
             </span>
@@ -386,8 +387,11 @@ function formatFecha(iso) {
               type="button"
               class="ficha-selector-clear"
               title="Limpiar búsqueda"
+              aria-label="Limpiar búsqueda"
               @click="limpiarBusqueda(d._id)"
-            >✕</button>
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
           </div>
         </div>
 

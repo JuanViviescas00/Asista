@@ -4,6 +4,7 @@ import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
 import { hashPassword } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
+import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -30,12 +31,12 @@ export async function getInstructores(req, res) {
     const resultado = instructores.map(inst => {
       const obj = inst.toObject()
       delete obj.password // No exponer el hash en la respuesta
-      if (obj.passwordSofiaPlus) {
-        obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
-      }
+      const tienePasswordSofia = Boolean(obj.passwordSofiaPlus)
+      delete obj.passwordSofiaPlus // Proteger credenciales externas
       const esLiderEnFicha = idsLideres.has(String(inst._id))
       return {
         ...obj,
+        tienePasswordSofia,
         esLider: !!(inst.esLider || esLiderEnFicha)
       }
     })
@@ -61,17 +62,32 @@ export async function createInstructor(req, res) {
 
     const obj = instructor.toObject()
     delete obj.password
-    if (obj.passwordSofiaPlus) {
-      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
-    }
+    const tienePasswordSofia = Boolean(obj.passwordSofiaPlus)
+    delete obj.passwordSofiaPlus
+    obj.tienePasswordSofia = tienePasswordSofia
     res.status(201).json(obj)
   } catch (err) {
+    if (err.code === 11000) {
+      const campo = Object.keys(err.keyPattern || {})[0] || 'documento o correo'
+      return res.status(400).json({ error: `Ya existe un instructor registrado con ese ${campo === 'correo' ? 'correo electrónico' : 'número de documento'}.` })
+    }
     res.status(500).json({ error: err.message })
   }
 }
 
 export async function updateInstructor(req, res) {
   try {
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    if (!esAdmin) {
+      if (String(req.usuario.id) !== String(req.params.id)) {
+        return res.status(403).json({ error: 'Solo puedes actualizar tu propio perfil de instructor' })
+      }
+      delete req.body.esLider
+      delete req.body.rol
+      delete req.body.fichas
+      delete req.body.activo
+    }
+
     const data = { ...req.body }
     if (data.password) {
       data.password = await hashPassword(data.password)
@@ -86,13 +102,24 @@ export async function updateInstructor(req, res) {
     const instructor = await Instructor.findByIdAndUpdate(req.params.id, data, { new: true })
     if (!instructor) return res.status(404).json({ error: 'Instructor no encontrado' })
 
+    if (req.body.password && instructor.correo) {
+      const nombreInst = `${instructor.nombres || ''} ${instructor.apellidos || ''}`.trim() || 'Instructor'
+      enviarCorreoConfirmacionCambioPassword(instructor.correo, nombreInst).catch(err => {
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña (instructor):', err.message)
+      })
+    }
+
     const obj = instructor.toObject()
     delete obj.password
-    if (obj.passwordSofiaPlus) {
-      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
-    }
+    const tienePasswordSofia = Boolean(obj.passwordSofiaPlus)
+    delete obj.passwordSofiaPlus
+    obj.tienePasswordSofia = tienePasswordSofia
     res.json(obj)
   } catch (err) {
+    if (err.code === 11000) {
+      const campo = Object.keys(err.keyPattern || {})[0] || 'documento o correo'
+      return res.status(400).json({ error: `Ya existe otro instructor registrado con ese ${campo === 'correo' ? 'correo electrónico' : 'número de documento'}.` })
+    }
     res.status(500).json({ error: err.message })
   }
 }

@@ -5,9 +5,16 @@ import { autenticarJWT, verificarRol, autenticarOpcional } from '../middlewares/
 
 const router = Router()
 
-// Consulta y Registro de Asistencias (permitido para Kiosco de Aula y paneles autenticados)
+// Consulta de Asistencias (permitido para Kiosco de Aula y paneles autenticados)
 router.get('/', autenticarOpcional, validarFecha('fecha'), asistenciaController.getAsistencias)
-router.post('/', autenticarOpcional, validarCamposRequeridos(['estudianteId', 'fichaId', 'fecha', 'estado']), validarFecha('fecha'), asistenciaController.createAsistencia)
+// Registro manual de asistencia (restringido a Administrador o Instructor autenticado)
+router.post('/',
+  autenticarJWT,
+  verificarRol(['Administrador', 'Instructor']),
+  validarCamposRequeridos(['estudianteId', 'fichaId', 'fecha', 'estado']),
+  validarFecha('fecha'),
+  asistenciaController.createAsistencia
+)
 
 // Control de Jornadas (requiere Administrador o Instructor)
 router.post('/inhabilitar-jornada',

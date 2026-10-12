@@ -15,7 +15,7 @@ router.put('/perfil', autenticarJWT, authController.updatePerfil)
 
 // Recuperación de contraseña (con rate limiter por IP)
 router.post('/recovery-code', recoveryLimiter, validarCamposRequeridos(['correo']), validarEmail('correo'), authController.recoveryCode)
-router.post('/reset-password', recoveryLimiter, validarCamposRequeridos(['correo', 'nuevaPassword']), validarEmail('correo'), authController.resetPassword)
+router.post('/reset-password', recoveryLimiter, validarCamposRequeridos(['correo', 'codigo', 'nuevaPassword']), validarEmail('correo'), authController.resetPassword)
 
 // Cambio de contraseña protegido por JWT y verificación de clave actual
 router.post('/cambiar-password', autenticarJWT, validarCamposRequeridos(['passwordActual', 'nuevaPassword']), authController.cambiarPassword)
