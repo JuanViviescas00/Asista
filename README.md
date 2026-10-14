@@ -54,6 +54,7 @@ El hardware biométrico y sus DLLs viven únicamente en `huellero/`, de modo que
 - Gestión de fichas, instructores, aprendices, excusas y días festivos.
 - Reportes y seguimiento de inasistencias en el panel web.
 - Roles: Administrador, Instructor (líder / de apoyo) y portal del aprendiz.
+- Acceso de instructores: se crean con una contraseña inicial igual a su número de documento, escrito solo con números (sin puntos ni espacios); pueden cambiarla desde su Perfil. El número de documento debe registrarse sin puntos ni espacios y tener al menos 6 caracteres para poder generar la contraseña inicial.
 
 ---
 
@@ -64,6 +65,7 @@ El hardware biométrico y sus DLLs viven únicamente en `huellero/`, de modo que
 - **Node.js 22** (los Dockerfiles usan `node:22-bookworm-slim` / `node:22-alpine`; no hay `.nvmrc` ni campo `engines`).
 - npm.
 - Para la app de escritorio: Windows 10/11 (64 bits) y lector U.are.U 4500. El driver, el SDK y el VC++ se instalan manualmente en desarrollo (ver [GUIA_INSTALACION.md](./GUIA_INSTALACION.md)).
+- En una PC nueva, `setup_huellas.bat` (raíz) instala las dependencias de `backend`, `frontend` y `huellero` y verifica los componentes nativos (DLLs, koffi, SQLite).
 
 ### Comandos (tomados de cada `package.json`)
 
@@ -152,6 +154,8 @@ Genera `huellero/release-app/Asista-Setup-<versión>.exe`. El instalador (NSIS, 
 - Microsoft Visual C++ Redistributable (x64).
 
 El instalador no está firmado digitalmente, por lo que Windows SmartScreen puede mostrar *"Windows protegió su PC"*: pulsa **"Más información"** → **"Ejecutar de todas formas"** (ver [GUIA_INSTALACION.md](./GUIA_INSTALACION.md)).
+
+El workflow `.github/workflows/release.yml` genera y publica el instalador en GitHub Releases: se dispara con tags que empiezan por `v` o manualmente (`workflow_dispatch`). **Advertencia:** mientras el repositorio sea público, ese release incluye el SDK de DigitalPersona; no subas tags ni lo ejecutes manualmente sin revisarlo antes.
 
 ---
 
