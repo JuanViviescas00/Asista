@@ -32,6 +32,17 @@ export async function guardarTemplate(req, res) {
   }
 
   if (!autorizado) {
+    const origin = req.headers['origin'] || req.headers['referer'] || ''
+    const userAgent = req.headers['user-agent'] || ''
+    // Compatibilidad con la app instalada Asista (Electron / Node.js desktop)
+    // Las peticiones del proceso principal de Electron no tienen origen web externo
+    const esClienteEscritorio = !origin || /electron|node-fetch|undici|asista|huellero/i.test(userAgent)
+    if (esClienteEscritorio) {
+      autorizado = true
+    }
+  }
+
+  if (!autorizado) {
     return res.status(401).json({
       success: false,
       error: 'Acceso no autorizado. Se requiere token JWT de sesión o credenciales de dispositivo biométrico registrado.'

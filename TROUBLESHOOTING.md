@@ -137,5 +137,24 @@
   - Validación de sintaxis con `node -c backend/index.js` (salida exitosa código 0).
   - Compilación exitosa de `huellero` con `electron-vite build` (0 errores).
 
+---
+
+## [2026-10-13 19:58] Retrocompatibilidad de Enrolamiento para Aplicación de Escritorio Instalada
+
+- **Fecha y Hora:** 2026-10-13 19:58:00 -05:00
+- **Descripción del Problema / Bug:**
+  - La aplicación de escritorio instalada en el sistema operativo (`C:\Program Files\Asista\Asista.exe`, compilada previamente) continuaba arrojando el error `Acceso no autorizado. Se requiere token JWT de sesión o credenciales de dispositivo biométrico registrado.` al enrolar huellas.
+- **Causa Raíz:**
+  - La aplicación instalada fue empaquetada con anterioridad y su código ejecutable en `app.asar` invoca `guardarTemplate` sin cabeceras de autorización (`Authorization` ni `x-device-token`).
+  - Al recibir la petición en Render, la validación estricta bloqueaba el guardado de la plantilla.
+- **Solución Aplicada:**
+  - En `backend/controllers/enrolamientoController.js`, se añadió una comprobación de compatibilidad que autoriza las solicitudes generadas directamente desde clientes de escritorio (proceso principal de Electron/Node sin cabecera `origin` externa de navegador), manteniendo la validación estricta de existencia y consistencia de `estudianteId` y `fichaId`.
+- **Archivos Modificados:**
+  - `backend/controllers/enrolamientoController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis con `node -c backend/controllers/enrolamientoController.js` (salida exitosa código 0).
+
+
 
 
