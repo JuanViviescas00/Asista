@@ -319,7 +319,6 @@ async function ejecutarImportacion() {
           especialidad: primeraFicha ? primeraFicha.nombrePrograma : 'Docente SENA',
           fichas: listaFichas,
           esLider: esLiderVal,
-          password: 'sena2026',
           rol: 'Instructor',
           estado: 'Activo',
         }

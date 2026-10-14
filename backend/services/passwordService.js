@@ -13,6 +13,17 @@ export async function hashPassword(plainText) {
 }
 
 /**
+ * Deriva la contraseña inicial de un instructor a partir de su número de documento.
+ * Normalización: recorta espacios, elimina puntos y todo espacio en blanco, y conserva
+ * ceros a la izquierda y letras (no se convierte a número).
+ * @param {string} numeroDocumento
+ * @returns {string}
+ */
+export function claveInicialInstructor(numeroDocumento) {
+  return String(numeroDocumento ?? '').trim().replace(/[.\s]/g, '')
+}
+
+/**
  * Compara una contraseña en texto plano contra el hash almacenado.
  * Si el usuario tenía una contraseña en texto plano antigua, la valida y
  * la actualiza automáticamente a un hash bcrypt en la base de datos (migración transparente).
