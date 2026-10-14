@@ -117,4 +117,25 @@
 - **Verificación:**
   - Validación de sintaxis Node.js con `node -c` en `emailService.js`, `authController.js` e `instructorController.js` (salida exitosa código 0).
 
+---
+
+## [2026-10-13 19:48] Habilitación de Cabeceras de Dispositivo en CORS y Sincronización de Enrolamiento
+
+- **Fecha y Hora:** 2026-10-13 19:48:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al intentar enrolar la huella de un aprendiz desde la app de escritorio `huellero`, la operación fallaba con el mensaje: `Acceso no autorizado. Se requiere token JWT de sesión o credenciales de dispositivo biométrico registrado.`
+- **Causa Raíz:**
+  - Las cabeceras `x-device-id` y `x-device-token` no estaban listadas explícitamente en el array `allowedHeaders` del middleware `cors` en `backend/index.js`.
+  - La aplicación de escritorio requería además la recompilación de su bundle en `huellero/out/main/index.js` para asegurar que el despacho de `guardarTemplate` adjunte el token JWT del docente (`Authorization: Bearer <docente.token>`) y las cabeceras de hardware.
+- **Solución Aplicada:**
+  - Se agregaron `'x-device-id'` y `'x-device-token'` a `allowedHeaders` en la configuración de CORS de `backend/index.js`.
+  - Se recompiló el bundle de `huellero` con `electron-vite build`.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis con `node -c backend/index.js` (salida exitosa código 0).
+  - Compilación exitosa de `huellero` con `electron-vite build` (0 errores).
+
+
 
