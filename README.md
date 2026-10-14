@@ -1,208 +1,269 @@
-# 🎓 Sistema de Asistencia Biométrica SENA (DigitalPersona U.are.U 4500)
+# Asista — Sistema de Asistencia Biométrica (SENA)
 
-Sistema integral modular para el control, registro y reporte de asistencia de aprendices e instructores mediante biometría dactilar con hardware DigitalPersona U.are.U 4500, WebSockets en tiempo real y soporte para Modo Kiosco Autónomo de Aula.
+**Asista** (antes "Huellero" / "Huellero SENA") es un sistema de control de asistencia por huella dactilar para el SENA. Los aprendices marcan su ingreso en un lector **DigitalPersona U.are.U 4500** dentro del aula y la asistencia queda disponible en tiempo real para instructores y administradores.
 
-Incluye una plataforma web responsiva (dashboard administrativo y panel de instructores), una API REST desacoplada y contenerizada (lista para despliegue en Docker/Linux), y una aplicación de escritorio local (Electron) que interactúa directamente con el lector biométrico y sus controladores nativos en Windows.
+> El nombre interno `huellero` se mantiene en carpetas (`huellero/`) y en el identificador de la app de escritorio (`appId`). El nombre comercial del producto es **Asista**.
 
 ---
 
-## 🏛️ Arquitectura del Sistema
+## Arquitectura
 
-El proyecto opera bajo un modelo de 3 capas claramente desacopladas:
+El sistema tiene 3 componentes desacoplados:
 
-```text
-       ┌────────────────────────┐      ┌────────────────────────┐
-       │   Frontend Web (Vue 3) │      │Kiosco Físico (Electron)│
-       │    Dashboard / Admin   │      │   DigitalPersona 4500  │
-       └───────────┬────────────┘      └───────────┬────────────┘
-                   │                               │
-        REST API / │                    REST API / │ WebSockets
-        WebSockets │                    Sincroniz. │
-                   ▼                               ▼
-       ┌────────────────────────────────────────────────────────┐
-       │              Backend API (Node.js 22)                  │
-       │     - Autenticación JWT & Control de Roles             │
-       │     - Servidor WebSockets en tiempo real               │
-       │     - Cron jobs de auto-cierre y agregación diaria     │
-       └───────────────┬────────────────────────┬───────────────┘
-                       │                        │
-                       ▼                        ▼
-       ┌────────────────────────┐      ┌────────────────────────┐
-       │  MongoDB Atlas (Cloud) │      │ SQLite Local (/data)   │
-       │  Entidades, Usuarios,  │      │ Auditoría, respaldo y  │
-       │  Plantillas Huella     │      │ reportes relacionales  │
-       └────────────────────────┘      └────────────────────────┘
+| Componente | Descripción |
+| :--- | :--- |
+| **`huellero/`** | App de escritorio (Electron + Vue 3) que se ejecuta en el computador del aula, conectado físicamente al lector DigitalPersona U.are.U 4500. Hace la captura y comparación biométrica en el cliente usando `koffi` (FFI) y las DLLs nativas de DigitalPersona. |
+| **`backend/`** | API REST y servidor de tiempo real (Node.js + Express + Socket.IO). Persiste en **MongoDB Atlas** y genera respaldos en **SQLite**. |
+| **`frontend/`** | Panel web (Vue 3 + Quasar + Vite) para administradores e instructores: gestión de fichas, aprendices, reportes, dispositivos y monitoreo en vivo. |
+
+```mermaid
+flowchart LR
+    Lector[Lector DigitalPersona U.are.U 4500] -->|USB| Huellero
+    subgraph Huellero[huellero/ — Escritorio]
+        Captura[Captura y comparación local]
+        Offline[Cola offline / sincronización]
+    end
+    subgraph Backend[backend/ — API]
+        API[REST + Socket.IO]
+        Mongo[(MongoDB Atlas)]
+        SQLite[(SQLite)]
+    end
+    subgraph Frontend[frontend/ — Panel web]
+        Panel[Admin / instructores / reportes]
+    end
+    Lector --> Captura
+    Huellero <-->|REST + WebSockets| Backend
+    Frontend <-->|REST + WebSockets| Backend
+    API --> Mongo
+    API --> SQLite
 ```
 
-1. **`backend/` (API REST & WebSockets):** Servidor Node.js 22 + Express. Completamente agnóstico del sistema operativo (sin DLLs de Windows en el servidor). Maneja persistencia en MongoDB Atlas y SQLite relacional local, notificaciones SMTP (Gmail) y tareas cron automáticas.
-2. **`frontend/` (Aplicación Web SPA):** Vue 3 + Vite. Panel administrativo, gestión de fichas, aprendices, reportes, justificaciones y monitoreo en vivo de clases.
-3. **`huellero/` (Aplicación de Escritorio Kiosco):** Electron + Vue 3 + C++ FFI (koffi). Contiene los drivers nativos y DLLs de DigitalPersona para Windows. Realiza la captura y comparación biométrica en el cliente y sincroniza la asistencia con el Backend.
+El hardware biométrico y sus DLLs viven únicamente en `huellero/`, de modo que el backend y el frontend no dependen de drivers de Windows.
 
 ---
 
-## 📁 Estructura del Proyecto
+## Funciones principales
+
+- Captura y comparación biométrica local (identificación 1:N) contra las plantillas de la ficha activa.
+- Modo sin conexión: las asistencias se guardan localmente y se sincronizan automáticamente cuando vuelve la conexión (idempotente por `uuid`).
+- Una asistencia por aprendiz, por ficha y por día, calculada en hora de Colombia (`America/Bogota`).
+- Enrolamiento de huellas (con detección de huella duplicada y de dedo repetido).
+- Registro y aprobación de equipos (dispositivos) por parte del administrador.
+- Activación y cierre de clase por el instructor, con descarga de plantillas de la ficha.
+- Consentimiento de tratamiento de datos personales (Habeas Data, Ley 1581 de 2012).
+- Gestión de fichas, instructores, aprendices, excusas y días festivos.
+- Reportes y seguimiento de inasistencias en el panel web.
+- Roles: Administrador, Instructor (líder / de apoyo) y portal del aprendiz.
+- Acceso de instructores: se crean con una contraseña inicial igual a su número de documento, escrito solo con números (sin puntos ni espacios); pueden cambiarla desde su Perfil. El número de documento debe registrarse sin puntos ni espacios y tener al menos 6 caracteres para poder generar la contraseña inicial.
+
+---
+
+## Requisitos y puesta en marcha para desarrollo
+
+### Requisitos
+
+- **Node.js 22** (los Dockerfiles usan `node:22-bookworm-slim` / `node:22-alpine`; no hay `.nvmrc` ni campo `engines`).
+- npm.
+- Para la app de escritorio: Windows 10/11 (64 bits) y lector U.are.U 4500. El driver, el SDK y el VC++ se instalan manualmente en desarrollo (ver [GUIA_INSTALACION.md](./GUIA_INSTALACION.md)).
+- En una PC nueva, `setup_huellas.bat` (raíz) instala las dependencias de `backend`, `frontend` y `huellero` y verifica los componentes nativos (DLLs, koffi, SQLite).
+
+### Comandos (tomados de cada `package.json`)
+
+**Raíz (monorepo, workspaces `backend` + `frontend`):**
+
+```bash
+npm run dev            # backend + frontend en paralelo (concurrently)
+npm run dev:backend    # solo backend  (node --watch index.js)
+npm run dev:frontend   # solo frontend (vite)
+npm run build:frontend # compila el frontend
+npm run build:prod     # compila frontend y copia dist a backend/public/
+```
+
+**`backend/`:**
+
+```bash
+npm run dev    # node --watch index.js
+npm start      # node index.js
+```
+
+**`frontend/`:**
+
+```bash
+npm run dev      # vite
+npm run build    # vite build
+npm run preview  # vite preview
+```
+
+**`huellero/`** (no es workspace; se instala aparte):
+
+```bash
+npm install
+npm run dev         # electron-vite dev
+npm run build       # electron-vite build
+npm run dist        # genera el instalador (ver más abajo)
+```
+
+> `huellero/` no forma parte de los workspaces de la raíz, así que sus dependencias se instalan con `npm install` dentro de `huellero/`.
+
+### Variables de entorno
+
+El backend lee sus variables desde `backend/.env` (el repositorio **no** incluye un `.env.example`; crea el archivo manualmente). Nombres de variables usadas por el código:
+
+| Variable | Descripción |
+| :--- | :--- |
+| `PORT` | Puerto HTTP del backend (por defecto 3000). |
+| `MONGODB_URI` | Cadena de conexión a MongoDB Atlas. |
+| `JWT_SECRET` | Clave para firmar los tokens JWT. |
+| `JWT_EXPIRES_IN` | Vigencia de los tokens (por defecto 8h). |
+| `GMAIL_USER` | Correo usado para el envío de notificaciones. |
+| `GMAIL_PASS` | Contraseña de aplicación de ese correo. |
+| `TZ` | Zona horaria (por defecto `America/Bogota`). |
+| `SOFIA_ENCRYPTION_KEY` | Clave maestra del cifrado AES-256-GCM de credenciales Sofia Plus. |
+| `CRON_SCHEDULE` | Programación del cron de exportación SQLite. |
+| `CRON_TIMEZONE` | Zona horaria de los cron. |
+| `ENABLE_SOFIA_SYNC` | Habilita la sincronización con Sofia Plus. |
+| `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus. |
+
+Variables opcionales de la app de escritorio (`huellero/`):
+
+| Variable | Descripción |
+| :--- | :--- |
+| `HUELLERO_BACKEND_URL` | URL del backend a la que se conecta la app. |
+| `HUELLERO_WS_URL` | URL WebSocket del backend. |
+| `BIOMETRIC_MATCH_THRESHOLD` | Umbral de coincidencia biométrica. |
+
+---
+
+## Instalación para usuarios
+
+Para instalar la app de escritorio en un aula (instalador `.exe`, drivers, activación del equipo y uso diario), consulta la **Parte A** de [GUIA_INSTALACION.md](./GUIA_INSTALACION.md).
+
+---
+
+## Generar el instalador
+
+```bash
+cd huellero
+npm run dist
+```
+
+Genera `huellero/release-app/Asista-Setup-<versión>.exe`. El instalador (NSIS, `huellero/build/installer.nsh`) incluye e instala en silencio, si aún no están presentes:
+
+- Driver del lector U.are.U 4500.
+- SDK U.are.U.
+- Microsoft Visual C++ Redistributable (x64).
+
+El instalador no está firmado digitalmente, por lo que Windows SmartScreen puede mostrar *"Windows protegió su PC"*: pulsa **"Más información"** → **"Ejecutar de todas formas"** (ver [GUIA_INSTALACION.md](./GUIA_INSTALACION.md)).
+
+El workflow `.github/workflows/release.yml` genera y publica el instalador en GitHub Releases: se dispara con tags que empiezan por `v` o manualmente (`workflow_dispatch`). **Advertencia:** mientras el repositorio sea público, ese release incluye el SDK de DigitalPersona; no subas tags ni lo ejecutes manualmente sin revisarlo antes.
+
+---
+
+## Dónde guarda datos la app
+
+- En desarrollo: `huellero/data/` (carpeta ignorada por Git).
+- En la app instalada: `%APPDATA%\huellero` (configuración y datos locales).
+
+No borres esa carpeta si hay asistencias pendientes de sincronizar.
+
+---
+
+## Estados de la barra superior (Kiosko)
+
+Textos y condiciones según `huellero/src/renderer/src/views/KioskoView.vue`:
+
+| Estado | Texto | Condición |
+| :--- | :--- | :--- |
+| En línea | `En línea` | Conexión lista (`listo`). |
+| Sin internet | `Sin internet. Las asistencias se guardan en este equipo y se enviarán al reconectar.` | Sin conexión a internet (`!navigator.onLine`). |
+| Deshabilitado | `Este equipo fue deshabilitado por el administrador.` | Rechazo con código `DEVICE_DISABLED`. |
+| Pendiente | `Equipo registrado. Esperando aprobación del administrador.` | Rechazo con código `PENDING_APPROVAL`. |
+| Error servidor | `El servidor tuvo un problema al verificar este equipo (puede ser la base de datos). Reintentando…` | Rechazo con código `INTERNAL_ERROR`. |
+| Rechazo genérico | Mensaje del rechazo. | Cualquier otro rechazo del servidor. |
+| Reintentando | `Reintentando…` | Conectado pero aún no listo. |
+| Sin conexión | `Sin conexión con el servidor. Reintentando… (puede tardar si estaba inactivo)` | Sin conexión al servidor. |
+
+Indicadores adicionales de la barra:
+
+| Indicador | Texto | Condición |
+| :--- | :--- | :--- |
+| Clase activa | `Ficha <código>` | Hay una clase activa. |
+| Lector no detectado | `Lector de huellas no detectado. Revisa que esté conectado por USB.` | Lector en estado `no-detectado`. |
+| Error de lector | `Error al iniciar el lector de huellas (driver o SDK). Reinstala Asista o revisa el driver.` | Lector en estado `error`. |
+| Pendientes | `N asistencias pendientes por sincronizar` | Hay asistencias sin sincronizar. |
+| Sin identidad | `Equipo no identificado. Reintentando…` | El dispositivo aún no está registrado. |
+
+---
+
+## Despliegue
+
+El repositorio incluye tres configuraciones de despliegue:
+
+- **Producción (Docker Compose):** `docker-compose.yml` levanta `backend` (puerto 3001, construye `backend/Dockerfile`) y `frontend` (Nginx, puerto 80, construye `frontend/Dockerfile`). El backend lee variables desde `./backend/.env`.
+  ```bash
+  docker compose up -d
+  ```
+
+- **Servicio único (Render):** el `Dockerfile` de la raíz es multi-stage: compila el frontend y sirve el `dist` desde el propio backend como SPA. Es el usado para el despliegue en Render.com.
+  ```bash
+  docker build -t asista .
+  ```
+
+- **Desarrollo (Docker Compose):** `docker-compose.dev.yml` monta volúmenes en vivo (backend en 3001 con `Dockerfile.dev`, frontend en 5173 con `Dockerfile.dev`).
+  ```bash
+  docker compose -f docker-compose.dev.yml up -d
+  ```
+
+Para despliegue local sin Docker, usa los comandos de desarrollo de cada paquete (ver sección de requisitos).
+
+---
+
+## Estructura del repositorio
 
 ```text
 HuelleroActualizado/
-├── backend/                       # ⚙️ Servidor API Node.js 22 + Express + WebSockets
-│   ├── controllers/               # 🎮 Controladores de lógica HTTP y base de datos
-│   ├── middlewares/               # 🛡️ Validadores de datos y control de roles JWT
-│   ├── models/                    # 📦 Modelos Mongoose (Aprendices, Instructores, Fichas, etc.)
-│   ├── routes/                    # 🛣️ Enrutadores REST API (/api/...)
-│   ├── services/                  # 🔧 Servicios (SQLite, Sockets, Tardanzas, Notificaciones)
-│   ├── data/                      # 💾 Base de datos relacional SQLite persistente
-│   ├── Dockerfile                 # 🐳 Imagen Docker de Producción (Node 22 Bookworm Slim)
-│   ├── Dockerfile.dev             # 🐳 Imagen Docker de Desarrollo (Node 22 con recarga en vivo)
-│   ├── .env.example               # 📋 Plantilla de variables de entorno
-│   └── package.json
-│
-├── frontend/                      # 💻 Aplicación Web Reactiva (Vue 3 + Vite)
-│   ├── src/
-│   │   ├── components/            # 🖼️ Vistas (PanelInstructor, KioscoAsistencia, Reportes, Perfiles)
-│   │   ├── services/              # 📡 Clientes de API REST y WebSockets en tiempo real
-│   │   ├── utils/                 # 🧰 Validadores y formateadores de fechas/horas
-│   │   └── App.vue                # 🚀 Enrutamiento principal y control de sesión
-│   ├── nginx.conf                 # 🌐 Configuración Nginx (Reverse Proxy /api y WebSockets)
-│   ├── Dockerfile                 # 🐳 Multi-stage build para Producción con Nginx Alpine
-│   ├── Dockerfile.dev             # 🐳 Imagen Docker de Desarrollo (Vite Server 5173)
-│   └── package.json
-│
-├── huellero/                      # 🖐️ Aplicación local Electron (Desktop Windows)
-│   ├── src/main/                  # ⚙️ Captura de huella, motor biométrico, WebSocket, SQLite offline
-│   ├── src/renderer/              # 🖼️ UI del kiosco de aula (Vue 3)
-│   ├── dll/                       # 🔌 Librerías nativas DigitalPersona (dpfj.dll, dpfpdd.dll, etc.)
-│   └── package.json
-│
-├── docs/                          # 📚 Documentación técnica del proyecto 
-│   └── CONTEXTO_HUELLERO.md       # 📄 Contexto y roadmap del huellero biométrico
-├── docker-compose.yml             # 🚀 Orquestador Docker para PRODUCCIÓN
-├── docker-compose.dev.yml         # 🛠️ Orquestador Docker para DESARROLLO
-├── package.json                   # ⚡ Monorepo scripts raíz
-└── setup_huellas.bat              # 📦 Instalador y verificador integral de dependencias
+├── backend/               # API REST + WebSockets (Node.js + Express + Socket.IO)
+│   ├── controllers/       # Lógica de los endpoints
+│   ├── models/            # Modelos Mongoose
+│   ├── routes/            # Enrutadores REST (/api/...)
+│   ├── services/          # Socket.IO, cron, SQLite, correo, cifrado
+│   ├── middlewares/       # Autenticación JWT, validación, rate limiting
+│   ├── data/              # SQLite exportado por docente (ignorado por Git)
+│   └── Dockerfile(.dev)
+├── frontend/              # Panel web (Vue 3 + Quasar + Vite)
+│   ├── src/               # views, components, services, router, ...
+│   ├── nginx.conf         # Reverse proxy /api y /socket.io
+│   └── Dockerfile(.dev)
+├── huellero/              # App de escritorio (Electron + Vue 3 + koffi)
+│   ├── src/main/          # Captura, motor biométrico, WebSocket, offline
+│   ├── src/renderer/      # UI del kiosco
+│   ├── dll/               # DLLs nativas DigitalPersona
+│   └── build/             # Instalador NSIS, driver, SDK, VC++, icono
+├── docs/                  # Documentación técnica y del proyecto
+├── scripts/               # copy-dist.js (build de producción)
+├── Dockerfile             # Despliegue single-service (Render)
+├── docker-compose.yml     # Producción (backend + frontend)
+├── docker-compose.dev.yml # Desarrollo
+└── package.json           # Scripts del monorepo (workspaces backend/frontend)
 ```
 
 ---
 
-## ⚙️ Configuración Inicial (`backend/.env`)
+## Documentación adicional
 
-Antes de iniciar el backend o los contenedores Docker, crea el archivo `backend/.env` (puedes basarte en `backend/.env.example`):
-
-```env
-# Servidor
-PORT=3000
-
-# Base de Datos MongoDB Atlas
-MONGODB_URI=mongodb+srv://<usuario>:<password>@<cluster>.mongodb.net/<database>?retryWrites=true&w=majority
-
-# Seguridad JWT
-JWT_SECRET=tu_clave_secreta_jwt_2026
-JWT_EXPIRES_IN=8h
-
-# Notificaciones por Correo (Gmail SMTP con Contraseña de Aplicación)
-GMAIL_USER=tu_correo@gmail.com
-GMAIL_PASS=tu_contraseña_de_aplicacion_16_caracteres
-```
+- [GUIA_INSTALACION.md](./GUIA_INSTALACION.md) — instalación de hardware/drivers y de la app para usuarios y desarrolladores.
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — registro de incidencias y correcciones.
+- [DESIGN.md](./DESIGN.md) — especificación de diseño e identidad visual.
+- [CONSOLIDADO_CAMBIOS_Y_BUGS.md](./CONSOLIDADO_CAMBIOS_Y_BUGS.md) — consolidado técnico de arquitectura, cambios y bugs.
+- [docs/PRD.md](./docs/PRD.md) — documento de requisitos del producto.
+- [docs/SETUP.md](./docs/SETUP.md) — instalación de Asista en una PC nueva (modo desarrollo).
+- [docs/EULA SDK.rtf](./docs/EULA%20SDK.rtf) — licencia del SDK de DigitalPersona.
 
 ---
 
-## 🐳 Despliegue con Docker
+## Licencia y uso
 
-El proyecto cuenta con dos configuraciones Docker Compose optimizadas y aisladas:
-
-### 1. Entorno de Producción
-En producción, el frontend se compila a estáticos optimizados servidos por **Nginx** en el puerto `80`, el cual actúa además como **Reverse Proxy** redirigiendo `/api/` y `/socket.io/` al backend en el puerto `3000`.
-
-```bash
-# Iniciar contenedores en segundo plano
-docker compose up -d
-
-# Ver logs en tiempo real
-docker compose logs -f
-
-# Detener contenedores
-docker compose down
-```
-
-* **Frontend Web:** `http://localhost` (puerto 80)
-* **Backend API directo:** `http://localhost:3001`
-
----
-
-### 2. Entorno de Desarrollo
-En desarrollo, se montan volúmenes en vivo para sincronización instantánea de código (Hot Reload en Vite y `node --watch` en Backend):
-
-```bash
-# Iniciar entorno de desarrollo
-docker compose -f docker-compose.dev.yml up -d
-
-# Ver logs en tiempo real
-docker compose -f docker-compose.dev.yml logs -f
-
-# Detener entorno de desarrollo
-docker compose -f docker-compose.dev.yml down
-```
-
-* **Frontend Vite Dev:** `http://localhost:5173`
-* **Backend API Dev:** `http://localhost:3001`
-
----
-
-## 💻 Ejecución Local (Sin Docker)
-
-Si prefieres ejecutar el proyecto directamente en tu máquina:
-
-### Requisitos:
-* **Node.js 22 o superior** (requerido por `better-sqlite3@13.0.3`)
-* **npm 10+**
-
-### Comandos desde la raíz del proyecto:
-```bash
-# Instalar dependencias en todos los paquetes
-npm run install:all
-
-# Iniciar Backend y Frontend en paralelo (Desarrollo local)
-npm run dev
-
-# Iniciar solo el Frontend Web (http://localhost:5173)
-npm run dev:frontend
-
-# Iniciar solo el Backend API (http://localhost:3001)
-npm run dev:backend
-
-# Compilar Frontend para producción
-npm run build:frontend
-```
-
----
-
-## 🖐️ Aplicación de Escritorio - Kiosco Biométrico (`huellero/`)
-
-La aplicación del lector biométrico corre exclusivamente en el computador donde esté conectado físicamente el dispositivo **DigitalPersona U.are.U 4500** (Windows).
-
-### Pasos para iniciar el Kiosco:
-1. Instalar drivers de DigitalPersona siguiendo [`GUIA_INSTALACION.md`](./GUIA_INSTALACION.md).
-2. Abrir terminal en la carpeta `huellero/`:
-   ```bash
-   cd huellero
-   npm install
-   npm run dev
-   ```
-*La ventana de Electron abrirá en modo Kiosco / Panel de Registro con soporte offline y sincronización automática hacia el Backend.*
-
----
-
-## 🚧 Estado y Próximos Pasos
-
-Resumen de alto nivel de las tareas en seguimiento (detalle completo en [`docs/CONTEXTO_HUELLERO.md`](./docs/CONTEXTO_HUELLERO.md)):
-
-- **Acks del protocolo WebSocket** (`ACTIVATED`/`DEACTIVATED`): diseñados, pendientes de validación en campo.
-- **Feed en vivo** (`ATTENDANCE_REGISTERED`): implementado y probado en backend/frontend; validar con múltiples marcaciones concurrentes.
-- **Índice único de asistencias:** en MongoDB `(estudianteId, fichaId, fecha)` para prevención estricta de duplicados en concurrencia.
-- **Empaquetado `.exe` de Asista:** generación de instalador autónomo portable para Windows.
-- **Auditoría de dependencias en huellero:** actualización de dependencias de build de Electron.
-
----
-
-## 📖 Documentación Adicional
-- 🛠️ [Guía de Instalación de Hardware y Drivers](./GUIA_INSTALACION.md)
-- 📋 [Contexto y Arquitectura de Asista](./docs/CONTEXTO_HUELLERO.md)
+- El SDK de DigitalPersona se usa bajo su EULA (ver `docs/EULA SDK.rtf`).
+- Uso **interno** del SENA.
+- El repositorio debe mantenerse **privado**.
+- No redistribuir el instalador ni el SDK fuera de la institución sin autorización.

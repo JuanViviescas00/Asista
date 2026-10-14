@@ -59,11 +59,22 @@ const seleccionado = computed(
   () => estudiantes.value.find((e) => e._id === seleccionadoId.value) || null
 )
 
-const slot1Ocupado = computed(() => !!seleccionado.value?.huellaTemplate)
-const slot2Ocupado = computed(() => !!seleccionado.value?.huellaTemplate2)
+// Reglas de ocupación de slot. El backend ya no envía huellaTemplate/huellaTemplate2
+// en la lista (getEstudiantes), pero sí huellaEnrolada y dedoEnrolado2. Se mantiene el
+// respaldo con las plantillas por si algún día vuelven a llegar.
+function slot1OcupadoDe(e) {
+  return !!e && (e.huellaEnrolada === true || Boolean(e.huellaTemplate))
+}
+
+function slot2OcupadoDe(e) {
+  return !!e && (Boolean(e.dedoEnrolado2 && String(e.dedoEnrolado2).trim()) || Boolean(e.huellaTemplate2))
+}
+
+const slot1Ocupado = computed(() => slot1OcupadoDe(seleccionado.value))
+const slot2Ocupado = computed(() => slot2OcupadoDe(seleccionado.value))
 
 function estadoHuellas(e) {
-  const n = (e.huellaTemplate ? 1 : 0) + (e.huellaTemplate2 ? 1 : 0)
+  const n = (slot1OcupadoDe(e) ? 1 : 0) + (slot2OcupadoDe(e) ? 1 : 0)
   if (n === 0) return { texto: 'Sin huella', clase: 'off' }
   if (n === 1) return { texto: `1/2 · ${e.dedoEnrolado || e.dedoEnrolado2}`, clase: 'ok' }
   return { texto: `2/2 · ${e.dedoEnrolado} + ${e.dedoEnrolado2}`, clase: 'ok' }
@@ -165,9 +176,9 @@ function aplicarSeleccion(id) {
   dedo.value = ''
 
   const est = estudiantes.value.find((e) => e._id === id)
-  if (!est?.huellaTemplate) {
+  if (!slot1OcupadoDe(est)) {
     slotObjetivo.value = 1
-  } else if (!est?.huellaTemplate2) {
+  } else if (!slot2OcupadoDe(est)) {
     slotObjetivo.value = 2
   } else {
     slotObjetivo.value = null

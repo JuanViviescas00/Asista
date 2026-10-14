@@ -2,7 +2,7 @@ import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
-import { hashPassword } from '../services/passwordService.js'
+import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 
@@ -50,7 +50,10 @@ export async function getInstructores(req, res) {
 export async function createInstructor(req, res) {
   try {
     const data = { ...req.body }
-    const clavePlana = data.password || 'sena2026'
+    const clavePlana = data.password || claveInicialInstructor(data.numeroDocumento)
+    if (String(clavePlana).length < 6) {
+      return res.status(400).json({ error: 'La contraseña inicial no es válida: el número de documento normalizado debe tener al menos 6 caracteres. Asigna una contraseña manual.' })
+    }
     data.password = await hashPassword(clavePlana)
 
     if (data.passwordSofiaPlus) {
@@ -189,7 +192,11 @@ export async function importarInstructores(req, res) {
 
         let instructor
         if (!existe) {
-          const clavePlana = password || 'sena2026'
+          const clavePlana = password || claveInicialInstructor(rest.numeroDocumento)
+          if (String(clavePlana).length < 6) {
+            errores++
+            continue
+          }
           const passwordHash = await hashPassword(clavePlana)
           const datosCrear = {
             ...rest,
