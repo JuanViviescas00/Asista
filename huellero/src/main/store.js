@@ -38,6 +38,22 @@ let plantillas = {}
 let pendientes = []
 let asistenciasDia = {}
 
+// Callback opcional para notificar cambios en la cola de pendientes (alta o baja).
+// Lo usa engine.js para reemitir el estado a la interfaz sin acoplar store con engine.
+let onPendientesChange = null
+
+export function setOnPendientesChange(cb) {
+  onPendientesChange = typeof cb === 'function' ? cb : null
+}
+
+function notificarPendientesChange() {
+  if (onPendientesChange) {
+    try {
+      onPendientesChange()
+    } catch (_) {}
+  }
+}
+
 function asegurarDirectorio() {
   if (!existsSync(DATA_DIR)) {
     mkdirSync(DATA_DIR, { recursive: true })
@@ -145,6 +161,7 @@ export function guardarPendiente(asistencia) {
   if (!asistencia) return
   pendientes.push(asistencia)
   persistirPendientes()
+  notificarPendientesChange()
 }
 
 export function getPendientes() {
@@ -156,6 +173,7 @@ export function marcarSincronizadas(uuids) {
   const conjunto = new Set(uuids.map((u) => String(u)))
   pendientes = pendientes.filter((p) => !conjunto.has(String(p.uuid)))
   persistirPendientes()
+  notificarPendientesChange()
 }
 
 export function yaTieneAsistenciaHoy(fichaId, estudianteId, timestamp) {

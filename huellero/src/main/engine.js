@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { getConfig, iniciarRegistroDispositivo, tieneIdentidad, reiniciarIdentidadYRegistrar } from './config.js'
 import * as store from './store.js'
 import wsClient from './ws-client.js'
-import { capturarHuella, inicializarCaptura, cancelarCapturaActual, getDevActual } from './capture.js'
+import { capturarHuella, inicializarCaptura, cancelarCapturaActual, getDevActual, verificarLector } from './capture.js'
 import { notificarPendienteNuevo, sincronizar } from './scheduler.js'
 import { identificarEstudiante } from '../verify.js'
 import * as fingerprint from '../fingerprint.js'
@@ -15,6 +15,8 @@ let enrolamientoCancelado = false
 let plantillasRetryTimer = null
 let plantillasFichaActual = null
 let descargandoPlantillas = false
+let lectorEstado = null
+let lectorInterval = null
 
 export function setOnEstadoChange(cb) {
   onEstadoChange = cb
@@ -45,9 +47,41 @@ function notificarProgresoEnrolamiento(payload) {
   if (onEnrolarProgreso) onEnrolarProgreso(payload)
 }
 
+function leerEstadoLector() {
+  // No consultar el lector mientras hay una captura en curso (el dispositivo está abierto).
+  if (getDevActual()) return
+
+  let nuevo = verificarLector()
+  // El motor de matching (dpfj.dll) también debe estar disponible para operar.
+  if (nuevo.estado === 'ok' && !fingerprint.isAvailable()) {
+    nuevo = { estado: 'error', detalle: 'Motor biométrico no disponible (dpfj.dll)' }
+  }
+
+  // Solo reemitir el estado cuando realmente cambia, no en cada ciclo.
+  if (JSON.stringify(nuevo) !== JSON.stringify(lectorEstado)) {
+    lectorEstado = nuevo
+    notificarEstado()
+  }
+}
+
+function iniciarMonitorLector() {
+  detenerMonitorLector()
+  leerEstadoLector()
+  lectorInterval = setInterval(leerEstadoLector, 5000)
+}
+
+export function detenerMonitorLector() {
+  if (lectorInterval) {
+    clearInterval(lectorInterval)
+    lectorInterval = null
+  }
+}
+
 export async function init() {
   await store.init()
   inicializarCaptura()
+  store.setOnPendientesChange(notificarEstado)
+  iniciarMonitorLector()
   fingerprint.setMatchThreshold(getConfig().BIOMETRIC_MATCH_THRESHOLD)
   wsClient.onConnectionChange(notificarEstado)
   wsClient.onConnectionChange((conectado) => {
@@ -102,9 +136,12 @@ export async function init() {
 export function getStatus() {
   return {
     online: wsClient.isConnected(),
+    listo: wsClient.isListo(),
     claseActiva: store.getClaseActiva() || null,
     dispositivoRegistrado: tieneIdentidad(),
     ultimoRechazo: wsClient.getUltimoRechazo(),
+    pendientes: store.getPendientes().length,
+    lector: lectorEstado,
     docente: docente
       ? {
           id: docente.id,
@@ -382,6 +419,16 @@ export async function getFichasLider() {
   return { ok: true, fichas: fichasLider }
 }
 
+// Solo se muestran aprendices "Activo". Se tolera que el campo estado no exista o
+// esté vacío (documentos antiguos); se excluye cualquier otro valor ("Inactivo", "Retirado", etc.).
+function esEstudianteActivo(estudiante) {
+  const estado = estudiante?.estado
+  if (estado == null) return true
+  const normalizado = String(estado).trim().toLowerCase()
+  if (normalizado === '') return true
+  return normalizado === 'activo'
+}
+
 export async function getEstudiantesFicha(fichaId) {
   if (!fichaId) {
     return { ok: false, error: 'Ficha no especificada' }
@@ -401,7 +448,8 @@ export async function getEstudiantesFicha(fichaId) {
   }
 
   const estudiantes = await res.json().catch(() => null)
-  return { ok: true, estudiantes: Array.isArray(estudiantes) ? estudiantes : [] }
+  const lista = Array.isArray(estudiantes) ? estudiantes.filter(esEstudianteActivo) : []
+  return { ok: true, estudiantes: lista }
 }
 
 function headersDocente() {

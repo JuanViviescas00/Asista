@@ -13,9 +13,71 @@ const estado = ref('idle')
 const resultado = ref(null)
 
 const online = computed(() => props.status.online)
+const listo = computed(() => props.status.listo)
 const claseActiva = computed(() => props.status.claseActiva)
 const dispositivoRegistrado = computed(() => !!props.status.dispositivoRegistrado)
 const ultimoRechazo = computed(() => props.status.ultimoRechazo || null)
+const pendientes = computed(() => props.status.pendientes || 0)
+const lector = computed(() => props.status.lector || null)
+
+// navigator.onLine solo indica que hay una interfaz de red activa, no internet real:
+// puede dar falsos "en línea" (p. ej. red local sin salida a internet). Es una
+// limitación aceptada para este indicador.
+const enLineaInternet = ref(navigator.onLine)
+
+function onInternetOnline() {
+  enLineaInternet.value = true
+}
+
+function onInternetOffline() {
+  enLineaInternet.value = false
+}
+
+const estadoConexion = computed(() => {
+  if (listo.value) return { texto: 'En línea', clase: 'ok' }
+  if (!enLineaInternet.value) {
+    return {
+      texto: 'Sin internet. Las asistencias se guardan en este equipo y se enviarán al reconectar.',
+      clase: 'off',
+    }
+  }
+  const r = ultimoRechazo.value
+  if (r?.code === 'DEVICE_DISABLED') {
+    return { texto: 'Este equipo fue deshabilitado por el administrador.', clase: 'off' }
+  }
+  if (r?.code === 'PENDING_APPROVAL') {
+    return { texto: 'Equipo registrado. Esperando aprobación del administrador.', clase: 'warn' }
+  }
+  if (r?.code === 'INTERNAL_ERROR') {
+    return {
+      texto: 'El servidor tuvo un problema al verificar este equipo (puede ser la base de datos). Reintentando…',
+      clase: 'warn',
+    }
+  }
+  if (r) return { texto: r.message, clase: 'warn' }
+  if (online.value) return { texto: 'Reintentando…', clase: 'warn' }
+  return {
+    texto: 'Sin conexión con el servidor. Reintentando… (puede tardar si estaba inactivo)',
+    clase: 'off',
+  }
+})
+
+const problemaLector = computed(() => {
+  if (!lector.value) return null
+  if (lector.value.estado === 'no-detectado') {
+    return { texto: 'Lector de huellas no detectado. Revisa que esté conectado por USB.', clase: 'off' }
+  }
+  if (lector.value.estado === 'error') {
+    return { texto: 'Error al iniciar el lector de huellas (driver o SDK). Reinstala Asista o revisa el driver.', clase: 'off' }
+  }
+  return null
+})
+
+const textoPendientes = computed(() => {
+  const n = pendientes.value
+  if (n <= 0) return null
+  return n === 1 ? '1 asistencia pendiente por sincronizar' : `${n} asistencias pendientes por sincronizar`
+})
 
 const aviso = ref('')
 let avisoTimer = null
@@ -40,9 +102,15 @@ function onKeydown(e) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('online', onInternetOnline)
+  window.addEventListener('offline', onInternetOffline)
+})
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('online', onInternetOnline)
+  window.removeEventListener('offline', onInternetOffline)
   if (avisoTimer) clearTimeout(avisoTimer)
   if (resultadoTimer) clearTimeout(resultadoTimer)
 })
@@ -97,9 +165,9 @@ const scanState = computed(() => {
     </Transition>
 
     <header class="hud">
-      <span class="hud-item" :class="online ? 'ok' : ultimoRechazo ? 'warn' : 'off'">
-        <AppIcon :name="online ? 'wifi' : 'wifi-off'" :size="16" />
-        {{ online ? 'En línea' : ultimoRechazo ? ultimoRechazo.message : 'Sin conexión' }}
+      <span class="hud-item" :class="estadoConexion.clase">
+        <AppIcon :name="listo ? 'wifi' : 'wifi-off'" :size="16" />
+        {{ estadoConexion.texto }}
       </span>
 
       <Transition name="hud-in">
@@ -108,6 +176,16 @@ const scanState = computed(() => {
           Ficha {{ claseActiva.codigoFicha || claseActiva.fichaId }}
         </span>
       </Transition>
+
+      <span v-if="problemaLector" class="hud-item" :class="problemaLector.clase">
+        <AppIcon name="alert-triangle" :size="16" />
+        {{ problemaLector.texto }}
+      </span>
+
+      <span v-if="textoPendientes" class="hud-item warn">
+        <AppIcon name="clock" :size="16" />
+        {{ textoPendientes }}
+      </span>
 
       <span v-if="!dispositivoRegistrado" class="hud-item pending">
         <AppIcon name="clock" :size="16" />
@@ -143,8 +221,13 @@ const scanState = computed(() => {
       </Transition>
     </main>
 
-    <button class="ghost acceso" title="Acceso docente" @click="emit('abrir-login')">
-      <AppIcon name="settings" :size="18" />
+    <button
+      class="ghost acceso"
+      title="Acceso docente"
+      aria-label="Configuración"
+      @click="emit('abrir-login')"
+    >
+      <AppIcon name="settings" :size="28" />
     </button>
   </div>
 </template>
@@ -262,14 +345,38 @@ h1 {
   position: absolute;
   bottom: 16px;
   right: 16px;
-  padding: 10px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border-radius: 10px;
-  opacity: 0.35;
+  color: #86efac;
+  opacity: 0.9;
+  transition: color 0.18s var(--ease-out), background-color 0.18s var(--ease-out);
 }
 
-.acceso:hover {
-  opacity: 1;
+.acceso :deep(svg) {
+  filter: drop-shadow(0 0 2px rgba(134, 239, 172, 0.35));
+  transition: filter 0.18s var(--ease-out);
+}
+
+.acceso:hover:not(:disabled) {
+  color: #ffffff;
   background: var(--bg-elev-2);
+  opacity: 1;
+}
+
+.acceso:hover:not(:disabled) :deep(svg) {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.7));
+}
+
+.acceso:focus-visible {
+  color: #ffffff;
+  background: var(--bg-elev-2);
+  opacity: 1;
+}
+
+.acceso:focus-visible :deep(svg) {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.7));
 }
 
 .aviso-sesion {
