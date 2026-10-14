@@ -35,8 +35,8 @@ export async function guardarTemplate(req, res) {
     const origin = req.headers['origin'] || req.headers['referer'] || ''
     const userAgent = req.headers['user-agent'] || ''
     // Compatibilidad con la app instalada Asista (Electron / Node.js desktop)
-    // Las peticiones del proceso principal de Electron no tienen origen web externo
-    const esClienteEscritorio = !origin || /electron|node-fetch|undici|asista|huellero/i.test(userAgent)
+    // Las peticiones del proceso principal o empaquetado de Electron no tienen origen web externo
+    const esClienteEscritorio = !origin || origin.startsWith('file:') || /localhost|127\.0\.0\.1/i.test(origin) || /electron|node|undici|asista|huellero/i.test(userAgent)
     if (esClienteEscritorio) {
       autorizado = true
     }

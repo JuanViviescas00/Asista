@@ -155,6 +155,61 @@
 - **Verificación:**
   - Validación de sintaxis con `node -c backend/controllers/enrolamientoController.js` (salida exitosa código 0).
 
+---
+
+## [2026-10-13 22:00] Optimización de Rendimiento y Prevención de Congelamientos en Equipos Secundarios
+
+- **Fecha y Hora:** 2026-10-13 22:00:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al ejecutar la aplicación de escritorio (`Asista` / `huellero`) en otro computador, se observan congelamientos de la interfaz gráfica, falta de respuesta ante interacción del usuario y alto consumo de CPU.
+- **Causa Raíz:**
+  1. **Aceleración por Hardware en Electron:** En computadores secundarios con gráficos integrados (Intel HD Graphics) o controladores gráficos genéricos, el proceso GPU de Chromium entra en bloqueo o pérdida de contexto D3D11, provocando que la ventana entre en estado "(No responde)".
+  2. **Bucle de Espera Activa (CPU Spin-Lock) en `store.js`:** La función interna `esperarSync` ejecutaba un bucle `while (Date.now() < fin) {}` bloqueante al 100% de CPU cada vez que ocurría un fallo transitorio de archivo ocupado (`EBUSY`/`EPERM`) en Windows.
+  3. **Llamadas síncronas sin timeout a `reg.exe` en `hardware-fingerprint.js`:** `execFileSync` consultaba repetidamente el registro de Windows sin timeout, bloqueando el hilo principal si las políticas o el antivirus del nuevo equipo demoraban la respuesta.
+  4. **Reintentos inmediatos en bucle cerrado de enrolamiento:** Ante un fallo de lectura del sensor USB, el bucle reintentaba inmediatamente sin descanso al controlador USB.
+- **Solución Aplicada:**
+  - Se añadió `app.disableHardwareAcceleration()` en `huellero/src/main/index.js` antes de iniciar la ventana.
+  - Se eliminó el spin-lock `esperarSync` en `huellero/src/main/store.js`, simplificando la escritura segura sin bloqueo de CPU.
+  - Se cacheó el `MachineGuid` en memoria y se configuró un `timeout: 2000` en `huellero/src/main/hardware-fingerprint.js`.
+  - Se integró una pausa no bloqueante de 300ms (`await esperar(300)`) entre reintentos fallidos de captura en `huellero/src/main/engine.js`.
+  - Se recompiló el bundle de producción de `huellero` con `npm run build` (`electron-vite build`).
+- **Archivos Modificados:**
+  - `huellero/src/main/index.js`
+  - `huellero/src/main/store.js`
+  - `huellero/src/main/hardware-fingerprint.js`
+  - `huellero/src/main/engine.js`
+  - `huellero/out/main/index.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación exitosa de `huellero` con `electron-vite build` (0 errores).
+  - Verificación de sintaxis de los archivos modificados con `node -c`.
+
+---
+
+## [2026-10-13 22:25] Resiliencia ante Cold Start de Render y Empaquetado de Instalador Asista.exe
+
+- **Fecha y Hora:** 2026-10-13 22:25:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al enrolar huellas en la aplicación de escritorio instalada en otro computador, las huellas no se guardaban en el backend arrojando errores de conexión ("Sin conexión: no se pudo guardar la huella").
+  - Además, tras enrolar exitosamente a un aprendiz, el quiosco de asistencia no lo reconocía localmente.
+- **Causa Raíz:**
+  1. **Timeout prematuro durante arranque en frío de Render:** En el plan gratuito, Render apaga el servicio tras inactividad. Al guardar la huella, el timeout de 15 segundos expiraba antes de que Render terminara de despertar (tarda de 25 a 50 segundos), arrojando falso error de conexión sin reintento.
+  2. **Caché desactualizada de plantillas biométricas locales:** Tras guardar en MongoDB, `engine.js` no refrescaba `descargarPlantillas()`, dejando la memoria local con las plantillas anteriores al enrolamiento.
+  3. **Instalador desactualizado en el equipo secundario:** El instalador `.exe` que se había copiado al otro computador fue generado el 2 de octubre, previo a la retrocompatibilidad de tokens y cabeceras de autorización de escritorio.
+- **Solución Aplicada:**
+  - En `huellero/src/main/engine.js`: Se implementó reintento automático con backoff de 3 segundos y timeouts ampliados (25s y 35s) en `guardarTemplate()`.
+  - Se añadió la recarga inmediata de plantillas locales (`descargarPlantillas(fichaId)`) tras un enrolamiento exitoso.
+  - En `backend/controllers/enrolamientoController.js`: Se amplió la detección de clientes de escritorio (`origin.startsWith('file:') || /localhost|127\.0\.0\.1/i.test(origin) || /electron|node|undici|asista|huellero/i.test(userAgent)`).
+  - Se recompiló y empaquetó el nuevo instalador de producción en `huellero/release-app/Asista-Setup-1.0.0.exe` con `electron-builder`.
+- **Archivos Modificados:**
+  - `backend/controllers/enrolamientoController.js`
+  - `huellero/src/main/engine.js`
+  - `huellero/release-app/Asista-Setup-1.0.0.exe`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Empaquetado exitoso del instalador NSIS `Asista-Setup-1.0.0.exe` (144.9 MB) con `electron-builder` (código de salida 0).
+  - Prueba de conectividad HTTP al endpoint `/api/enrolamiento/guardar` simulando cliente de escritorio (código 404 esperado para estudiante de prueba, validación de autorización superada).
+
 
 
 

@@ -53,41 +53,19 @@ function leerJSON(ruta, porDefecto) {
   }
 }
 
-function esperarSync(ms) {
-  const fin = Date.now() + ms
-  while (Date.now() < fin) {}
-}
-
 function escribirJSON(ruta, valor) {
   const tmp = `${ruta}.tmp`
   writeFileSync(tmp, JSON.stringify(valor, null, 2), 'utf8')
 
-  const reintentables = new Set(['EPERM', 'EBUSY', 'EACCES'])
-  for (let intento = 1; intento <= 3; intento++) {
+  try {
+    renameSync(tmp, ruta)
+  } catch {
+    // Si Windows o el antivirus bloquean temporalmente el renombrado atómico (EBUSY/EPERM),
+    // escribir directamente en el destino sin bloquear el hilo principal con bucles de espera.
     try {
-      renameSync(tmp, ruta)
-      return
-    } catch (err) {
-      const reintentable = reintentables.has(err.code)
-
-      if (reintentable && intento < 3) {
-        esperarSync(50)
-        continue
-      }
-
-      if (reintentable) {
-        if (existsSync(tmp)) {
-          try { unlinkSync(tmp) } catch (_) {}
-        }
-        writeFileSync(ruta, JSON.stringify(valor, null, 2), 'utf8')
-        return
-      }
-
-      if (existsSync(tmp)) {
-        try { unlinkSync(tmp) } catch (_) {}
-      }
-      throw err
-    }
+      if (existsSync(tmp)) unlinkSync(tmp)
+    } catch (_) {}
+    writeFileSync(ruta, JSON.stringify(valor, null, 2), 'utf8')
   }
 }
 

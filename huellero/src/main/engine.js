@@ -129,19 +129,22 @@ async function descargarPlantillas(fichaId) {
   if (descargandoPlantillas) return
 
   const { backendUrl, deviceId, token } = getConfig()
-  if (!deviceId || !token) {
+  if (!deviceId && !token && !docente?.token) {
     programarReintentoPlantillas(fichaId)
     return
   }
 
   descargandoPlantillas = true
   try {
+    const headers = { ...headersDocente() }
+    if (deviceId && token) {
+      headers['x-device-id'] = String(deviceId)
+      headers['x-device-token'] = String(token)
+    }
+
     const res = await fetch(`${backendUrl}/api/fichas/${encodeURIComponent(fichaId)}/plantillas`, {
-      headers: {
-        'x-device-id': String(deviceId),
-        'x-device-token': String(token),
-      },
-      signal: AbortSignal.timeout(10000),
+      headers,
+      signal: AbortSignal.timeout(25000),
     })
 
     if (!res.ok) {
@@ -502,16 +505,26 @@ export async function guardarTemplate({ estudianteId, fichaId, dedo, template, s
     headers['x-device-token'] = String(token)
   }
 
-  let res
-  try {
-    res = await fetch(`${backendUrl}/api/enrolamiento/guardar`, {
+  async function enviarPeticion(timeoutMs) {
+    return fetch(`${backendUrl}/api/enrolamiento/guardar`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(timeoutMs),
     })
+  }
+
+  let res
+  try {
+    res = await enviarPeticion(25000)
   } catch {
-    return { ok: false, error: 'Sin conexión: no se pudo guardar la huella' }
+    // Si Render está en frío (cold start) o hay latencia de red, esperar 3s y reintentar
+    await esperar(3000)
+    try {
+      res = await enviarPeticion(35000)
+    } catch {
+      return { ok: false, error: 'Sin conexión con el servidor. Verifica tu conexión e intenta de nuevo.' }
+    }
   }
 
   const data = await res.json().catch(() => null)
@@ -583,6 +596,7 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, s
           notificarProgresoEnrolamiento({ fase: 'cancelado', actual, total, mensaje: 'Enrolamiento cancelado por fallos consecutivos' })
           return { ok: false, error: `No se pudo capturar una huella válida: ${motivo}` }
         }
+        await esperar(300) // Breve pausa no bloqueante para desahogar el bus USB
         continue // reintenta la MISMA captura (no avanza el contador)
       }
 
@@ -665,6 +679,7 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, s
     const guardado = await guardarTemplate({ estudianteId, fichaId, dedo, template: completo.template, slot })
 
     if (guardado.ok) {
+      descargarPlantillas(fichaId).catch(() => {})
       notificarProgresoEnrolamiento({ fase: 'completado', actual, total, mensaje: 'Huella registrada correctamente' })
     }
     return guardado

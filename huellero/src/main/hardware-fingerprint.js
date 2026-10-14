@@ -8,16 +8,22 @@ import { execFileSync } from 'child_process'
 // un fallo aquí no debe tumbar el arranque del huellero.
 const GUID_RE = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/
 
+let cachedGuid = undefined
+
 export function obtenerHardwareFingerprint() {
+  if (cachedGuid !== undefined) return cachedGuid
+
   try {
     const salida = execFileSync(
       'reg',
       ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'],
-      { encoding: 'utf8', windowsHide: true }
+      { encoding: 'utf8', windowsHide: true, timeout: 2000 }
     )
     const match = salida.match(GUID_RE)
-    return match ? match[0].toLowerCase() : null
+    cachedGuid = match ? match[0].toLowerCase() : null
   } catch {
-    return null
+    cachedGuid = null
   }
+
+  return cachedGuid
 }
