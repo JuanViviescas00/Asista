@@ -210,6 +210,64 @@
   - Empaquetado exitoso del instalador NSIS `Asista-Setup-1.0.0.exe` (144.9 MB) con `electron-builder` (código de salida 0).
   - Prueba de conectividad HTTP al endpoint `/api/enrolamiento/guardar` simulando cliente de escritorio (código 404 esperado para estudiante de prueba, validación de autorización superada).
 
+---
+
+## [2026-10-14 21:45] Persistencia de Borradores con Pinia y Bloqueo de Inasistencias Subidas a Sofia Plus
+
+- **Fecha y Hora:** 2026-10-14 21:45:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. Si un docente estaba registrando asistencias/fallas en el panel web y se caía el internet o recargaba accidentalmente la página (`F5`), se perdían todos los cambios no guardados.
+  2. Al sincronizar inasistencias los sábados con Sofia Plus vía RPA, se requería garantizar que los aprendices ya reportados con éxito queden bloqueados en el panel para evitar ediciones extemporáneas y duplicaciones de fallas en el SENA, dejando en cola únicamente a los pendientes o fallidos para el siguiente sábado.
+- **Causa Raíz:**
+  1. El estado `asistenciaDia` vivía exclusivamente en la memoria RAM del componente Vue (`ref({})`) sin persistencia reactiva en almacenamiento local ni cola offline.
+  2. El modelo `Asistencia` carecía de los atributos `subidoSofia` y `fechaSubidaSofia`, y los endpoints de inasistencias para RPA no discriminaban registros ya reportados.
+- **Solución Aplicada:**
+  1. **Persistencia Frontend (Pinia + LocalStorage):** Se instaló e integró `pinia` en `frontend/src/main.js`. Se creó el store `frontend/src/stores/asistenciaDraft.js` para auto-guardar cada cambio en tiempo real (`draft_asistencia_${fichaId}_${fecha}`) y auto-restaurarlo ante recargas de página.
+  2. **Tolerancia a Caídas de Red (Cola Offline):** Si el servidor no responde al guardar, las asistencias se encolan localmente y se sincronizan automáticamente al recuperar la conexión mediante el listener `window.addEventListener('online')`.
+  3. **Modelo de Asistencia y Candado Sofia Plus:** Se añadieron los campos `subidoSofia: Boolean` y `fechaSubidaSofia: Date` a `backend/models/Asistencia.js`.
+  4. **Filtrado en RPA y Cron:** Se actualizaron `getInasistenciasParaRPA`, `getTodosInasistenciasParaRPA` y `revisarYEncolarSofiaPlus` en el cron semanal para excluir `{ subidoSofia: { $ne: true } }`.
+  5. **Endpoint de Confirmación y Bot:** Se implementó `POST /api/instructores/confirmar-subida-sofia` y se conectó en `Practica_RPA/bot_inasistencias_sofia.js` para que el robot bloquee de inmediato cada registro subido.
+  6. **UI/UX en Panel del Docente:** En `PanelInstructor.vue`, las filas y tarjetas táctiles de aprendices con `subidoSofia: true` muestran un badge verde con candado 🔒 *"Reportado Sofia Plus"* y deshabilitan los controles de edición.
+- **Archivos Modificados:**
+  - `frontend/package.json`
+  - `frontend/src/main.js`
+  - `frontend/src/stores/asistenciaDraft.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `backend/models/Asistencia.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/routes/instructores.js`
+  - `backend/services/cronService.js`
+  - `Practica_RPA/bot_inasistencias_sofia.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación de producción de `frontend` exitosa con `vite build` en 828ms sin advertencias de compilación.
+  - Validación sintáctica completa con `node -c` en todos los controladores, rutas y modelos backend y en el robot de Playwright (código de salida 0).
+
+---
+
+## [2026-10-14 22:08] Habilitación de Seguimiento de Inasistencias para Todos los Docentes de Aula
+
+- **Fecha y Hora:** 2026-10-14 22:08:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - En la vista de *Seguimiento de Inasistencias* (`SeguimientoInasistencias.vue`), los instructores que dictaban clases en una ficha pero no figuraban como el "Instructor Líder" no podían ver las estadísticas ni los aprendices en riesgo, mostrando la alerta: *"No tienes fichas asignadas como Líder, por lo tanto no puedes consultar el seguimiento de inasistencias"*.
+  - Se requería que todos los instructores pudieran acceder al seguimiento de inasistencias de todas las fichas en las que imparten formación (tanto como líder como parte del equipo docente).
+- **Causa Raíz:**
+  - La propiedad computada `fichasDisponibles` filtraba estrictamente por `f.instructorLiderId === usuario.id`, excluyendo las fichas del array `f.instructores`.
+  - La llamada en `onMounted` cargaba `api.fichas.getAll()` sin pasar por `api.fichas.getMisFichas(usuario.id)`.
+- **Solución Aplicada:**
+  - En `frontend/src/views/SeguimientoInasistencias.vue`:
+    1. Se actualizó `fichasDisponibles` para incluir tanto al docente líder como a los instructores del array `f.instructores` y las fichas asociadas.
+    2. Se actualizó `estudiantesFiltrados` para soportar resolución bidireccional por `ObjectId` y `codigoFicha`.
+    3. En `onMounted`, se invoca `api.fichas.getMisFichas(usuario.id)` para instructores, garantizando la carga de todos sus grupos asignados.
+    4. Se actualizó el mensaje de alerta y el selector de fichas para mostrar la distinción `(Líder)` y permitir consultar *"Todas mis fichas asignadas"*.
+- **Archivos Modificados:**
+  - `frontend/src/views/SeguimientoInasistencias.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación de producción con `vite build` exitosa en 1.50s (código de salida 0).
+
+
+
 
 
 

@@ -299,9 +299,11 @@ export async function revisarYEncolarSofiaPlus() {
   const festivosDocs = await DiaFestivo.find().select('fecha')
   const festivosSet = new Set(festivosDocs.map(f => f.fecha))
 
-  // 2. Obtener asistencias relevantes (fallas y excusadas)
-  const asistencias = await Asistencia.find({ estado: { $in: ['Falta', 'Excusada'] } })
-    .populate('fichaId', 'jornada instructorLiderId')
+  // 2. Obtener asistencias relevantes (fallas y excusadas que no hayan sido subidas aún)
+  const asistencias = await Asistencia.find({
+    estado: { $in: ['Falta', 'Excusada'] },
+    subidoSofia: { $ne: true }
+  }).populate('fichaId', 'jornada instructorLiderId')
 
   if (!asistencias || asistencias.length === 0) {
     return { encolados: 0, omitidosYaExistentes: 0, enEsperaDiasHabiles: 0 }

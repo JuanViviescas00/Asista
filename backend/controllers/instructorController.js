@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
+import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
@@ -334,7 +335,8 @@ export async function getInasistenciasParaRPA(req, res) {
 
     const filter = {
       fichaId: { $in: targetFichaIds },
-      estado: { $in: ['Falta', 'Tardanza'] }
+      estado: { $in: ['Falta', 'Tardanza'] },
+      subidoSofia: { $ne: true }
     }
     if (fecha) filter.fecha = fecha
 
@@ -431,7 +433,8 @@ export async function getTodosInasistenciasParaRPA(req, res) {
 
       const filter = {
         fichaId: { $in: fichaIds },
-        estado: { $in: ['Falta', 'Tardanza'] }
+        estado: { $in: ['Falta', 'Tardanza'] },
+        subidoSofia: { $ne: true }
       }
       if (fecha) filter.fecha = fecha
 
@@ -509,5 +512,49 @@ export async function getTodosInasistenciasParaRPA(req, res) {
     res.status(500).json({ ok: false, error: err.message })
   }
 }
+
+// Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus
+export async function confirmarSubidaSofia(req, res) {
+  try {
+    const { asistenciaId, estudianteId, fichaId, fecha } = req.body
+
+    if (!asistenciaId && (!estudianteId || !fecha)) {
+      return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId o (estudianteId y fecha)' })
+    }
+
+    const query = asistenciaId ? { _id: asistenciaId } : { estudianteId, fecha }
+    if (fichaId) query.fichaId = fichaId
+
+    const asistenciaActualizada = await Asistencia.findOneAndUpdate(
+      query,
+      { subidoSofia: true, fechaSubidaSofia: new Date() },
+      { new: true }
+    )
+
+    if (!asistenciaActualizada) {
+      return res.status(404).json({ ok: false, error: 'Registro de asistencia no encontrado' })
+    }
+
+    // Actualizar o marcar en la colección SofiaPlusSync si existe
+    await SofiaPlusSync.findOneAndUpdate(
+      { asistenciaId: asistenciaActualizada._id },
+      { estadoSync: 'subido', fechaSubida: new Date() },
+      { upsert: false }
+    )
+
+    res.json({
+      ok: true,
+      mensaje: 'Asistencia marcada como subida a Sofia Plus correctamente',
+      asistencia: {
+        id: asistenciaActualizada._id,
+        subidoSofia: asistenciaActualizada.subidoSofia,
+        fechaSubidaSofia: asistenciaActualizada.fechaSubidaSofia
+      }
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
 
 

@@ -14,6 +14,8 @@ const asistenciaSchema = new mongoose.Schema({
   metodo: { type: String, enum: ['HUELLA', 'MANUAL'], default: 'HUELLA' },
   horaInicioClase: { type: Date, default: null },
   claseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Clase', default: null },
+  subidoSofia: { type: Boolean, default: false },
+  fechaSubidaSofia: { type: Date, default: null },
 }, { timestamps: true, collection: 'asistencias' })
 
 // Índice único real: elimina la ventana de carrera del anti-duplicado en

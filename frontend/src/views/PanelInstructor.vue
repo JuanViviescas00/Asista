@@ -4,7 +4,11 @@ import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
+import { useAsistenciaDraftStore } from '../stores/asistenciaDraft.js'
 import '../styles/panelInstructor.css'
+
+const draftStore = useAsistenciaDraftStore()
+
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -33,13 +37,28 @@ function showToast(message, type = 'success') {
   setTimeout(() => { toast.show = false }, 3000)
 }
 
+async function onConexionRecuperada() {
+  const res = await draftStore.sincronizarColaOffline(api)
+  if (res.totalSincronizados > 0) {
+    showToast(`Conexión recuperada: ${res.totalSincronizados} asistencias sincronizadas automáticamente.`, 'success')
+    if (fichaSeleccionada.value?._id) {
+      await cargarDatosFicha(fichaSeleccionada.value._id)
+    }
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener('online', onConexionRecuperada)
   await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
+  if (draftStore.pendientesOfflineCount > 0) {
+    onConexionRecuperada()
+  }
 })
 
 onUnmounted(() => {
+  window.removeEventListener('online', onConexionRecuperada)
   if (fichaSeleccionada.value?._id) {
     salirDeSalaFicha(fichaSeleccionada.value._id)
   }
@@ -424,6 +443,12 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
   }
 }
 
+function autoGuardarBorrador() {
+  if (fichaSeleccionada.value?._id && fechaAsistencia.value) {
+    draftStore.guardarBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, asistenciaDia.value)
+  }
+}
+
 function inicializarAsistenciaDia() {
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
@@ -444,8 +469,28 @@ function inicializarAsistenciaDia() {
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
+      subidoSofia: existente ? !!existente.subidoSofia : false,
     }
   }
+
+  // Comprobar si existe un borrador no guardado en Pinia / LocalStorage
+  const borrador = draftStore.obtenerBorrador(fichaSeleccionada.value?._id, hoy)
+  if (borrador && borrador.registros) {
+    let restaurados = 0
+    for (const estId in borrador.registros) {
+      if (registros[estId]) {
+        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios
+        if (!registros[estId].subidoSofia && (borrador.registros[estId].estado !== 'Ninguno' || borrador.registros[estId].excusa)) {
+          registros[estId] = { ...registros[estId], ...borrador.registros[estId] }
+          restaurados++
+        }
+      }
+    }
+    if (restaurados > 0) {
+      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios no guardados.`, 'info')
+    }
+  }
+
   asistenciaDia.value = registros
 }
 
@@ -456,6 +501,11 @@ function marcarPresente(estId) {
   }
   const reg = asistenciaDia.value[estId]
   if (!reg) return
+
+  if (reg.subidoSofia) {
+    showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
+    return
+  }
 
   if (reg.estado === 'Presente' || reg.estado === 'Tardanza') {
     // Desmarcar al hacer clic de nuevo
@@ -476,6 +526,8 @@ function marcarPresente(estId) {
     reg.tiempoTardanza = tardanzaInfo.tiempoTardanza
     reg.excusa = false
   }
+
+  autoGuardarBorrador()
 }
 
 function toggleExcusa(estId) {
@@ -484,17 +536,24 @@ function toggleExcusa(estId) {
     return
   }
   const reg = asistenciaDia.value[estId]
-  if (reg) {
-    reg.excusa = !reg.excusa
-    if (reg.excusa) {
-      reg.estado = 'Excusada'
-    } else {
-      reg.estado = 'Ninguno'
-      reg.horaMarcacion = ''
-      reg.horasTardanza = 0
-      reg.tiempoTardanza = '0 horas'
-    }
+  if (!reg) return
+
+  if (reg.subidoSofia) {
+    showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
+    return
   }
+
+  reg.excusa = !reg.excusa
+  if (reg.excusa) {
+    reg.estado = 'Excusada'
+  } else {
+    reg.estado = 'Ninguno'
+    reg.horaMarcacion = ''
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+  }
+
+  autoGuardarBorrador()
 }
 
 async function guardarAsistenciaDia() {
@@ -512,6 +571,7 @@ async function guardarAsistenciaDia() {
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
   let exitosos = 0
   let errores = 0
+  const fallidosParaOffline = []
 
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
@@ -535,32 +595,41 @@ async function guardarAsistenciaDia() {
       }
     }
 
+    const itemAsistencia = {
+      estudianteId: est._id,
+      fichaId: fichaSeleccionada.value._id,
+      estado: estadoFinal,
+      fecha: hoy,
+      hora: horaMarcada,
+      horasTardanza: hTardanza,
+      tiempoTardanza: tTardanza,
+      instructorId: usuario.value.id || null,
+    }
+
     try {
-      await api.asistencias.create({
-        estudianteId: est._id,
-        fichaId: fichaSeleccionada.value._id,
-        estado: estadoFinal,
-        fecha: hoy,
-        hora: horaMarcada,
-        horasTardanza: hTardanza,
-        tiempoTardanza: tTardanza,
-        instructorId: usuario.value.id || null,
-      })
+      await api.asistencias.create(itemAsistencia)
       exitosos++
     } catch (err) {
       errores++
+      fallidosParaOffline.push(itemAsistencia)
       console.error(`Error asistencia ${est.nombres}:`, err.message)
     }
   }
 
-  await cargarDatosFicha(fichaSeleccionada.value._id)
-  guardandoAsistencia.value = false
-
   if (errores === 0) {
+    draftStore.limpiarBorrador(fichaSeleccionada.value._id, hoy)
+    await cargarDatosFicha(fichaSeleccionada.value._id)
     showToast(`Jornada finalizada. Asistencias guardadas exitosamente.`)
   } else {
-    showToast(`${exitosos} guardados, ${errores} con error`, 'warning')
+    // Si hubo errores (ej: fallo de conexión/internet), encolar en Pinia offline
+    draftStore.encolarOffline(fallidosParaOffline)
+    showToast(
+      `${exitosos} guardados. ${errores} guardados localmente por corte de conexión (se enviarán automáticamente al reconectar).`,
+      'warning'
+    )
   }
+
+  guardandoAsistencia.value = false
 }
 
 // Contadores de asistencia del día
@@ -1089,22 +1158,22 @@ function descargarExcel(data, nombreArchivo) {
                   <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="jornadaInhabilitada ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza'"
-                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada"
+                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                         @change="marcarPresente(est._id)"
                       />
                       <span class="checkbox-custom radio-presente"></span>
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="jornadaInhabilitada ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
-                        :disabled="jornadaInhabilitada"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                         @change="toggleExcusa(est._id)"
                       />
                       <span class="checkbox-custom"></span>
@@ -1114,7 +1183,11 @@ function descargarExcel(data, nombreArchivo) {
                     {{ jornadaInhabilitada ? '—' : (asistenciaDia[est._id]?.horaMarcacion || '—') }}
                   </td>
                   <td>
-                    <span v-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
+                    <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge" style="background: #ecfdf5; color: #047857; border: 1px solid #10b981; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" title="Inasistencia ya reportada en Sofia Plus. Bloqueada para edición.">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      Reportado Sofia Plus ({{ asistenciaDia[est._id]?.estado }})
+                    </span>
+                    <span v-else-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
                       Inhabilitada
                     </span>
@@ -1164,7 +1237,8 @@ function descargarExcel(data, nombreArchivo) {
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
                   </div>
                   <div class="mob-status-badge">
-                    <span v-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
+                    <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
+                    <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
                     <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge-mob-pres">Presente</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
@@ -1184,7 +1258,7 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-presente"
                       :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
-                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada"
+                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                       @click="marcarPresente(est._id)"
                       title="Marcar presente"
                     >
@@ -1196,7 +1270,7 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-excusa"
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
-                      :disabled="jornadaInhabilitada"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                       @click="toggleExcusa(est._id)"
                       title="Registrar excusa"
                     >
@@ -1212,6 +1286,18 @@ function descargarExcel(data, nombreArchivo) {
           </div>
 
           <div class="action-bar" v-if="estudiantesFicha.length > 0">
+            <!-- Indicador de cola offline si hay asistencias pendientes por enviar -->
+            <button
+              v-if="draftStore.pendientesOfflineCount > 0"
+              class="btn"
+              @click="onConexionRecuperada"
+              title="Haz clic para intentar sincronizar las asistencias guardadas localmente"
+              style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px;"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>{{ draftStore.pendientesOfflineCount }} offline (Reintentar envío)</span>
+            </button>
+
             <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
