@@ -309,22 +309,52 @@
   white-space: nowrap;
 }
 
-.horas-fallidas {
-  display: inline-block;
-  min-width: 62px;
-  padding: 3px 10px;
-  border-radius: 8px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+.horas-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.horas-fallidas-cero {
-  background: #f1f5f9;
+.input-horas {
+  width: 64px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
   color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-horas:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.input-horas-activo {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.input-horas:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.horas-max {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.input-horas-mob {
+  width: 54px;
+  padding: 4px 6px;
+  margin-left: 4px;
 }
 
 .row-excusada {

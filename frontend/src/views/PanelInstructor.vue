@@ -55,6 +55,7 @@ function iniciarSocketDocente() {
       asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
       asistenciaDia.value[data.estudianteId].excusa = false
       asistenciaDia.value[data.estudianteId].previo = null
+      asistenciaDia.value[data.estudianteId].horasFallidas = horasAuto(asistenciaDia.value[data.estudianteId])
     }
     feedEnVivoDocente.value.unshift({
       id: data.estudianteId,
@@ -434,23 +435,42 @@ const horasClaseFicha = computed(() => {
   return (j.includes('noche') || j.includes('nocturna')) ? 5 : 6
 })
 
-// Formato tipo hora: 6 -> "06:00"
-function formatoHoras(horas) {
-  const n = Math.max(0, Number(horas) || 0)
-  return `${String(n).padStart(2, '0')}:00`
+// Horas fallidas sugeridas según el estado (el instructor puede ajustarlas a mano):
+//  - Falta (con o sin excusa): todas las horas de la jornada
+//  - Tardanza: las horas de retraso (1 o 2, sin pasar del máximo)
+//  - Presente: 0
+function horasAuto(reg) {
+  const max = horasClaseFicha.value
+  if (!reg) return 0
+  if (reg.estado === 'Falta') return max
+  if (reg.estado === 'Tardanza') return Math.min(Number(reg.horasTardanza) || 1, max)
+  return 0
 }
 
-// Horas fallidas del aprendiz en el día:
-//  - Falta (con o sin excusa): todas las horas de la jornada
-//  - Tardanza: las horas de retraso (1 o 2)
-//  - Presente: 00:00
-function horasFallidasDe(estId) {
-  if (jornadaInhabilitada.value) return '—'
+// Solo números enteros: se bloquean ".", ",", "e", "+" y "-"
+function bloquearNoEnteros(ev) {
+  if (['.', ',', 'e', 'E', '+', '-'].includes(ev.key)) ev.preventDefault()
+}
+
+// Mientras escribe: se limita al rango 0..máximo de la jornada
+function onHorasInput(estId, ev) {
   const reg = asistenciaDia.value[estId]
-  if (!reg) return formatoHoras(0)
-  if (reg.estado === 'Falta') return formatoHoras(horasClaseFicha.value)
-  if (reg.estado === 'Tardanza') return formatoHoras(reg.horasTardanza || 1)
-  return formatoHoras(0)
+  if (!reg || jornadaInhabilitada.value) return
+  const n = parseInt(ev.target.value, 10)
+  if (Number.isNaN(n)) return // campo vacío mientras escribe
+  const limitado = Math.min(Math.max(n, 0), horasClaseFicha.value)
+  reg.horasFallidas = limitado
+  if (limitado !== n) ev.target.value = limitado
+}
+
+// Al salir del campo: si quedó vacío o inválido, se restaura el valor guardado
+function onHorasChange(estId, ev) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg) return
+  const n = parseInt(ev.target.value, 10)
+  const limitado = Number.isNaN(n) ? (reg.horasFallidas || 0) : Math.min(Math.max(n, 0), horasClaseFicha.value)
+  reg.horasFallidas = limitado
+  ev.target.value = limitado
 }
 
 function inicializarAsistenciaDia() {
@@ -478,6 +498,7 @@ function inicializarAsistenciaDia() {
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
     }
+    registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
   asistenciaDia.value = registros
 }
@@ -511,6 +532,7 @@ function marcarFalta(estId) {
     reg.horasTardanza = 0
     reg.tiempoTardanza = '0 horas'
   }
+  reg.horasFallidas = horasAuto(reg)
 }
 
 function toggleExcusa(estId) {
@@ -994,10 +1016,24 @@ function descargarExcel(data, nombreArchivo) {
                     </span>
                   </td>
                   <td class="td-horas">
-                    <span
-                      class="horas-fallidas"
-                      :class="{ 'horas-fallidas-cero': horasFallidasDe(est._id) === '00:00' || horasFallidasDe(est._id) === '—' }"
-                    >{{ horasFallidasDe(est._id) }}</span>
+                    <div class="horas-wrap">
+                      <input
+                        type="number"
+                        class="input-horas"
+                        :class="{ 'input-horas-activo': (asistenciaDia[est._id]?.horasFallidas || 0) > 0 }"
+                        min="0"
+                        :max="horasClaseFicha"
+                        step="1"
+                        inputmode="numeric"
+                        :value="asistenciaDia[est._id]?.horasFallidas || 0"
+                        :disabled="jornadaInhabilitada"
+                        :title="`Horas fallidas (máximo ${horasClaseFicha})`"
+                        @keydown="bloquearNoEnteros"
+                        @input="onHorasInput(est._id, $event)"
+                        @change="onHorasChange(est._id, $event)"
+                      />
+                      <span class="horas-max">/ {{ horasClaseFicha }}</span>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="estudiantesFicha.length === 0">
@@ -1040,7 +1076,22 @@ function descargarExcel(data, nombreArchivo) {
 
                 <div class="mob-card-footer">
                   <div class="mob-time-info">
-                    Horas fallidas: <span class="time-val">{{ horasFallidasDe(est._id) }}</span>
+                    Horas fallidas:
+                    <input
+                      type="number"
+                      class="input-horas input-horas-mob"
+                      :class="{ 'input-horas-activo': (asistenciaDia[est._id]?.horasFallidas || 0) > 0 }"
+                      min="0"
+                      :max="horasClaseFicha"
+                      step="1"
+                      inputmode="numeric"
+                      :value="asistenciaDia[est._id]?.horasFallidas || 0"
+                      :disabled="jornadaInhabilitada"
+                      @keydown="bloquearNoEnteros"
+                      @input="onHorasInput(est._id, $event)"
+                      @change="onHorasChange(est._id, $event)"
+                    />
+                    <span class="horas-max">/ {{ horasClaseFicha }}</span>
                   </div>
                   <div class="mob-actions-row">
                     <!-- Botón Marcar Asistencia Táctil -->
