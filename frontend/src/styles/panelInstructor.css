@@ -172,14 +172,24 @@
 }
 
 .tab-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 52px;
+  padding: 10px 20px;
+  border-radius: 10px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.tab-btn svg {
+  width: 24px;
+  height: 24px;
 }
 
 .tab-btn:hover:not(.disabled) {
@@ -195,14 +205,14 @@
 
 .tab-icon-img {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 
 .tab-btn.active .tab-icon-img {
   background: #ffffff;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .tab-btn.disabled {
@@ -291,6 +301,30 @@
 .td-radio {
   text-align: center;
   width: 80px;
+}
+
+.th-horas,
+.td-horas {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.horas-fallidas {
+  display: inline-block;
+  min-width: 62px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.horas-fallidas-cero {
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .row-excusada {
@@ -1251,7 +1285,7 @@
 
   .mob-card-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     padding-top: 8px;
     border-top: 1px solid #f1f5f9;
