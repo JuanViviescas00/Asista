@@ -214,3 +214,66 @@ export async function calcularResumenAsistencia(estudianteId) {
   const jornada = estudiante?.fichaId?.jornada || ''
   return calcularResumenDesdeAsistencias(asistencias, jornada)
 }
+
+/**
+ * Auto-cierre de inasistencias:
+ * Para una ficha y una fecha dada, identifica a todos los aprendices activos que
+ * no registraron marcación de asistencia (huella ni manual) y les crea automáticamente
+ * un registro con estado 'Falta'.
+ */
+export async function cerrarInasistenciasFicha(fichaId, fecha = getHoyString(), instructorId = null) {
+  try {
+    if (!fichaId || !fecha) return { creados: 0 }
+
+    const fichaIds = await getFichaIdList(fichaId)
+    if (!fichaIds.length) return { creados: 0 }
+
+    const fichaDoc = await Ficha.findOne({ _id: { $in: fichaIds } })
+    const instId = instructorId || fichaDoc?.instructorLiderId || null
+
+    const estudiantes = await Estudiante.find({
+      fichaId: { $in: fichaIds },
+      estado: 'Activo'
+    }).select('_id')
+
+    if (!estudiantes.length) return { creados: 0 }
+
+    const existentes = await Asistencia.find({
+      fichaId: { $in: fichaIds },
+      fecha
+    }).select('estudianteId')
+
+    const presentesSet = new Set(existentes.map(a => String(a.estudianteId)))
+
+    const aCrear = []
+    for (const est of estudiantes) {
+      if (!presentesSet.has(String(est._id))) {
+        aCrear.push({
+          estudianteId: est._id,
+          fichaId: fichaDoc?._id || fichaIds[0],
+          fecha,
+          estado: 'Falta',
+          hora: '—',
+          horasTardanza: 0,
+          tiempoTardanza: '0 horas',
+          instructorId: instId,
+          metodo: 'MANUAL',
+          subidoSofia: false
+        })
+      }
+    }
+
+    if (aCrear.length > 0) {
+      const res = await Asistencia.insertMany(aCrear, { ordered: false })
+      return { creados: res.length }
+    }
+    return { creados: 0 }
+  } catch (err) {
+    if (err.code === 11000) {
+      return { creados: err.result?.nInserted || 0 }
+    }
+    console.error('[cerrarInasistenciasFicha] Error:', err.message)
+    return { creados: 0, error: err.message }
+  }
+}
+

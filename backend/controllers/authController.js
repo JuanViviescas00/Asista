@@ -44,6 +44,31 @@ export async function login(req, res) {
         return res.status(403).json({ error: 'Tu cuenta de instructor se encuentra inactiva' })
       }
       if (!password) {
+        // Si no se proporcionó contraseña (consulta desde pestaña Aprendiz),
+        // verificar si el identificador corresponde a un Aprendiz antes de fallar
+        const estudianteFallback = await Estudiante.findOne({
+          $or: [{ numeroDocumento: identificador }, { correo: identificador }]
+        })
+        if (estudianteFallback) {
+          if (estudianteFallback.estado !== 'Activo') {
+            return res.status(403).json({ error: `Tu cuenta de aprendiz se encuentra en estado ${estudianteFallback.estado}` })
+          }
+          const nombreCompleto = `${estudianteFallback.nombres} ${estudianteFallback.apellidos}`
+          const payload = {
+            id: estudianteFallback._id,
+            nombre: nombreCompleto,
+            correo: estudianteFallback.correo,
+            rol: 'Estudiante',
+            estudianteId: estudianteFallback._id
+          }
+          const token = generarToken(payload)
+          return res.json({
+            ok: true,
+            token,
+            usuario: payload,
+            admin: payload
+          })
+        }
         return res.status(400).json({ error: 'Contraseña requerida para cuenta de Instructor' })
       }
       const passOk = await verifyAndUpgradePassword(instructor, password)

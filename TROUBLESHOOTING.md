@@ -287,8 +287,40 @@
   - `frontend/src/views/PanelInstructor.vue`
   - `frontend/src/views/SeguimientoInasistencias.vue`
   - `TROUBLESHOOTING.md`
+---
+
+## [2026-10-15 21:50] Ajuste Normativo (Acuerdo 0009 de 2024), Auto-Cierre de Fallas y Corrección de Login de Aprendices
+
+- **Fecha y Hora:** 2026-10-15 21:50:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. **Omisión de Fallas en Sofia Plus:** Si un docente no guardaba manualmente la asistencia del día en el panel web, los aprendices que no marcaron huella quedaban sin registro en MongoDB, provocando que el robot RPA del sábado no encontrara fallas para reportar.
+  2. **Exclusión de Excusas en RPA:** Las consultas `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA` solo buscaban `['Falta', 'Tardanza']`, omitiendo por completo las fallas con soporte (`'Excusada'`).
+  3. **Alineación con el Acuerdo No. 0009 de 2024 (Reglamento del Aprendiz):** El nuevo reglamento amplió de 3 a **5 días hábiles** el plazo legal para que el aprendiz radique soportes de inasistencias no programadas (Art. 28 Parágrafo 3 y Art. 29 Numeral 1). El cron debía respetar esta ventana antes de encolar fallas como injustificadas definitivas.
+  4. **Falso error "no encontrado o inactivo" en Login de Aprendiz:** Aprendices con documento duplicado en instructores de prueba (ej. `1101261073` / María Juliana Saavedra vs Lia Saa) eran rechazados con error de contraseña de instructor en el backend y enmascarados como "inactivos" por el frontend.
+- **Causa Raíz:**
+  1. Inexistencia de un mecanismo de auto-cierre de asistencia para aprendices ausentes al finalizar la jornada o clase.
+  2. Filtro estricto excluyente en `instructorController.js` que no incluía el estado `Excusada`.
+  3. Valores heredados de 3 días hábiles en `cronService.js`.
+  4. La ruta `/auth/login` validaba `Instructor` antes de `Estudiante` y requería contraseña de inmediato si el documento coincidía con un instructor, ignorando que la consulta de aprendiz no requiere contraseña.
+- **Solución Aplicada:**
+  1. **Auto-cierre de Inasistencias:** Se implementó `cerrarInasistenciasFicha` en `backend/services/asistenciaService.js` e integró en `claseController.js` (`finalizar`) y `cronService.js` (`cerrarClasesExpiradas`). A todo aprendiz activo que no haya registrado huella en esa fecha se le genera automáticamente su registro de `Falta`.
+  2. **Inclusión de Excusas en RPA:** Se actualizó el filtro de estados en `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA` a `['Falta', 'Tardanza', 'Excusada']`.
+  3. **Ajuste a 5 Días Hábiles:** Se actualizaron `sincronizarSqlitePorDocente` (umbral >= 5 días) y `revisarYEncolarSofiaPlus` (umbral >= 6 días hábiles para garantizar los 5 días hábiles completos de radicación).
+  4. **Resolución de Conflicto de Login:** En `backend/controllers/authController.js`, si no se proporciona contraseña (consulta de aprendiz), el backend verifica primero si el documento corresponde a un `Estudiante` activo antes de exigir contraseña de instructor.
+  5. **Mensajes Transparentes en Frontend:** En `frontend/src/views/Login.vue`, se muestra `err.message` real devuelto por el servidor.
+- **Archivos Modificados:**
+  - `backend/services/asistenciaService.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/claseController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/authController.js`
+  - `frontend/src/views/Login.vue`
+  - `TROUBLESHOOTING.md`
 - **Verificación:**
-  - Compilación de producción con `vite build` (`npm run build`) completada con éxito en 1.32s sin advertencias de sintaxis ni errores de importación.
+  - Sintaxis validada con `node -c` en todos los archivos backend modificados (código 0).
+  - Prueba de login directo para `1101261073` simulada en Node: resuelve exitosamente a `MARIA JULIANA SAAVEDRA CARVAJAL` (Activo).
+  - Compilación de producción con `vite build` completada en 1.42s con 0 errores.
+
 
 
 

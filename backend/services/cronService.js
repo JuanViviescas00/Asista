@@ -5,7 +5,7 @@ import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
-import { getHoyString } from './asistenciaService.js'
+import { getHoyString, cerrarInasistenciasFicha } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 
 /**
@@ -52,6 +52,11 @@ export async function cerrarClasesExpiradas() {
       emitirClaseDesactivada(fichaIdStr, {
         fichaId: fichaIdStr,
         motivo: 'AUTO_CIERRE_3_HORAS'
+      })
+
+      // 3. Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella
+      cerrarInasistenciasFicha(clase.fichaId?._id || clase.fichaId, getHoyString(), clase.instructorId).catch(err => {
+        console.error('[AutoCierre] Error al completar inasistencias de la clase expirada:', err.message)
       })
 
       cerradas++
@@ -174,9 +179,9 @@ export function iniciarCronJobs() {
 /**
  * Genera y actualiza un archivo SQLite independiente para cada Docente que haya impartido clases.
  * - Incluye todas las clases dictadas diariamente por el profesor (sin importar si es líder o apoyo).
- * - Evalúa los 3 días hábiles posteriores a la clase:
- *   - Si días hábiles < 3: Estado de carga 'EN_ESPERA' (ventana para excusas/justificaciones).
- *   - Si días hábiles >= 3: Estado de carga 'LISTO_PARA_SUBIR' (elegible para el servidor institucional).
+ * - Evalúa los 5 días hábiles posteriores a la clase (Acuerdo 0009 de 2024, Art. 28 Parágrafo 3):
+ *   - Si días hábiles < 5: Estado de carga 'EN_ESPERA' (ventana reglamentaria para radicar excusas).
+ *   - Si días hábiles >= 5: Estado de carga 'LISTO_PARA_SUBIR' (plazo vencido, elegible para consolidación).
  */
 export async function sincronizarSqlitePorDocente() {
   const hoyStr = getHoyString()
@@ -218,7 +223,7 @@ export async function sincronizarSqlitePorDocente() {
     }
 
     const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId?.jornada || '')
-    const esElegible = diasHabiles >= 3
+    const esElegible = diasHabiles >= 5
     const estadoCarga = esElegible ? 'LISTO_PARA_SUBIR' : 'EN_ESPERA'
 
     asistenciasPorDocente.get(docenteKey).rows.push({
@@ -285,11 +290,11 @@ export async function sincronizarSqlitePorDocente() {
 /**
  * Revisa las asistencias con estado 'Falta' o 'Excusada' y las encola en la
  * colección SofiaPlusSync para que otro proceso (RPA) las suba a Sofía Plus.
- * - 'Excusada' se encola de inmediato, sin esperar días hábiles.
- * - 'Falta' solo se encola cuando hayan transcurrido >= 4 días hábiles desde la
- *   fecha de la inasistencia. Esto es intencional: el plazo de excusa es de 3
- *   días hábiles completos (día 1, 2 o 3), por lo que una falta se considera
- *   vencida únicamente cuando el día 3 ya transcurrió por completo, no durante él.
+ * - 'Excusada' se encola de inmediato como justificada, sin esperar días hábiles.
+ * - 'Falta' solo se encola cuando hayan transcurrido >= 6 días hábiles desde la
+ *   fecha de la inasistencia (Acuerdo 0009 de 2024, Art. 28 Parágrafo 3 y Art. 29 Numeral 1).
+ *   Esto garantiza al aprendiz sus 5 días hábiles completos para radicar soportes;
+ *   la falta se considera vencida e injustificada una vez culminado el 5to día hábil.
  * - No duplica: si ya existe un SofiaPlusSync para una asistencia, la omite.
  */
 export async function revisarYEncolarSofiaPlus() {
@@ -343,7 +348,7 @@ export async function revisarYEncolarSofiaPlus() {
 
     // estado === 'Falta'
     const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId.jornada || '')
-    if (diasHabiles >= 4) {
+    if (diasHabiles >= 6) {
       aEncolar.push({
         asistenciaId: a._id,
         estudianteId: a.estudianteId,

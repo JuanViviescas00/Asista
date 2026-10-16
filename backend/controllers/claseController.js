@@ -3,6 +3,7 @@ import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
 import Dispositivo from '../models/Dispositivo.js'
 import { emitirActivacion, emitirDesactivacion, emitirClaseActivada, emitirClaseDesactivada } from '../services/socketService.js'
+import { cerrarInasistenciasFicha, getHoyString } from '../services/asistenciaService.js'
 
 export async function activar(req, res) {
   const { fichaId, instructorId } = req.body
@@ -109,6 +110,11 @@ export async function finalizar(req, res) {
     clase.estado = 'Finalizada'
     clase.finalizadaAt = new Date()
     await clase.save()
+
+    // Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella
+    cerrarInasistenciasFicha(clase.fichaId, getHoyString(), clase.instructorId).catch(err => {
+      console.error('[claseController] Error en auto-cierre de inasistencias:', err.message)
+    })
 
     const enviado = emitirDesactivacion(clase.deviceId, {
       type: 'DEACTIVATE',

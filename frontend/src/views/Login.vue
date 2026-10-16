@@ -92,7 +92,7 @@ async function consultarAprendiz() {
       emit('login-success', res.usuario)
     }
   } catch (err) {
-    error.value = 'Número de documento no encontrado o aprendiz inactivo'
+    error.value = err.message || 'Número de documento no encontrado o aprendiz inactivo'
   } finally {
     loading.value = false
   }

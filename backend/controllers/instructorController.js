@@ -335,7 +335,7 @@ export async function getInasistenciasParaRPA(req, res) {
 
     const filter = {
       fichaId: { $in: targetFichaIds },
-      estado: { $in: ['Falta', 'Tardanza'] },
+      estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
       subidoSofia: { $ne: true }
     }
     if (fecha) filter.fecha = fecha
@@ -433,7 +433,7 @@ export async function getTodosInasistenciasParaRPA(req, res) {
 
       const filter = {
         fichaId: { $in: fichaIds },
-        estado: { $in: ['Falta', 'Tardanza'] },
+        estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
         subidoSofia: { $ne: true }
       }
       if (fecha) filter.fecha = fecha
