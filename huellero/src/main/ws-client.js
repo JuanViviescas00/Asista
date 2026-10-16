@@ -23,6 +23,8 @@ import { obtenerHardwareFingerprint } from './hardware-fingerprint.js'
 // ---------------------------------------------------------------------------
 let socket = null
 let connected = false
+// true cuando el servidor respondió al HELLO (ACTIVATE/DEACTIVATE), es decir, el equipo fue aceptado.
+let helloAceptado = false
 let currentConfig = null
 let ultimoRechazo = null // { code, message, at } del último HELLO_RECHAZADO
 
@@ -42,9 +44,12 @@ const deviceNotFoundHandlers = []
 // Aquí programamos la reconexión manualmente (socket.connect()) con backoff.
 const RECONEXION_DELAY_BASE = 2000
 const RECONEXION_DELAY_MAX = 60000
-// Para HARDWARE_MISMATCH (posible copia de identidad) el problema probablemente
-// no se resuelve solo; reintentamos con un intervalo fijo mucho más largo para
-// no saturar el backend con intentos inútiles.
+// PENDING_APPROVAL: el admin puede aprobar en cualquier momento, reintentar seguido (5s ± 1s de jitter).
+const RECONEXION_PENDING_APPROVAL = 5000
+const RECONEXION_JITTER = 1000
+// DEVICE_DISABLED: no se resuelve solo, reintento lento y fijo.
+const RECONEXION_DEVICE_DISABLED = 30000
+// HARDWARE_MISMATCH: posible copia de identidad, no se resuelve solo; intervalo muy largo.
 const RECONEXION_HARDWARE_MISMATCH = 10 * 60 * 1000 // 10 minutos
 
 let reintentoManualTimer = null
@@ -57,20 +62,34 @@ function cancelarReintentoManual() {
   }
 }
 
+// Jitter uniforme de ±ms para no sincronizar muchos equipos a la vez.
+function jitterMs(ms) {
+  return Math.round((Math.random() * 2 - 1) * ms)
+}
+
 function programarReintentoManual() {
   if (!socket || reintentoManualTimer) return
-  const esHardwareMismatch = ultimoRechazo?.code === 'HARDWARE_MISMATCH'
-  const delay = esHardwareMismatch ? RECONEXION_HARDWARE_MISMATCH : reintentoManualDelay
-  log(`Reintentando conexión en ${delay}ms (motivo: ${ultimoRechazo?.code || 'server disconnect'})`)
+
+  const code = ultimoRechazo?.code
+  let delay
+  if (code === 'PENDING_APPROVAL') {
+    delay = RECONEXION_PENDING_APPROVAL + jitterMs(RECONEXION_JITTER)
+  } else if (code === 'DEVICE_DISABLED') {
+    delay = RECONEXION_DEVICE_DISABLED
+  } else if (code === 'HARDWARE_MISMATCH') {
+    delay = RECONEXION_HARDWARE_MISMATCH
+  } else {
+    delay = reintentoManualDelay
+    // El backoff exponencial solo crece para rechazos recuperables; los casos
+    // especiales de arriba usan un intervalo fijo.
+    reintentoManualDelay = Math.min(reintentoManualDelay * 2, RECONEXION_DELAY_MAX)
+  }
+
+  log(`Reintentando conexión en ${delay}ms (motivo: ${code || 'server disconnect'})`)
   reintentoManualTimer = setTimeout(() => {
     reintentoManualTimer = null
     if (socket) socket.connect()
   }, delay)
-  // El backoff exponencial solo crece para rechazos recuperables; para
-  // HARDWARE_MISMATCH usamos el intervalo fijo definido arriba.
-  if (!esHardwareMismatch) {
-    reintentoManualDelay = Math.min(reintentoManualDelay * 2, RECONEXION_DELAY_MAX)
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +192,7 @@ export function connect(config) {
     log(`Conectado a ${url}`)
     // Autenticación: primer mensaje tras (re)conectar. El fingerprint se calcula
     // en runtime (no se persiste en config.json) para no hacerlo copiable.
+    helloAceptado = false
     socket.emit('HELLO', {
       deviceId: String(deviceId),
       token: String(token),
@@ -183,6 +203,7 @@ export function connect(config) {
 
   socket.on('disconnect', (reason) => {
     log(`Desconectado (${reason})`)
+    helloAceptado = false
     setConnected(false)
     // "io server disconnect" significa que el servidor cerró la conexión
     // (p.ej. HELLO rechazado). socket.io NO reintenta solo en este caso,
@@ -210,6 +231,7 @@ export function connect(config) {
       at: Date.now(),
     }
     log('HELLO rechazado:', ultimoRechazo.code, '-', ultimoRechazo.message)
+    helloAceptado = false
     setConnected(false)
 
     // El backend no reconoce este deviceId (p.ej. su BD fue restaurada/restablecida).
@@ -227,6 +249,7 @@ export function connect(config) {
 
   socket.on('ACTIVATE', (payload) => {
     ultimoRechazo = null // HELLO aceptado (la reconciliación siempre responde)
+    helloAceptado = true
     reintentoManualDelay = RECONEXION_DELAY_BASE // reinicia backoff manual
     log('ACTIVATE recibido:', payload)
     despachar(activateHandlers, payload, 'onActivate')
@@ -234,6 +257,7 @@ export function connect(config) {
 
   socket.on('DEACTIVATE', (payload) => {
     ultimoRechazo = null // HELLO aceptado (la reconciliación siempre responde)
+    helloAceptado = true
     reintentoManualDelay = RECONEXION_DELAY_BASE // reinicia backoff manual
     log('DEACTIVATE recibido:', payload)
     despachar(deactivateHandlers, payload, 'onDeactivate')
@@ -246,6 +270,15 @@ export function connect(config) {
  */
 export function isConnected() {
   return connected
+}
+
+/**
+ * ¿Transporte conectado Y servidor que ya aceptó al equipo (HELLO respondido)?
+ * Es la señal de "listo" que debe usar la interfaz para decir "En línea".
+ * @returns {boolean}
+ */
+export function isListo() {
+  return connected && helloAceptado
 }
 
 /**
@@ -324,6 +357,7 @@ export function send(type, payload) {
 const wsClient = {
   connect,
   isConnected,
+  isListo,
   getUltimoRechazo,
   onActivate,
   onDeactivate,

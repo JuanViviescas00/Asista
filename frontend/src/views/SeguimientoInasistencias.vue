@@ -21,23 +21,45 @@ const loading = ref(true)
 
 const esInstructor = computed(() => usuario.value?.rol === 'Instructor')
 
-// Fichas que puede ver: todas (Admin) o solo las que lidera (Instructor Líder).
+// Fichas disponibles: todas (Admin) o todas en las que el docente dicta clase (Líder o de Apoyo).
 const fichasDisponibles = computed(() => {
   if (!esInstructor.value) return fichasList.value
+  const miId = String(usuario.value?.id || '')
   return fichasList.value.filter((f) => {
     const liderId = f.instructorLiderId?._id || f.instructorLiderId
-    return String(liderId) === String(usuario.value.id)
+    const esLider = String(liderId) === miId
+    const esDocente = Array.isArray(f.instructores) && f.instructores.some((inst) => {
+      const instId = inst?._id || inst
+      return String(instId) === miId
+    })
+    return f.esLider || esLider || esDocente
   })
 })
 
 const estudiantesFiltrados = computed(() => {
   if (filtroFicha.value) {
-    return todosEstudiantes.value.filter((e) => String(e.fichaId) === String(filtroFicha.value))
+    const targetFicha = fichasList.value.find((f) => String(f._id) === String(filtroFicha.value))
+    const validIds = [String(filtroFicha.value)]
+    if (targetFicha?.codigoFicha) validIds.push(String(targetFicha.codigoFicha).trim())
+
+    return todosEstudiantes.value.filter((e) => {
+      const eFichaId = e.fichaId?._id || e.fichaId
+      return validIds.includes(String(eFichaId).trim())
+    })
   }
+
   if (esInstructor.value) {
-    const ids = fichasDisponibles.value.map((f) => String(f._id))
-    return todosEstudiantes.value.filter((e) => ids.includes(String(e.fichaId)))
+    const validIds = []
+    fichasDisponibles.value.forEach((f) => {
+      validIds.push(String(f._id))
+      if (f.codigoFicha) validIds.push(String(f.codigoFicha).trim())
+    })
+    return todosEstudiantes.value.filter((e) => {
+      const eFichaId = e.fichaId?._id || e.fichaId
+      return validIds.includes(String(eFichaId).trim())
+    })
   }
+
   return todosEstudiantes.value
 })
 
@@ -52,12 +74,14 @@ const etiquetaConsecutivos = computed(() => `${LIMITE_DIAS_CONSECUTIVOS}+ días 
 const etiquetaNoConsecutivos = computed(() => `${LIMITE_DIAS_NO_CONSECUTIVOS}+ días no consecutivos`)
 
 function getFichaNombre(fichaId) {
-  const f = fichasList.value.find((f) => String(f._id) === String(fichaId))
+  const targetId = fichaId?._id || fichaId
+  const f = fichasList.value.find((f) => String(f._id) === String(targetId) || String(f.codigoFicha).trim() === String(targetId).trim())
   return f ? `${f.codigoFicha} - ${f.nombrePrograma}` : 'Sin ficha'
 }
 
 function getFichaApodo(fichaId) {
-  const f = fichasList.value.find((f) => String(f._id) === String(fichaId))
+  const targetId = fichaId?._id || fichaId
+  const f = fichasList.value.find((f) => String(f._id) === String(targetId) || String(f.codigoFicha).trim() === String(targetId).trim())
   return f ? apodoPrograma(f.nombrePrograma) : 'Sin ficha'
 }
 
@@ -89,14 +113,17 @@ function descargarExcel(lista, nombre) {
 onMounted(async () => {
   loading.value = true
   try {
-    const [fichas, estudiantes, asistencias] = await Promise.all([
-      api.fichas.getAll(),
+    const promises = [
+      esInstructor.value && usuario.value?.id
+        ? api.fichas.getMisFichas(usuario.value.id)
+        : api.fichas.getAll(),
       api.estudiantes.getAll(),
       api.asistencias.getAll(),
-    ])
-    fichasList.value = fichas
-    todosEstudiantes.value = estudiantes
-    todasAsistencias.value = asistencias
+    ]
+    const [fichas, estudiantes, asistencias] = await Promise.all(promises)
+    fichasList.value = Array.isArray(fichas) ? fichas : []
+    todosEstudiantes.value = Array.isArray(estudiantes) ? estudiantes : []
+    todasAsistencias.value = Array.isArray(asistencias) ? asistencias : []
   } catch (e) {
     console.error('Error cargando datos de seguimiento:', e)
   } finally {
@@ -114,7 +141,7 @@ onMounted(async () => {
   <div v-if="loading" class="empty-state"><p>Cargando información de inasistencias…</p></div>
 
   <template v-else>
-    <!-- Selector de ficha (Admin) o acceso restringido (Instructor sin ficha líder) -->
+    <!-- Selector de ficha (Admin / Instructor con sus fichas de formación) -->
     <div class="card">
       <div class="card-header">
         <h3>Parámetros de Consulta</h3>
@@ -125,7 +152,7 @@ onMounted(async () => {
         class="alert alert-error"
         style="max-width: 100%;"
       >
-        No tienes fichas asignadas como Líder, por lo tanto no puedes consultar el seguimiento de inasistencias.
+        No tienes fichas asignadas actualmente. Contacta al Administrador para que te asigne a tus grupos de formación.
       </div>
 
       <div v-else class="form-grid">
@@ -133,10 +160,10 @@ onMounted(async () => {
           <label>Ficha de Formación</label>
           <select v-model="filtroFicha">
             <option :value="null">
-              {{ esInstructor ? 'Todas mis fichas' : 'Todas las fichas' }}
+              {{ esInstructor ? 'Todas mis fichas asignadas' : 'Todas las fichas' }}
             </option>
             <option v-for="f in fichasDisponibles" :key="f._id" :value="f._id">
-              {{ f.codigoFicha }} - {{ f.nombrePrograma }}
+              {{ f.codigoFicha }} - {{ f.nombrePrograma }} {{ f.esLider ? '(Líder)' : '' }}
             </option>
           </select>
         </div>

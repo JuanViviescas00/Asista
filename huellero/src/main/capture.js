@@ -477,6 +477,35 @@ export async function capturarHuella(timeoutMs = TIMEOUT_CAPTURA_MS) {
 }
 
 /**
+ * Consulta de SOLO LECTURA la presencia del lector, sin abrirlo. Usa únicamente la
+ * primera llamada de dpfpdd_query_devices (el conteo), por lo que no interfiere con
+ * una captura en curso. No lanza: devuelve un estado y un detalle legible.
+ * @returns {{ estado: 'ok' | 'no-detectado' | 'error', detalle: string }}
+ */
+export function verificarLector() {
+  if (errorInicializacion) {
+    return { estado: 'error', detalle: errorInicializacion }
+  }
+  if (!dpfpdd || !dpfpdd_query_devices) {
+    return { estado: 'error', detalle: 'La librería dpfpdd.dll no está cargada' }
+  }
+  try {
+    const countBuf = Buffer.alloc(4)
+    const rc = dpfpdd_query_devices(countBuf, null)
+    if (rc !== DPFPDD_SUCCESS && rc !== DPFPDD_E_MORE_DATA) {
+      return { estado: 'error', detalle: `dpfpdd_query_devices() falló: ${describirError(rc)}` }
+    }
+    const count = countBuf.readUInt32LE(0)
+    if (count === 0) {
+      return { estado: 'no-detectado', detalle: 'No se encontraron lectores de huella conectados' }
+    }
+    return { estado: 'ok', detalle: `${count} lector(es) detectado(s)` }
+  } catch (err) {
+    return { estado: 'error', detalle: err?.message || 'Error consultando el lector de huellas' }
+  }
+}
+
+/**
  * Devuelve el manejador del lector actualmente abierto, o null si no hay captura en curso.
  */
 export function getDevActual() {

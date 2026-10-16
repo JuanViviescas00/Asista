@@ -121,6 +121,9 @@ export async function createDiaFestivo(req, res) {
     }
     res.status(201).json(dia)
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Ya existe un día inhabilitado o festivo registrado para esta fecha.' })
+    }
     res.status(500).json({ error: err.message })
   }
 }

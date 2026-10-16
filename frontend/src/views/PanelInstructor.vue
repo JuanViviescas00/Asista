@@ -4,12 +4,14 @@ import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
+import { useAsistenciaDraftStore } from '../stores/asistenciaDraft.js'
 import '../styles/panelInstructor.css'
+import iconoHistorial from '../assets/historial-icon.png'
+import iconoGestionarEstudiantes from '../assets/gestionar-estudiantes-icon.png'
+import iconoEquipoDocente from '../assets/equipo-docente-icon.png'
 
-// Flag de control: el enrolamiento/captura de huellas por SDK del navegador
-// (Fingerprint.WebApi + endpoints /estudiantes/fingerprint-*) está reemplazado
-// por la app de escritorio Asista. Con `true` se restaura el flujo anterior.
-const ENROLAMIENTO_EN_PANEL = false
+const draftStore = useAsistenciaDraftStore()
+
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -38,13 +40,28 @@ function showToast(message, type = 'success') {
   setTimeout(() => { toast.show = false }, 3000)
 }
 
+async function onConexionRecuperada() {
+  const res = await draftStore.sincronizarColaOffline(api)
+  if (res.totalSincronizados > 0) {
+    showToast(`Conexión recuperada: ${res.totalSincronizados} asistencias sincronizadas automáticamente.`, 'success')
+    if (fichaSeleccionada.value?._id) {
+      await cargarDatosFicha(fichaSeleccionada.value._id)
+    }
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener('online', onConexionRecuperada)
   await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
+  if (draftStore.pendientesOfflineCount > 0) {
+    onConexionRecuperada()
+  }
 })
 
 onUnmounted(() => {
+  window.removeEventListener('online', onConexionRecuperada)
   if (fichaSeleccionada.value?._id) {
     salirDeSalaFicha(fichaSeleccionada.value._id)
   }
@@ -56,6 +73,10 @@ function iniciarSocketDocente() {
     if (asistenciaDia.value[data.estudianteId]) {
       asistenciaDia.value[data.estudianteId].estado = data.estado
       asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
+      asistenciaDia.value[data.estudianteId].excusa = false
+      asistenciaDia.value[data.estudianteId].previo = null
+      asistenciaDia.value[data.estudianteId].horasFallidas = horasAuto(asistenciaDia.value[data.estudianteId])
+      autoGuardarBorrador()
     }
     feedEnVivoDocente.value.unshift({
       id: data.estudianteId,
@@ -429,6 +450,59 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
   }
 }
 
+function autoGuardarBorrador() {
+  if (fichaSeleccionada.value?._id && fechaAsistencia.value) {
+    draftStore.guardarBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, asistenciaDia.value)
+  }
+}
+
+// Horas de clase por día según la jornada de la ficha (mismo criterio del módulo Reportes:
+// Noche = 5 horas, Mañana / Tarde = 6 horas).
+const horasClaseFicha = computed(() => {
+  const j = (fichaSeleccionada.value?.jornada || '').toLowerCase()
+  return (j.includes('noche') || j.includes('nocturna')) ? 5 : 6
+})
+
+// Horas fallidas sugeridas según el estado (el instructor puede ajustarlas a mano):
+//  - Falta (con o sin excusa): todas las horas de la jornada
+//  - Tardanza: las horas de retraso (1 o 2, sin pasar del máximo)
+//  - Presente: 0
+function horasAuto(reg) {
+  const max = horasClaseFicha.value
+  if (!reg) return 0
+  if (reg.estado === 'Falta') return max
+  if (reg.estado === 'Tardanza') return Math.min(Number(reg.horasTardanza) || 1, max)
+  return 0
+}
+
+// Solo números enteros: se bloquean ".", ",", "e", "+" y "-"
+function bloquearNoEnteros(ev) {
+  if (['.', ',', 'e', 'E', '+', '-'].includes(ev.key)) ev.preventDefault()
+}
+
+// Mientras escribe: se limita al rango 0..máximo de la jornada
+function onHorasInput(estId, ev) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg || jornadaInhabilitada.value) return
+  const n = parseInt(ev.target.value, 10)
+  if (Number.isNaN(n)) return // campo vacío mientras escribe
+  const limitado = Math.min(Math.max(n, 0), horasClaseFicha.value)
+  reg.horasFallidas = limitado
+  if (limitado !== n) ev.target.value = limitado
+  autoGuardarBorrador()
+}
+
+// Al salir del campo: si quedó vacío o inválido, se restaura el valor guardado
+function onHorasChange(estId, ev) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg) return
+  const n = parseInt(ev.target.value, 10)
+  const limitado = Number.isNaN(n) ? (reg.horasFallidas || 0) : Math.min(Math.max(n, 0), horasClaseFicha.value)
+  reg.horasFallidas = limitado
+  ev.target.value = limitado
+  autoGuardarBorrador()
+}
+
 function inicializarAsistenciaDia() {
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
@@ -449,8 +523,29 @@ function inicializarAsistenciaDia() {
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
+      subidoSofia: existente ? !!existente.subidoSofia : false,
+    }
+    registros[est._id].horasFallidas = horasAuto(registros[est._id])
+  }
+
+  // Comprobar si existe un borrador no guardado en Pinia / LocalStorage
+  const borrador = draftStore.obtenerBorrador(fichaSeleccionada.value?._id, hoy)
+  if (borrador && borrador.registros) {
+    let restaurados = 0
+    for (const estId in borrador.registros) {
+      if (registros[estId]) {
+        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios
+        if (!registros[estId].subidoSofia && (borrador.registros[estId].estado !== 'Ninguno' || borrador.registros[estId].excusa)) {
+          registros[estId] = { ...registros[estId], ...borrador.registros[estId] }
+          restaurados++
+        }
+      }
+    }
+    if (restaurados > 0) {
+      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios no guardados.`, 'info')
     }
   }
+
   asistenciaDia.value = registros
 }
 
@@ -461,6 +556,11 @@ function marcarPresente(estId) {
   }
   const reg = asistenciaDia.value[estId]
   if (!reg) return
+
+  if (reg.subidoSofia) {
+    showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
+    return
+  }
 
   if (reg.estado === 'Presente' || reg.estado === 'Tardanza') {
     // Desmarcar al hacer clic de nuevo
@@ -481,6 +581,8 @@ function marcarPresente(estId) {
     reg.tiempoTardanza = tardanzaInfo.tiempoTardanza
     reg.excusa = false
   }
+  reg.horasFallidas = horasAuto(reg)
+  autoGuardarBorrador()
 }
 
 function toggleExcusa(estId) {
@@ -489,18 +591,26 @@ function toggleExcusa(estId) {
     return
   }
   const reg = asistenciaDia.value[estId]
-  if (reg) {
-    reg.excusa = !reg.excusa
-    if (reg.excusa) {
-      reg.estado = 'Excusada'
-    } else {
-      reg.estado = 'Ninguno'
-      reg.horaMarcacion = ''
-      reg.horasTardanza = 0
-      reg.tiempoTardanza = '0 horas'
-    }
+  if (!reg) return
+
+  if (reg.subidoSofia) {
+    showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
+    return
   }
+
+  reg.excusa = !reg.excusa
+  if (reg.excusa) {
+    reg.estado = 'Excusada'
+  } else {
+    reg.estado = 'Ninguno'
+    reg.horaMarcacion = ''
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+  }
+
+  autoGuardarBorrador()
 }
+
 
 async function guardarAsistenciaDia() {
   if (jornadaInhabilitada.value) {
@@ -517,6 +627,7 @@ async function guardarAsistenciaDia() {
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
   let exitosos = 0
   let errores = 0
+  const fallidosParaOffline = []
 
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
@@ -540,32 +651,41 @@ async function guardarAsistenciaDia() {
       }
     }
 
+    const itemAsistencia = {
+      estudianteId: est._id,
+      fichaId: fichaSeleccionada.value._id,
+      estado: estadoFinal,
+      fecha: hoy,
+      hora: horaMarcada,
+      horasTardanza: hTardanza,
+      tiempoTardanza: tTardanza,
+      instructorId: usuario.value.id || null,
+    }
+
     try {
-      await api.asistencias.create({
-        estudianteId: est._id,
-        fichaId: fichaSeleccionada.value._id,
-        estado: estadoFinal,
-        fecha: hoy,
-        hora: horaMarcada,
-        horasTardanza: hTardanza,
-        tiempoTardanza: tTardanza,
-        instructorId: usuario.value.id || null,
-      })
+      await api.asistencias.create(itemAsistencia)
       exitosos++
     } catch (err) {
       errores++
+      fallidosParaOffline.push(itemAsistencia)
       console.error(`Error asistencia ${est.nombres}:`, err.message)
     }
   }
 
-  await cargarDatosFicha(fichaSeleccionada.value._id)
-  guardandoAsistencia.value = false
-
   if (errores === 0) {
+    draftStore.limpiarBorrador(fichaSeleccionada.value._id, hoy)
+    await cargarDatosFicha(fichaSeleccionada.value._id)
     showToast(`Jornada finalizada. Asistencias guardadas exitosamente.`)
   } else {
-    showToast(`${exitosos} guardados, ${errores} con error`, 'warning')
+    // Si hubo errores (ej: fallo de conexión/internet), encolar en Pinia offline
+    draftStore.encolarOffline(fallidosParaOffline)
+    showToast(
+      `${exitosos} guardados. ${errores} guardados localmente por corte de conexión (se enviarán automáticamente al reconectar).`,
+      'warning'
+    )
   }
+
+  guardandoAsistencia.value = false
 }
 
 // Contadores de asistencia del día
@@ -591,446 +711,6 @@ const conteoAsistencia = computed(() => {
 })
 
 
-
-// =============================================
-// SEMÁFORO DE ESTADO (WS SERVIDORES + LECTORES USB)
-// =============================================
-const wsConectado = ref(false)
-const sdkBackendActivo = ref(false)
-const lectorConectado = ref(false)
-const sdkCargando = ref(true)
-const estadoLector = ref('Verificando Lector USB...')
-
-let fpSdk = null
-let currentReaderUid = ''
-let capturing = false
-let sdkInitIntentos = 0
-let currentFormat = null
-let modoCaptura = 'enrolamiento' // 'enrolamiento' o 'asistencia'
-
-// Estado de verificación biométrica para asistencia
-const verificandoHuella = ref(false)
-const ultimaVerificacion = ref(null)
-
-async function verificarConexionServidor() {
-  if (!ENROLAMIENTO_EN_PANEL) return
-  try {
-    const res = await api.estudiantes.fingerprint.status()
-    wsConectado.value = true
-    sdkBackendActivo.value = !!(res && res.sdkAvailable)
-  } catch (err) {
-    wsConectado.value = false
-    sdkBackendActivo.value = false
-  }
-}
-
-function verificarEstadoLectorUSB() {
-  if (!ENROLAMIENTO_EN_PANEL) return
-  if (!fpSdk || capturing || enrolando.value) return // No consultar durante captura o enrolamiento para no interrumpir la transmisión de datos
-
-  fpSdk.enumerateDevices().then(function (readers) {
-    sdkCargando.value = false
-    if (readers && readers.length > 0) {
-      currentReaderUid = readers[0]
-      lectorConectado.value = true
-      estadoLector.value = `Lector USB Conectado (${readers.length} dispositivo detectado)`
-    } else {
-      currentReaderUid = ''
-      lectorConectado.value = false
-      estadoLector.value = 'Sin lector de huellas USB'
-    }
-  }, function (error) {
-    sdkCargando.value = false
-    lectorConectado.value = false
-    currentReaderUid = ''
-    estadoLector.value = 'Servicio local de huellas no responde'
-  })
-}
-
-function initFingerprintSDK() {
-  if (!ENROLAMIENTO_EN_PANEL) return
-  sdkInitIntentos++
-  console.log('[FP SDK] Intento', sdkInitIntentos, '- verificando Fingerprint global...')
-
-  if (typeof Fingerprint === 'undefined') {
-    console.warn('[FP SDK] Fingerprint global no definido aun.')
-    sdkCargando.value = true
-    estadoLector.value = 'SDK no cargado - scripts faltantes'
-    if (sdkInitIntentos < 10) {
-      setTimeout(initFingerprintSDK, 1000)
-    } else {
-      sdkCargando.value = false
-      lectorConectado.value = false
-      estadoLector.value = 'SDK no disponible tras varios intentos'
-    }
-    return
-  }
-
-  console.log('[FP SDK] Fingerprint global OK, creando WebApi...')
-  try {
-    fpSdk = new Fingerprint.WebApi()
-    console.log('[FP SDK] WebApi creado:', fpSdk)
-  } catch (e) {
-    console.error('[FP SDK] Error al crear WebApi:', e.message)
-    sdkCargando.value = false
-    lectorConectado.value = false
-    estadoLector.value = 'Error al inicializar SDK: ' + e.message
-    return
-  }
-
-  fpSdk.onDeviceConnected = function (e) {
-    console.log('[FP SDK] Dispositivo conectado:', e)
-    if (e && e.deviceUid) currentReaderUid = e.deviceUid
-    lectorConectado.value = true
-    sdkCargando.value = false
-    estadoLector.value = 'Lector conectado - U.are.U 4500'
-  }
-
-  fpSdk.onDeviceDisconnected = function (e) {
-    console.log('[FP SDK] Dispositivo desconectado:', e)
-    lectorConectado.value = false
-    currentReaderUid = ''
-    estadoLector.value = 'Lector desconectado'
-  }
-
-  fpSdk.onCommunicationFailed = function (e) {
-    console.error('[FP SDK] Error de comunicacion:', e)
-    estadoLector.value = 'Error de comunicacion con el lector'
-    lectorConectado.value = false
-    sdkCargando.value = false
-  }
-
-  fpSdk.onSamplesAcquired = function (s) {
-    console.log('[FP SDK] Muestra adquirida, modo:', modoCaptura)
-    detenerCapturaSDK()
-    try {
-      const samples = JSON.parse(s.samples)
-      if (!samples || samples.length === 0) {
-        console.warn('[FP SDK] No hay samples en la respuesta')
-        return
-      }
-      const imgSrc = 'data:image/png;base64,' + Fingerprint.b64UrlTo64(samples[0])
-      console.log('[FP SDK] PNG generado, size:', imgSrc.length)
-      if (modoCaptura === 'asistencia') {
-        procesarVerificacionAsistencia(imgSrc)
-      } else {
-        enviarCapturaAlBackend(imgSrc)
-      }
-    } catch (e) {
-      console.error('[FP SDK] Error procesando muestra:', e.message)
-    }
-  }
-
-  fpSdk.onQualityReported = function (e) {
-    console.log('[FP SDK] Calidad reportada:', e.quality)
-  }
-
-  console.log('[FP SDK] Enumerando dispositivos...')
-  fpSdk.enumerateDevices().then(function (readers) {
-    console.log('[FP SDK] Dispositivos encontrados:', readers)
-    sdkCargando.value = false
-    if (readers && readers.length > 0) {
-      currentReaderUid = readers[0]
-      lectorConectado.value = true
-      estadoLector.value = 'Lector U.are.U 4500 listo (' + readers.length + ' dispositivo(s))'
-    } else {
-      estadoLector.value = 'No se detecto lector de huellas. ¿DigitalPersona Agent corriendo?'
-      lectorConectado.value = false
-    }
-  }, function (error) {
-    console.error('[FP SDK] Error al enumerar:', error)
-    sdkCargando.value = false
-    estadoLector.value = 'Error al buscar dispositivos: ' + (error.message || error)
-    lectorConectado.value = false
-  })
-}
-
-function iniciarCapturaSDK() {
-  console.log('[FP SDK] iniciarCapturaSDK - capturing:', capturing, 'readerUid:', currentReaderUid)
-  if (capturing) {
-    console.warn('[FP SDK] Ya esta capturando')
-    return
-  }
-  if (!currentReaderUid) {
-    console.log('[FP SDK] No hay readerUid, re-enumerando...')
-    fpSdk.enumerateDevices().then(function (readers) {
-      if (readers && readers.length > 0) {
-        currentReaderUid = readers[0]
-        lectorConectado.value = true
-        estadoLector.value = 'Lector listo'
-        iniciarCapturaSDK()
-      } else {
-        showToast('Lector no detectado. Verifique la conexion USB y el DigitalPersona Agent.', 'error')
-      }
-    })
-    return
-  }
-
-  console.log('[FP SDK] Iniciando adquisicion en', currentReaderUid, 'formato: PngImage')
-  currentFormat = Fingerprint.SampleFormat.PngImage
-  fpSdk.startAcquisition(currentFormat, currentReaderUid).then(function () {
-    console.log('[FP SDK] Adquisicion iniciada OK')
-    capturing = true
-  }, function (error) {
-    console.error('[FP SDK] Error al iniciar adquisicion:', error)
-    showToast('Error al iniciar captura: ' + (error.message || error), 'error')
-  })
-}
-
-function detenerCapturaSDK() {
-  if (!capturing || !fpSdk) return
-  console.log('[FP SDK] Deteniendo captura...')
-  fpSdk.stopAcquisition().then(function () {
-    console.log('[FP SDK] Captura detenida')
-    capturing = false
-  }, function (e) {
-    console.warn('[FP SDK] Error al detener:', e)
-    capturing = false
-  })
-}
-
-// =============================================
-// VERIFICACIÓN BIOMÉTRICA PARA ASISTENCIA
-// =============================================
-function iniciarVerificacionHuella() {
-  if (!ENROLAMIENTO_EN_PANEL) return
-  if (!fpSdk || !lectorConectado.value) {
-    showToast('El lector de huellas no está conectado.', 'error')
-    return
-  }
-  if (!fichaSeleccionada.value) {
-    showToast('Selecciona una ficha primero.', 'error')
-    return
-  }
-  verificandoHuella.value = true
-  ultimaVerificacion.value = null
-  modoCaptura = 'asistencia'
-  showToast('Coloque el dedo en el lector para registrar asistencia...', 'info')
-  iniciarCapturaSDK()
-}
-
-function detenerVerificacionHuella() {
-  detenerCapturaSDK()
-  verificandoHuella.value = false
-  modoCaptura = 'enrolamiento'
-}
-
-async function procesarVerificacionAsistencia(imageBase64) {
-  try {
-    const fichaId = fichaSeleccionada.value._id
-    const result = await api.estudiantes.fingerprint.verify(imageBase64, fichaId)
-
-    if (result.match) {
-      // Encontró al estudiante: marcarlo como presente
-      const estId = result.studentId
-      const nombre = `${result.nombres} ${result.apellidos}`
-      
-      // Verificar que el estudiante pertenece a esta ficha
-      const estudianteEnFicha = estudiantesFicha.value.find(e => e._id === estId)
-      if (estudianteEnFicha) {
-        const reg = asistenciaDia.value[estId]
-        if (reg && (reg.estado === 'Presente' || reg.estado === 'Tardanza')) {
-          // Ya está marcado, no desmarcar
-          ultimaVerificacion.value = {
-            exito: true,
-            nombre: nombre,
-            estado: reg.estado,
-            hora: reg.horaMarcacion,
-          }
-          showToast(`${nombre} ya estaba marcado como ${reg.estado}.`, 'info')
-        } else {
-          // Marcar como presente
-          marcarPresente(estId)
-          ultimaVerificacion.value = {
-            exito: true,
-            nombre: nombre,
-            estado: asistenciaDia.value[estId]?.estado || 'Presente',
-            hora: asistenciaDia.value[estId]?.horaMarcacion || '',
-          }
-          showToast(`${nombre} - ${asistenciaDia.value[estId]?.estado} (${asistenciaDia.value[estId]?.horaMarcacion})`, 'success')
-        }
-      } else {
-        ultimaVerificacion.value = {
-          exito: false,
-          nombre: nombre,
-          mensaje: 'Estudiante identificado pero no pertenece a esta ficha.',
-        }
-        showToast(`${nombre} no pertenece a esta ficha.`, 'warning')
-      }
-    } else {
-      ultimaVerificacion.value = {
-        exito: false,
-        nombre: null,
-        mensaje: 'Huella no reconocida. El estudiante puede no estar enrolado.',
-      }
-      showToast('Huella no reconocida. Intente de nuevo.', 'error')
-    }
-  } catch (err) {
-    console.error('[Verificacion] Error:', err)
-    ultimaVerificacion.value = {
-      exito: false,
-      nombre: null,
-      mensaje: 'Error al verificar: ' + err.message,
-    }
-    showToast('Error al verificar huella: ' + err.message, 'error')
-  }
-
-  // Si el modo asistencia sigue activo, reactivar captura para el siguiente estudiante
-  if (verificandoHuella.value) {
-    setTimeout(() => {
-      showToast('Lector listo para el siguiente estudiante...', 'info')
-      iniciarCapturaSDK()
-    }, 1500)
-  }
-}
-
-// =============================================
-// ENROLAMIENTO DE HUELLAS - SDK REAL
-// =============================================
-const showEnrolarModal = ref(false)
-const estudianteTarget = ref(null)
-const pasoEnrolamiento = ref(1)
-const capturasCompletadas = ref(0)
-const enrolando = ref(false)
-const enrollmentSessionId = ref(null)
-const dedoSeleccionado = ref('indice_derecho')
-
-const sdkDisponible = computed(() => {
-  return !!(lectorConectado.value && !sdkCargando.value)
-})
-
-const DEDOS = [
-  { value: 'pulgar_derecho', label: 'Pulgar Derecho' },
-  { value: 'indice_derecho', label: 'Índice Derecho' },
-  { value: 'medio_derecho', label: 'Medio Derecho' },
-  { value: 'anular_derecho', label: 'Anular Derecho' },
-  { value: 'menique_derecho', label: 'Meñique Derecho' },
-  { value: 'pulgar_izquierdo', label: 'Pulgar Izquierdo' },
-  { value: 'indice_izquierdo', label: 'Índice Izquierdo' },
-  { value: 'medio_izquierdo', label: 'Medio Izquierdo' },
-  { value: 'anular_izquierdo', label: 'Anular Izquierdo' },
-  { value: 'menique_izquierdo', label: 'Meñique Izquierdo' },
-]
-
-function abrirModalEnrolamiento(estudiante) {
-  if (!ENROLAMIENTO_EN_PANEL) return
-  estudianteTarget.value = estudiante
-  pasoEnrolamiento.value = 1
-  capturasCompletadas.value = 0
-  enrolando.value = false
-  dedoSeleccionado.value = estudiante.dedoEnrolado || 'indice_derecho'
-  modoCaptura = 'enrolamiento'
-  showEnrolarModal.value = true
-  verificarEstadoLectorUSB()
-}
-
-async function iniciarEnrolamientoReal() {
-  if (!lectorConectado.value) {
-    showToast('El lector de huellas USB no está conectado.', 'error')
-    return
-  }
-  if (!estudianteTarget.value) return
-
-  enrolando.value = true
-  pasoEnrolamiento.value = 2
-  capturasCompletadas.value = 0
-  modoCaptura = 'enrolamiento'
-
-  try {
-    const nombre = `${estudianteTarget.value.nombres} ${estudianteTarget.value.apellidos}`
-    const doc = `${estudianteTarget.value.tipoDocumento} ${estudianteTarget.value.numeroDocumento}`
-    const res = await api.estudiantes.fingerprint.enrollStart(
-      estudianteTarget.value._id,
-      nombre,
-      doc,
-      dedoSeleccionado.value
-    )
-
-    if (!res.success && res.error) {
-      throw new Error(res.error)
-    }
-
-    enrollmentSessionId.value = res.sessionId
-    showToast('Coloque el dedo en el lector para la primera muestra...', 'info')
-    iniciarCapturaSDK()
-  } catch (err) {
-    enrolando.value = false
-    pasoEnrolamiento.value = 1
-    showToast('Error al iniciar enrolamiento: ' + err.message, 'error')
-  }
-}
-
-async function enviarCapturaAlBackend(imageBase64) {
-  if (!enrolando.value || !enrollmentSessionId.value || pasoEnrolamiento.value !== 2) return
-
-  try {
-    const res = await api.estudiantes.fingerprint.enrollCapture(
-      enrollmentSessionId.value,
-      imageBase64
-    )
-
-    if (res.error) {
-      throw new Error(res.error)
-    }
-
-    const numMuestras = res.captures || (capturasCompletadas.value + 1)
-    capturasCompletadas.value = numMuestras
-
-    // Si el SDK indica que ya tiene suficientes muestras (ready=true) o se alcanzaron 4 muestras:
-    if (res.ready || numMuestras >= 4) {
-      // 1. Detener inmediatamente el sensor USB para evitar lecturas adicionales
-      detenerCapturaSDK()
-      enrolando.value = false
-
-      // 2. Completar enrolamiento en el servidor con validación de no-duplicado
-      try {
-        const compRes = await api.estudiantes.fingerprint.enrollComplete(enrollmentSessionId.value)
-        if (compRes.success) {
-          pasoEnrolamiento.value = 3
-          showToast(`¡Huella enrolada exitosamente para ${estudianteTarget.value.nombres}!`, 'success')
-          await cargarDatosFicha(fichaSeleccionada.value._id)
-        } else {
-          throw new Error(compRes.error || 'Error al guardar plantilla biométrica')
-        }
-      } catch (compErr) {
-        pasoEnrolamiento.value = 1
-        capturasCompletadas.value = 0
-        showToast(compErr.message, 'error')
-      }
-    } else {
-      showToast(`Muestra ${numMuestras} de 4 registrada. Levante y coloque el dedo nuevamente...`, 'info')
-      setTimeout(() => {
-        if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
-          iniciarCapturaSDK()
-        }
-      }, 700)
-    }
-  } catch (err) {
-    console.error('Error al procesar muestra:', err)
-    showToast('Muestra no válida: ' + err.message + '. Intente de nuevo.', 'warning')
-    setTimeout(() => {
-      if (enrolando.value && showEnrolarModal.value && pasoEnrolamiento.value === 2) {
-        iniciarCapturaSDK()
-      }
-    }, 1000)
-  }
-}
-
-async function cancelarEnrolamiento() {
-  detenerCapturaSDK()
-  if (enrollmentSessionId.value) {
-    try {
-      await api.estudiantes.fingerprint.enrollCancel(enrollmentSessionId.value)
-    } catch (e) {}
-  }
-  enrolando.value = false
-  showEnrolarModal.value = false
-  estudianteTarget.value = null
-  pasoEnrolamiento.value = 1
-  capturasCompletadas.value = 0
-  enrollmentSessionId.value = null
-  modoCaptura = 'asistencia'
-}
 
 
 // =============================================
@@ -1277,7 +957,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'editar_asistencia'"
               title="Historial"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
+              <img :src="iconoHistorial" alt="Historial" class="tab-icon-img" width="16" height="16" />
             </button>
             <!-- BOTÓN GESTIONAR ESTUDIANTES -->
             <button
@@ -1286,7 +966,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'gestionar_estudiantes'"
               title="Gestionar Estudiantes"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
+              <img :src="iconoGestionarEstudiantes" alt="Gestionar Estudiantes" class="tab-icon-img" width="16" height="16" />
             </button>
             <button
               class="tab-btn"
@@ -1294,7 +974,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'docentes'"
               title="Equipo Docente"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3.3"/><path d="M2.5 19c1.2-3.4 3.8-5.2 6.5-5.2s5.3 1.8 6.5 5.2z"/><circle cx="17" cy="8.5" r="2.6" opacity="0.75"/><path d="M15 13.6c2.2.4 4 2 5 5H18" opacity="0.75"/></svg>
+              <img :src="iconoEquipoDocente" alt="Equipo Docente" class="tab-icon-img" width="16" height="16" />
             </button>
           </div>
         </div>
@@ -1491,23 +1171,6 @@ function descargarExcel(data, nombreArchivo) {
             </button>
           </div>
 
-          <!-- Panel de verificación biométrica activa (Solo si la sesión no está inhabilitada) -->
-          <div v-if="ENROLAMIENTO_EN_PANEL && verificandoHuella && !jornadaInhabilitada" class="biometric-panel">
-            <div class="biometric-pulse-icon"></div>
-            <div class="biometric-panel-text">
-              <strong>Lector biométrico activo</strong>
-              <span>Esperando que los estudiantes coloquen su dedo en el sensor...</span>
-            </div>
-            <div v-if="ultimaVerificacion" class="biometric-last-result" :class="{ 'result-ok': ultimaVerificacion.exito, 'result-fail': !ultimaVerificacion.exito }">
-              <span v-if="ultimaVerificacion.exito">
-                {{ ultimaVerificacion.nombre }} — {{ ultimaVerificacion.estado }} ({{ ultimaVerificacion.hora }})
-              </span>
-              <span v-else>
-                {{ ultimaVerificacion.mensaje }}
-              </span>
-            </div>
-          </div>
-
           <!-- Contadores rápidos -->
           <div class="conteo-row">
             <div v-if="jornadaInhabilitada" class="conteo-chip" style="background: #ffedd5; color: #9a3412; border: 1.5px solid #fdba74; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
@@ -1543,6 +1206,7 @@ function descargarExcel(data, nombreArchivo) {
                   <th>Excusa (F2F)</th>
                   <th>Hora Marcación</th>
                   <th>Estado Asignado</th>
+                  <th class="th-horas">Horas Fallidas</th>
                 </tr>
               </thead>
               <tbody>
@@ -1551,22 +1215,22 @@ function descargarExcel(data, nombreArchivo) {
                   <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="jornadaInhabilitada ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza'"
-                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada"
+                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                         @change="marcarPresente(est._id)"
                       />
                       <span class="checkbox-custom radio-presente"></span>
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="jornadaInhabilitada ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
-                        :disabled="jornadaInhabilitada"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                         @change="toggleExcusa(est._id)"
                       />
                       <span class="checkbox-custom"></span>
@@ -1576,7 +1240,11 @@ function descargarExcel(data, nombreArchivo) {
                     {{ jornadaInhabilitada ? '—' : (asistenciaDia[est._id]?.horaMarcacion || '—') }}
                   </td>
                   <td>
-                    <span v-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
+                    <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge" style="background: #ecfdf5; color: #047857; border: 1px solid #10b981; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" title="Inasistencia ya reportada en Sofia Plus. Bloqueada para edición.">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      Reportado Sofia Plus ({{ asistenciaDia[est._id]?.estado }})
+                    </span>
+                    <span v-else-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
                       Inhabilitada
                     </span>
@@ -1597,9 +1265,29 @@ function descargarExcel(data, nombreArchivo) {
                       Falta (Automática)
                     </span>
                   </td>
+                  <td class="td-horas">
+                    <div class="horas-wrap">
+                      <input
+                        type="number"
+                        class="input-horas"
+                        :class="{ 'input-horas-activo': (asistenciaDia[est._id]?.horasFallidas || 0) > 0 }"
+                        min="0"
+                        :max="horasClaseFicha"
+                        step="1"
+                        inputmode="numeric"
+                        :value="asistenciaDia[est._id]?.horasFallidas || 0"
+                        :disabled="jornadaInhabilitada"
+                        :title="`Horas fallidas (máximo ${horasClaseFicha})`"
+                        @keydown="bloquearNoEnteros"
+                        @input="onHorasInput(est._id, $event)"
+                        @change="onHorasChange(est._id, $event)"
+                      />
+                      <span class="horas-max">/ {{ horasClaseFicha }}</span>
+                    </div>
+                  </td>
                 </tr>
                 <tr v-if="estudiantesFicha.length === 0">
-                  <td colspan="6" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
+                  <td colspan="7" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
                 </tr>
               </tbody>
             </table>
@@ -1626,18 +1314,34 @@ function descargarExcel(data, nombreArchivo) {
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
                   </div>
                   <div class="mob-status-badge">
-                    <span v-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
+                    <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
+                    <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
                     <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge-mob-pres">Presente</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
                     <span v-else class="badge-mob-falta">Falta</span>
                   </div>
                 </div>
-
                 <div class="mob-card-footer">
                   <div class="mob-time-info">
                     <span class="time-label">Hora:</span>
                     <span class="time-val">{{ jornadaInhabilitada ? '—' : (asistenciaDia[est._id]?.horaMarcacion || 'Sin registro') }}</span>
+                    <span class="time-label" style="margin-left: 6px;">Fallidas:</span>
+                    <input
+                      type="number"
+                      class="input-horas input-horas-mob"
+                      :class="{ 'input-horas-activo': (asistenciaDia[est._id]?.horasFallidas || 0) > 0 }"
+                      min="0"
+                      :max="horasClaseFicha"
+                      step="1"
+                      inputmode="numeric"
+                      :value="asistenciaDia[est._id]?.horasFallidas || 0"
+                      :disabled="jornadaInhabilitada"
+                      @keydown="bloquearNoEnteros"
+                      @input="onHorasInput(est._id, $event)"
+                      @change="onHorasChange(est._id, $event)"
+                    />
+                    <span class="horas-max">/ {{ horasClaseFicha }}</span>
                   </div>
 
                   <div class="mob-actions-row">
@@ -1646,7 +1350,7 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-presente"
                       :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
-                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada"
+                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                       @click="marcarPresente(est._id)"
                       title="Marcar presente"
                     >
@@ -1658,7 +1362,7 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-excusa"
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
-                      :disabled="jornadaInhabilitada"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
                       @click="toggleExcusa(est._id)"
                       title="Registrar excusa"
                     >
@@ -1674,6 +1378,18 @@ function descargarExcel(data, nombreArchivo) {
           </div>
 
           <div class="action-bar" v-if="estudiantesFicha.length > 0">
+            <!-- Indicador de cola offline si hay asistencias pendientes por enviar -->
+            <button
+              v-if="draftStore.pendientesOfflineCount > 0"
+              class="btn"
+              @click="onConexionRecuperada"
+              title="Haz clic para intentar sincronizar las asistencias guardadas localmente"
+              style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px;"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>{{ draftStore.pendientesOfflineCount }} offline (Reintentar envío)</span>
+            </button>
+
             <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>

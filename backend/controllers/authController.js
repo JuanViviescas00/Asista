@@ -4,6 +4,7 @@ import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import { generarToken } from '../middlewares/auth.js'
 import { hashPassword, verifyAndUpgradePassword } from '../services/passwordService.js'
+import { enviarCorreoRecuperacion, enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 
 export async function login(req, res) {
   try {
@@ -43,6 +44,31 @@ export async function login(req, res) {
         return res.status(403).json({ error: 'Tu cuenta de instructor se encuentra inactiva' })
       }
       if (!password) {
+        // Si no se proporcionó contraseña (consulta desde pestaña Aprendiz),
+        // verificar si el identificador corresponde a un Aprendiz antes de fallar
+        const estudianteFallback = await Estudiante.findOne({
+          $or: [{ numeroDocumento: identificador }, { correo: identificador }]
+        })
+        if (estudianteFallback) {
+          if (estudianteFallback.estado !== 'Activo') {
+            return res.status(403).json({ error: `Tu cuenta de aprendiz se encuentra en estado ${estudianteFallback.estado}` })
+          }
+          const nombreCompleto = `${estudianteFallback.nombres} ${estudianteFallback.apellidos}`
+          const payload = {
+            id: estudianteFallback._id,
+            nombre: nombreCompleto,
+            correo: estudianteFallback.correo,
+            rol: 'Estudiante',
+            estudianteId: estudianteFallback._id
+          }
+          const token = generarToken(payload)
+          return res.json({
+            ok: true,
+            token,
+            usuario: payload,
+            admin: payload
+          })
+        }
         return res.status(400).json({ error: 'Contraseña requerida para cuenta de Instructor' })
       }
       const passOk = await verifyAndUpgradePassword(instructor, password)
@@ -115,20 +141,51 @@ export async function getPerfil(req, res) {
 export async function updatePerfil(req, res) {
   try {
     const { nombre, telefono, correo, password } = req.body
-    let admin = await Admin.findOne()
-    if (!admin) {
-      const passHash = password ? await hashPassword(password) : await hashPassword('sena2026ADSO')
-      admin = new Admin({ nombre, telefono, correo, password: passHash })
-    } else {
-      if (nombre !== undefined) admin.nombre = nombre
-      if (telefono !== undefined) admin.telefono = telefono
-      if (correo !== undefined) admin.correo = correo
-      if (password) {
-        admin.password = await hashPassword(password)
-      }
+    const usuarioId = req.usuario?.id
+    if (!usuarioId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' })
     }
-    await admin.save()
-    res.json({ ok: true, perfil: { nombre: admin.nombre, rol: admin.rol, telefono: admin.telefono, correo: admin.correo } })
+
+    let usuario = null
+    if (req.usuario.rol === 'Administrador') {
+      usuario = await Admin.findById(usuarioId)
+    } else if (req.usuario.rol === 'Instructor') {
+      usuario = await Instructor.findById(usuarioId)
+    }
+
+    if (!usuario) {
+      return res.status(404).json({ error: 'Usuario no encontrado' })
+    }
+
+    if (nombre !== undefined) {
+      if (usuario.nombre !== undefined) usuario.nombre = nombre
+      if (usuario.nombres !== undefined) usuario.nombres = nombre
+    }
+    if (telefono !== undefined) usuario.telefono = telefono
+    if (correo !== undefined) usuario.correo = correo
+    if (password) {
+      usuario.password = await hashPassword(password)
+    }
+
+    await usuario.save()
+
+    if (password && usuario.correo) {
+      const nombreUsuario = usuario.nombre || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Usuario'
+      enviarCorreoConfirmacionCambioPassword(usuario.correo, nombreUsuario).catch(err => {
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña (perfil):', err.message)
+      })
+    }
+
+    res.json({
+      ok: true,
+      perfil: {
+        id: usuario._id,
+        nombre: usuario.nombre || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim(),
+        rol: usuario.rol,
+        telefono: usuario.telefono,
+        correo: usuario.correo
+      }
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -137,16 +194,33 @@ export async function updatePerfil(req, res) {
 export async function recoveryCode(req, res) {
   try {
     const { correo } = req.body
-    const admin = await Admin.findOne({ correo })
-    const instructor = await Instructor.findOne({ correo })
-    const estudiante = await Estudiante.findOne({ correo })
+    if (!correo) return res.status(400).json({ error: 'Correo requerido' })
 
-    if (!admin && !instructor && !estudiante) {
+    const correoLimpio = String(correo).trim().toLowerCase()
+    const admin = await Admin.findOne({ correo: correoLimpio })
+    const instructor = await Instructor.findOne({ correo: correoLimpio })
+
+    const usuario = admin || instructor
+    if (!usuario) {
       return res.status(404).json({ error: 'No existe una cuenta asociada a este correo electrónico' })
     }
 
+    // Generar PIN aleatorio seguro de 6 dígitos y almacenarlo hasheado con expiración
     const codigo = String(Math.floor(100000 + Math.random() * 900000))
-    res.json({ ok: true, codigo, expira: Date.now() + 10 * 60 * 1000 })
+    usuario.codigoRecuperacion = await hashPassword(codigo)
+    usuario.expiraCodigoRecuperacion = new Date(Date.now() + 10 * 60 * 1000)
+    await usuario.save()
+
+    // Enviar código exclusivamente por correo electrónico institucional
+    try {
+      await enviarCorreoRecuperacion(correoLimpio, codigo)
+    } catch (emailErr) {
+      console.error('[Email] Error al enviar correo de recuperación:', emailErr.message)
+      return res.status(500).json({ error: 'No se pudo enviar el correo de recuperación. Revisa la configuración del servidor SMTP.' })
+    }
+
+    // NUNCA divulgar el código en la respuesta HTTP
+    res.json({ ok: true, message: 'Código de recuperación enviado a tu correo electrónico.' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -154,34 +228,55 @@ export async function recoveryCode(req, res) {
 
 export async function resetPassword(req, res) {
   try {
-    const { correo, nuevaPassword } = req.body
-    if (!correo || !nuevaPassword) {
-      return res.status(400).json({ error: 'Correo y nueva contraseña requeridos' })
+    const { correo, codigo, nuevaPassword } = req.body
+    if (!correo || !codigo || !nuevaPassword) {
+      return res.status(400).json({ error: 'Correo, código de verificación y nueva contraseña son requeridos' })
     }
 
     if (nuevaPassword.length < 6) {
       return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' })
     }
 
-    const nuevaHash = await hashPassword(nuevaPassword)
-    let encontrado = false
+    const correoLimpio = String(correo).trim().toLowerCase()
+    const admin = await Admin.findOne({ correo: correoLimpio })
+    const instructor = await Instructor.findOne({ correo: correoLimpio })
+    const usuario = admin || instructor
 
-    const admin = await Admin.findOne({ correo })
-    if (admin) {
-      admin.password = nuevaHash
-      await admin.save()
-      encontrado = true
+    if (!usuario) {
+      return res.status(404).json({ error: 'No se encontró ninguna cuenta asociada a este correo' })
     }
 
-    const instructor = await Instructor.findOne({ correo })
-    if (instructor) {
-      instructor.password = nuevaHash
-      await instructor.save()
-      encontrado = true
+    if (!usuario.codigoRecuperacion || !usuario.expiraCodigoRecuperacion) {
+      return res.status(400).json({ error: 'No hay una solicitud de recuperación activa para esta cuenta' })
     }
 
-    if (!encontrado) {
-      return res.status(404).json({ error: 'No se encontró ninguna cuenta de docente o administrador con este correo' })
+    if (new Date() > new Date(usuario.expiraCodigoRecuperacion)) {
+      usuario.codigoRecuperacion = null
+      usuario.expiraCodigoRecuperacion = null
+      await usuario.save()
+      return res.status(400).json({ error: 'El código de verificación ha expirado. Solicita uno nuevo.' })
+    }
+
+    // Validar el código contra el hash guardado en la base de datos
+    const codigoValido = await verifyAndUpgradePassword(
+      { password: usuario.codigoRecuperacion, save: () => {} },
+      String(codigo).trim()
+    )
+    if (!codigoValido) {
+      return res.status(400).json({ error: 'Código de verificación incorrecto' })
+    }
+
+    // Código verificado con éxito: actualizar contraseña y limpiar código
+    usuario.password = await hashPassword(nuevaPassword)
+    usuario.codigoRecuperacion = null
+    usuario.expiraCodigoRecuperacion = null
+    await usuario.save()
+
+    if (usuario.correo) {
+      const nombreUsuario = usuario.nombre || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Usuario'
+      enviarCorreoConfirmacionCambioPassword(usuario.correo, nombreUsuario).catch(err => {
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña (reset):', err.message)
+      })
     }
 
     res.json({ ok: true, message: 'Contraseña restablecida exitosamente con cifrado seguro' })
@@ -233,6 +328,13 @@ export async function cambiarPassword(req, res) {
     // 3. Hashear y guardar la nueva contraseña con bcrypt
     usuario.password = await hashPassword(nuevaPassword)
     await usuario.save()
+
+    if (usuario.correo) {
+      const nombreUsuario = usuario.nombre || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Usuario'
+      enviarCorreoConfirmacionCambioPassword(usuario.correo, nombreUsuario).catch(err => {
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña (cambiarPassword):', err.message)
+      })
+    }
 
     return res.json({ ok: true, message: '¡Contraseña actualizada exitosamente con cifrado seguro!' })
   } catch (err) {

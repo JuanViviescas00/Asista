@@ -4,7 +4,7 @@ const estudianteSchema = new mongoose.Schema({
   nombres: { type: String, required: true },
   apellidos: { type: String, required: true },
   tipoDocumento: { type: String, enum: ['CC', 'CE', 'PEP'], default: 'CC' },
-  numeroDocumento: { type: String, required: true },
+  numeroDocumento: { type: String, required: true, unique: true },
   correo: { type: String, required: true },
   telefono: { type: String, required: true },
   fichaId: { type: mongoose.Schema.Types.Mixed, ref: 'Ficha', default: null },

@@ -91,8 +91,8 @@ const api = {
     checkRecoveryEmail(correo) {
       return request('/auth/recovery-code', { method: 'POST', body: JSON.stringify({ correo }) })
     },
-    resetPassword(correo, nuevaPassword) {
-      return request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ correo, nuevaPassword }) })
+    resetPassword(correo, codigo, nuevaPassword) {
+      return request('/auth/reset-password', { method: 'POST', body: JSON.stringify({ correo, codigo, nuevaPassword }) })
     },
     cambiarPassword(body) {
       return request('/auth/cambiar-password', { method: 'POST', body: JSON.stringify(body) })
@@ -128,27 +128,7 @@ const api = {
     update(id, body) { return request(`/estudiantes/${id}`, { method: 'PUT', body: JSON.stringify(body) }) },
     enrolarHuella(id, huellaTemplate) { return request(`/estudiantes/${id}/enrolar-huella`, { method: 'PUT', body: JSON.stringify({ huellaTemplate }) }) },
     delete(id) { return request(`/estudiantes/${id}`, { method: 'DELETE' }) },
-    importar(estudiantes) { return request('/estudiantes/importar', { method: 'POST', body: JSON.stringify({ estudiantes }) }) },
-    fingerprint: {
-      enrollStart(studentId, name, documento, dedo) {
-        return request('/estudiantes/enroll-start', { method: 'POST', body: JSON.stringify({ studentId, name, documento, dedo }) })
-      },
-      enrollCapture(sessionId, image) {
-        return request('/estudiantes/enroll-capture', { method: 'POST', body: JSON.stringify({ sessionId, image }) })
-      },
-      enrollComplete(sessionId) {
-        return request('/estudiantes/enroll-complete', { method: 'POST', body: JSON.stringify({ sessionId }) })
-      },
-      enrollCancel(sessionId) {
-        return request('/estudiantes/enroll-cancel', { method: 'POST', body: JSON.stringify({ sessionId }) })
-      },
-      verify(image, fichaId) {
-        return request('/estudiantes/verify', { method: 'POST', body: JSON.stringify({ image, fichaId }) })
-      },
-      status() {
-        return request('/estudiantes/fingerprint-status')
-      }
-    }
+    importar(estudiantes) { return request('/estudiantes/importar', { method: 'POST', body: JSON.stringify({ estudiantes }) }) }
   },
 
   asistencias: {
@@ -263,27 +243,6 @@ export function iniciarAsistenciaRemota(datos) {
 
 export function cerrarAsistenciaRemota(fichaId) {
   socket.emit('docente:cerrar_asistencia', { fichaId: String(fichaId) })
-}
-
-// ------------------------------------------------------------
-// 3. CORREO (enviar código de recuperación)
-// ------------------------------------------------------------
-export async function enviarCodigoRecuperacion(correoDestino, codigo) {
-  const response = await fetch(`${BASE}/enviar-codigo`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      correo: correoDestino,
-      codigo: codigo,
-    }),
-  })
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error(data.error || 'Error al enviar el correo')
-  }
-
-  return true
 }
 
 export { api }

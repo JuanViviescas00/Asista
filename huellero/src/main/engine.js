@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { getConfig, iniciarRegistroDispositivo, tieneIdentidad, reiniciarIdentidadYRegistrar } from './config.js'
 import * as store from './store.js'
 import wsClient from './ws-client.js'
-import { capturarHuella, inicializarCaptura, cancelarCapturaActual, getDevActual } from './capture.js'
+import { capturarHuella, inicializarCaptura, cancelarCapturaActual, getDevActual, verificarLector } from './capture.js'
 import { notificarPendienteNuevo, sincronizar } from './scheduler.js'
 import { identificarEstudiante } from '../verify.js'
 import * as fingerprint from '../fingerprint.js'
@@ -15,6 +15,8 @@ let enrolamientoCancelado = false
 let plantillasRetryTimer = null
 let plantillasFichaActual = null
 let descargandoPlantillas = false
+let lectorEstado = null
+let lectorInterval = null
 
 export function setOnEstadoChange(cb) {
   onEstadoChange = cb
@@ -45,9 +47,41 @@ function notificarProgresoEnrolamiento(payload) {
   if (onEnrolarProgreso) onEnrolarProgreso(payload)
 }
 
+function leerEstadoLector() {
+  // No consultar el lector mientras hay una captura en curso (el dispositivo está abierto).
+  if (getDevActual()) return
+
+  let nuevo = verificarLector()
+  // El motor de matching (dpfj.dll) también debe estar disponible para operar.
+  if (nuevo.estado === 'ok' && !fingerprint.isAvailable()) {
+    nuevo = { estado: 'error', detalle: 'Motor biométrico no disponible (dpfj.dll)' }
+  }
+
+  // Solo reemitir el estado cuando realmente cambia, no en cada ciclo.
+  if (JSON.stringify(nuevo) !== JSON.stringify(lectorEstado)) {
+    lectorEstado = nuevo
+    notificarEstado()
+  }
+}
+
+function iniciarMonitorLector() {
+  detenerMonitorLector()
+  leerEstadoLector()
+  lectorInterval = setInterval(leerEstadoLector, 5000)
+}
+
+export function detenerMonitorLector() {
+  if (lectorInterval) {
+    clearInterval(lectorInterval)
+    lectorInterval = null
+  }
+}
+
 export async function init() {
   await store.init()
   inicializarCaptura()
+  store.setOnPendientesChange(notificarEstado)
+  iniciarMonitorLector()
   fingerprint.setMatchThreshold(getConfig().BIOMETRIC_MATCH_THRESHOLD)
   wsClient.onConnectionChange(notificarEstado)
   wsClient.onConnectionChange((conectado) => {
@@ -102,9 +136,12 @@ export async function init() {
 export function getStatus() {
   return {
     online: wsClient.isConnected(),
+    listo: wsClient.isListo(),
     claseActiva: store.getClaseActiva() || null,
     dispositivoRegistrado: tieneIdentidad(),
     ultimoRechazo: wsClient.getUltimoRechazo(),
+    pendientes: store.getPendientes().length,
+    lector: lectorEstado,
     docente: docente
       ? {
           id: docente.id,
@@ -129,19 +166,22 @@ async function descargarPlantillas(fichaId) {
   if (descargandoPlantillas) return
 
   const { backendUrl, deviceId, token } = getConfig()
-  if (!deviceId || !token) {
+  if (!deviceId && !token && !docente?.token) {
     programarReintentoPlantillas(fichaId)
     return
   }
 
   descargandoPlantillas = true
   try {
+    const headers = { ...headersDocente() }
+    if (deviceId && token) {
+      headers['x-device-id'] = String(deviceId)
+      headers['x-device-token'] = String(token)
+    }
+
     const res = await fetch(`${backendUrl}/api/fichas/${encodeURIComponent(fichaId)}/plantillas`, {
-      headers: {
-        'x-device-id': String(deviceId),
-        'x-device-token': String(token),
-      },
-      signal: AbortSignal.timeout(10000),
+      headers,
+      signal: AbortSignal.timeout(25000),
     })
 
     if (!res.ok) {
@@ -379,6 +419,16 @@ export async function getFichasLider() {
   return { ok: true, fichas: fichasLider }
 }
 
+// Solo se muestran aprendices "Activo". Se tolera que el campo estado no exista o
+// esté vacío (documentos antiguos); se excluye cualquier otro valor ("Inactivo", "Retirado", etc.).
+function esEstudianteActivo(estudiante) {
+  const estado = estudiante?.estado
+  if (estado == null) return true
+  const normalizado = String(estado).trim().toLowerCase()
+  if (normalizado === '') return true
+  return normalizado === 'activo'
+}
+
 export async function getEstudiantesFicha(fichaId) {
   if (!fichaId) {
     return { ok: false, error: 'Ficha no especificada' }
@@ -398,7 +448,8 @@ export async function getEstudiantesFicha(fichaId) {
   }
 
   const estudiantes = await res.json().catch(() => null)
-  return { ok: true, estudiantes: Array.isArray(estudiantes) ? estudiantes : [] }
+  const lista = Array.isArray(estudiantes) ? estudiantes.filter(esEstudianteActivo) : []
+  return { ok: true, estudiantes: lista }
 }
 
 function headersDocente() {
@@ -491,21 +542,37 @@ export async function guardarTemplate({ estudianteId, fichaId, dedo, template, s
     return { ok: false, error: 'Faltan datos para guardar la huella' }
   }
 
-  const { backendUrl } = getConfig()
+  const { backendUrl, deviceId, token } = getConfig()
 
   const body = { estudianteId, fichaId, dedo, template }
   if (slot != null) body.slot = slot
 
+  const headers = { 'Content-Type': 'application/json', ...headersDocente() }
+  if (deviceId && token) {
+    headers['x-device-id'] = String(deviceId)
+    headers['x-device-token'] = String(token)
+  }
+
+  async function enviarPeticion(timeoutMs) {
+    return fetch(`${backendUrl}/api/enrolamiento/guardar`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  }
+
   let res
   try {
-    res = await fetch(`${backendUrl}/api/enrolamiento/guardar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
-    })
+    res = await enviarPeticion(25000)
   } catch {
-    return { ok: false, error: 'Sin conexión: no se pudo guardar la huella' }
+    // Si Render está en frío (cold start) o hay latencia de red, esperar 3s y reintentar
+    await esperar(3000)
+    try {
+      res = await enviarPeticion(35000)
+    } catch {
+      return { ok: false, error: 'Sin conexión con el servidor. Verifica tu conexión e intenta de nuevo.' }
+    }
   }
 
   const data = await res.json().catch(() => null)
@@ -577,6 +644,7 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, s
           notificarProgresoEnrolamiento({ fase: 'cancelado', actual, total, mensaje: 'Enrolamiento cancelado por fallos consecutivos' })
           return { ok: false, error: `No se pudo capturar una huella válida: ${motivo}` }
         }
+        await esperar(300) // Breve pausa no bloqueante para desahogar el bus USB
         continue // reintenta la MISMA captura (no avanza el contador)
       }
 
@@ -659,6 +727,7 @@ export async function enrolarEstudiante({ estudianteId, fichaId, dedo, nombre, s
     const guardado = await guardarTemplate({ estudianteId, fichaId, dedo, template: completo.template, slot })
 
     if (guardado.ok) {
+      descargarPlantillas(fichaId).catch(() => {})
       notificarProgresoEnrolamiento({ fase: 'completado', actual, total, mensaje: 'Huella registrada correctamente' })
     }
     return guardado

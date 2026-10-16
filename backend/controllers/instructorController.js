@@ -2,8 +2,10 @@ import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
-import { hashPassword } from '../services/passwordService.js'
+import SofiaPlusSync from '../models/SofiaPlusSync.js'
+import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
+import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -30,12 +32,12 @@ export async function getInstructores(req, res) {
     const resultado = instructores.map(inst => {
       const obj = inst.toObject()
       delete obj.password // No exponer el hash en la respuesta
-      if (obj.passwordSofiaPlus) {
-        obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
-      }
+      const tienePasswordSofia = Boolean(obj.passwordSofiaPlus)
+      delete obj.passwordSofiaPlus // Proteger credenciales externas
       const esLiderEnFicha = idsLideres.has(String(inst._id))
       return {
         ...obj,
+        tienePasswordSofia,
         esLider: !!(inst.esLider || esLiderEnFicha)
       }
     })
@@ -49,7 +51,10 @@ export async function getInstructores(req, res) {
 export async function createInstructor(req, res) {
   try {
     const data = { ...req.body }
-    const clavePlana = data.password || 'sena2026'
+    const clavePlana = data.password || claveInicialInstructor(data.numeroDocumento)
+    if (String(clavePlana).length < 6) {
+      return res.status(400).json({ error: 'La contraseña inicial no es válida: el número de documento normalizado debe tener al menos 6 caracteres. Asigna una contraseña manual.' })
+    }
     data.password = await hashPassword(clavePlana)
 
     if (data.passwordSofiaPlus) {
@@ -61,17 +66,32 @@ export async function createInstructor(req, res) {
 
     const obj = instructor.toObject()
     delete obj.password
-    if (obj.passwordSofiaPlus) {
-      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
-    }
+    const tienePasswordSofia = Boolean(obj.passwordSofiaPlus)
+    delete obj.passwordSofiaPlus
+    obj.tienePasswordSofia = tienePasswordSofia
     res.status(201).json(obj)
   } catch (err) {
+    if (err.code === 11000) {
+      const campo = Object.keys(err.keyPattern || {})[0] || 'documento o correo'
+      return res.status(400).json({ error: `Ya existe un instructor registrado con ese ${campo === 'correo' ? 'correo electrónico' : 'número de documento'}.` })
+    }
     res.status(500).json({ error: err.message })
   }
 }
 
 export async function updateInstructor(req, res) {
   try {
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    if (!esAdmin) {
+      if (String(req.usuario.id) !== String(req.params.id)) {
+        return res.status(403).json({ error: 'Solo puedes actualizar tu propio perfil de instructor' })
+      }
+      delete req.body.esLider
+      delete req.body.rol
+      delete req.body.fichas
+      delete req.body.activo
+    }
+
     const data = { ...req.body }
     if (data.password) {
       data.password = await hashPassword(data.password)
@@ -86,13 +106,24 @@ export async function updateInstructor(req, res) {
     const instructor = await Instructor.findByIdAndUpdate(req.params.id, data, { new: true })
     if (!instructor) return res.status(404).json({ error: 'Instructor no encontrado' })
 
+    if (req.body.password && instructor.correo) {
+      const nombreInst = `${instructor.nombres || ''} ${instructor.apellidos || ''}`.trim() || 'Instructor'
+      enviarCorreoConfirmacionCambioPassword(instructor.correo, nombreInst).catch(err => {
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña (instructor):', err.message)
+      })
+    }
+
     const obj = instructor.toObject()
     delete obj.password
-    if (obj.passwordSofiaPlus) {
-      obj.passwordSofiaPlus = decrypt(obj.passwordSofiaPlus)
-    }
+    const tienePasswordSofia = Boolean(obj.passwordSofiaPlus)
+    delete obj.passwordSofiaPlus
+    obj.tienePasswordSofia = tienePasswordSofia
     res.json(obj)
   } catch (err) {
+    if (err.code === 11000) {
+      const campo = Object.keys(err.keyPattern || {})[0] || 'documento o correo'
+      return res.status(400).json({ error: `Ya existe otro instructor registrado con ese ${campo === 'correo' ? 'correo electrónico' : 'número de documento'}.` })
+    }
     res.status(500).json({ error: err.message })
   }
 }
@@ -162,7 +193,11 @@ export async function importarInstructores(req, res) {
 
         let instructor
         if (!existe) {
-          const clavePlana = password || 'sena2026'
+          const clavePlana = password || claveInicialInstructor(rest.numeroDocumento)
+          if (String(clavePlana).length < 6) {
+            errores++
+            continue
+          }
           const passwordHash = await hashPassword(clavePlana)
           const datosCrear = {
             ...rest,
@@ -300,7 +335,8 @@ export async function getInasistenciasParaRPA(req, res) {
 
     const filter = {
       fichaId: { $in: targetFichaIds },
-      estado: { $in: ['Falta', 'Tardanza'] }
+      estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
+      subidoSofia: { $ne: true }
     }
     if (fecha) filter.fecha = fecha
 
@@ -397,7 +433,8 @@ export async function getTodosInasistenciasParaRPA(req, res) {
 
       const filter = {
         fichaId: { $in: fichaIds },
-        estado: { $in: ['Falta', 'Tardanza'] }
+        estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
+        subidoSofia: { $ne: true }
       }
       if (fecha) filter.fecha = fecha
 
@@ -475,5 +512,49 @@ export async function getTodosInasistenciasParaRPA(req, res) {
     res.status(500).json({ ok: false, error: err.message })
   }
 }
+
+// Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus
+export async function confirmarSubidaSofia(req, res) {
+  try {
+    const { asistenciaId, estudianteId, fichaId, fecha } = req.body
+
+    if (!asistenciaId && (!estudianteId || !fecha)) {
+      return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId o (estudianteId y fecha)' })
+    }
+
+    const query = asistenciaId ? { _id: asistenciaId } : { estudianteId, fecha }
+    if (fichaId) query.fichaId = fichaId
+
+    const asistenciaActualizada = await Asistencia.findOneAndUpdate(
+      query,
+      { subidoSofia: true, fechaSubidaSofia: new Date() },
+      { new: true }
+    )
+
+    if (!asistenciaActualizada) {
+      return res.status(404).json({ ok: false, error: 'Registro de asistencia no encontrado' })
+    }
+
+    // Actualizar o marcar en la colección SofiaPlusSync si existe
+    await SofiaPlusSync.findOneAndUpdate(
+      { asistenciaId: asistenciaActualizada._id },
+      { estadoSync: 'subido', fechaSubida: new Date() },
+      { upsert: false }
+    )
+
+    res.json({
+      ok: true,
+      mensaje: 'Asistencia marcada como subida a Sofia Plus correctamente',
+      asistencia: {
+        id: asistenciaActualizada._id,
+        subidoSofia: asistenciaActualizada.subidoSofia,
+        fechaSubidaSofia: asistenciaActualizada.fechaSubidaSofia
+      }
+    })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
+
 
 

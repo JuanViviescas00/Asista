@@ -1,6 +1,5 @@
 <script setup>
 import { ref, reactive } from 'vue'
-import { enviarCodigoRecuperacion } from '../services/index.js'
 import api from '../services/index.js'
 import instructorIcon from '../assets/instructor-icon.png'
 import senaLogo from '../assets/sena-logo.png'
@@ -93,7 +92,7 @@ async function consultarAprendiz() {
       emit('login-success', res.usuario)
     }
   } catch (err) {
-    error.value = 'Número de documento no encontrado o aprendiz inactivo'
+    error.value = err.message || 'Número de documento no encontrado o aprendiz inactivo'
   } finally {
     loading.value = false
   }
@@ -131,33 +130,14 @@ async function enviarCodigo() {
     return
   }
 
-  try {
-    await api.auth.checkRecoveryEmail(recuperarForm.correo)
-  } catch (err) {
-    errorRecuperar.value = 'El correo ingresado no coincide con ningún usuario registrado'
-    return
-  }
-
-  const codigo = String(Math.floor(100000 + Math.random() * 900000))
-  codigoGenerado.value = codigo
-
-  const recovery = {
-    correo: recuperarForm.correo,
-    codigo,
-    expira: Date.now() + 10 * 60 * 1000,
-  }
-  localStorage.setItem('admin_recovery', JSON.stringify(recovery))
-
   enviando.value = true
   try {
-    await enviarCodigoRecuperacion(recuperarForm.correo, codigo)
+    const res = await api.auth.checkRecoveryEmail(recuperarForm.correo)
     codigoEnviado.value = true
     mostrarCodigoEnPantalla.value = false
-    exitoRecuperar.value = 'Código de verificación enviado a tu correo.'
-  } catch (e) {
-    codigoEnviado.value = true
-    mostrarCodigoEnPantalla.value = true
-    exitoRecuperar.value = 'Usa este código para continuar.'
+    exitoRecuperar.value = res.message || 'Código de verificación enviado a tu correo.'
+  } catch (err) {
+    errorRecuperar.value = err.message || 'El correo ingresado no coincide con ningún usuario registrado'
   } finally {
     enviando.value = false
   }
@@ -180,33 +160,9 @@ async function restablecerPassword() {
     return
   }
 
-  const recoveryData = localStorage.getItem('admin_recovery')
-  if (!recoveryData) {
-    errorRecuperar.value = 'No hay un código de recuperación generado.'
-    return
-  }
-
-  let recovery
-  try { recovery = JSON.parse(recoveryData) } catch(e) {
-    errorRecuperar.value = 'Error al leer los datos de recuperación'
-    return
-  }
-
-  if (Date.now() > recovery.expira) {
-    errorRecuperar.value = 'El código ha expirado.'
-    localStorage.removeItem('admin_recovery')
-    return
-  }
-
-  if (recuperarForm.codigo !== recovery.codigo) {
-    errorRecuperar.value = 'Código de verificación incorrecto'
-    return
-  }
-
   try {
-    await api.auth.resetPassword(recovery.correo, recuperarForm.nuevaPassword)
-    localStorage.removeItem('admin_recovery')
-    exitoRecuperar.value = 'Contraseña restablecida correctamente.'
+    const res = await api.auth.resetPassword(recuperarForm.correo, recuperarForm.codigo, recuperarForm.nuevaPassword)
+    exitoRecuperar.value = res.message || 'Contraseña restablecida correctamente.'
     setTimeout(() => {
       volverAlLogin()
       exito.value = 'Contraseña restablecida. Inicia sesión con tu nueva clave.'

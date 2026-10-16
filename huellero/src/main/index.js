@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url'
 import * as engine from './engine.js'
 import { iniciarScheduler } from './scheduler.js'
 
+// Desactivar aceleración gráfica por hardware para evitar cuelgues del proceso GPU
+// en equipos con tarjetas integradas (Intel HD Graphics) o drivers genéricos.
+app.disableHardwareAcceleration()
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const iconPath = app.isPackaged
@@ -96,6 +100,10 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  engine.detenerMonitorLector()
 })
 
 export { broadcastStatus }

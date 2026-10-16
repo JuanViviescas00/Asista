@@ -284,7 +284,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   <div class="page-header">
     <h1>Estudiantes</h1>
     <p v-if="esInstructor">
-      ‍ Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
+      Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
     </p>
     <p v-else>
       Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
@@ -413,7 +413,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div class="form-grid">
         <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del estudiante" /></div>
         <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del estudiante" /></div>
-        <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option value="CC">CC</option><option value="CE">CE</option><option value="PEP">PEP</option></select></div>
+        <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option value="CC">CC</option><option value="CE">CE</option><option value="TI">TI</option><option value="PEP">PEP</option></select></div>
         <div class="form-group"><label>Numero de Documento</label><input v-model="estudianteForm.numeroDocumento" type="text" placeholder="Numero de documento" /></div>
         <div class="form-group"><label>Correo Electronico</label><input v-model="estudianteForm.correo" type="email" placeholder="correo@ejemplo.com" /></div>
         <div class="form-group"><label>Telefono</label><input v-model="estudianteForm.telefono" type="tel" placeholder="+57 300 000 0000" /></div>

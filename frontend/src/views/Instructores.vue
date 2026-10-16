@@ -84,8 +84,11 @@ const instructoresFiltrados = computed(() => {
     lista = lista.filter(i => (i.especialidad || '').toLowerCase() === busqueda.especialidad.toLowerCase())
   }
   if (busqueda.documento.trim()) {
-    const doc = busqueda.documento.toLowerCase().trim()
-    lista = lista.filter(i => (i.numeroDocumento || '').toLowerCase().includes(doc))
+    const docLimpio = busqueda.documento.replace(/[\.\s-]/g, '').toLowerCase().trim()
+    lista = lista.filter(i => {
+      const targetLimpio = String(i.numeroDocumento || '').replace(/[\.\s-]/g, '').toLowerCase()
+      return targetLimpio.includes(docLimpio)
+    })
   }
   if (busqueda.nombres.trim()) {
     const nom = busqueda.nombres.toLowerCase().trim()
@@ -411,7 +414,7 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
         <div class="form-group"><label>Especialidad</label><input v-model="instructorForm.especialidad" type="text" placeholder="Ej: Desarrollo de Software" /></div>
       </div>
       <div v-if="!editingId" style="margin-top: 16px; padding: 12px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 12.5px; color: #1e40af;">
-        <strong>Cuenta de Acceso Automática:</strong> Se creará una cuenta para iniciar sesión. Su usuario será <strong>{{ instructorForm.correo || 'el correo ingresado' }}</strong> y su contraseña estándar inicial será <strong>sena2026</strong> (el docente podrá cambiarla desde su Perfil).
+        <strong>Cuenta de Acceso Automática:</strong> Se creará una cuenta para iniciar sesión. Su usuario será <strong>{{ instructorForm.correo || 'el correo ingresado' }}</strong> y su contraseña inicial será su número de documento (sin puntos ni espacios). Podrá cambiarla desde su Perfil.
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
         <button class="btn btn-outline" @click="closeModal" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>

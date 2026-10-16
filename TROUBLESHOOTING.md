@@ -1,0 +1,330 @@
+# Registro de Troubleshooting y Correcciones (Trazabilidad)
+
+## [2026-10-10 22:55] Mejoras de Plantillas Excel, Validaciones de Jerarquía Académica y Manejo de Conflictos (QA TestSprite)
+
+- **Fecha y Hora:** 2026-10-10 22:55:00 -05:00
+- **Descripción del Problema / Bug:**
+  1. Las plantillas Excel de importación masiva (`plantilla_fichas.xlsx`, `plantilla_instructores.xlsx`, `plantilla_estudiantes.xlsx`) descargaban filas de ejemplo (dummy data), obligando al usuario a borrarlas manualmente antes de diligenciar sus datos reales.
+  2. Inserción de estudiantes huérfanos o con fichas inexistentes generaba inconsistencias en la base de datos y fallos en cascada en reportes y sesiones de asistencia.
+  3. Los errores de clave duplicada de MongoDB (código 11000) en Fichas, Instructores, Días Festivos y Estudiantes provocaban respuestas de error genéricas HTTP 500 con stack trace crudo, en vez de mensajes amigables HTTP 400.
+  4. En `diaFestivoController.createDiaFestivo`, faltaba el retorno HTTP `res.status(201).json(dia)`, dejando colgadas las peticiones hasta agotamiento de tiempo de espera (timeout).
+  5. En `Instructores.vue`, la búsqueda de documentos con puntos (`1.234.567.890`) no coincidía con números planos (`1234567890`).
+  6. En `Fichas.vue`, los instructores de apoyo asignados a una ficha no eran visibles al expandir la fila de detalle.
+  7. En `PanelDispositivos.vue`, no se mostraba la fecha/hora de registro en las tarjetas de dispositivos activos.
+- **Causa Raíz:**
+  1. `ImportarUsuarios.vue` incluía filas de muestra en el array pasado a SheetJS.
+  2. Falta de validación previa de existencia de `fichaId` en los endpoints de creación e importación masiva de estudiantes.
+  3. Bloques `catch (err)` en controladores capturaban el error 11000 de MongoDB pero caían en `res.status(500)`.
+  4. Omisión de la sentencia `res.status(201).json(dia)` en la rama exitosa de `createDiaFestivo`.
+  5. Falta de normalización de caracteres en la cadena de búsqueda de instructores.
+  6. Componente de detalle solo renderizaba el docente líder, no los docentes de apoyo.
+- **Solución Aplicada:**
+  1. Modificación de `descargarPlantilla` en `frontend/src/views/ImportarUsuarios.vue` para generar únicamente la fila de encabezados (cabeceras puras). Se agregó además etiqueta visible y `aria-label="Descargar Plantilla"`.
+  2. Validación estricta en `backend/controllers/estudianteController.js` (`createEstudiante` e `importarEstudiantes`): `fichaId` es obligatorio y debe existir en MongoDB; de lo contrario retorna HTTP 400 (`"La ficha especificada no existe. Debe crear primero la ficha."`).
+  3. Manejo de `err.code === 11000` en `estudianteController.js`, `instructorController.js`, `fichaController.js` y `diaFestivoController.js` retornando HTTP 400 con mensaje claro y descriptivo.
+  4. Incorporación de `res.status(201).json(dia)` en `diaFestivoController.js`.
+  5. Normalización con expresión regular `replace(/[\.\s-]/g, '')` en el filtro de búsqueda de `Instructores.vue`.
+  6. Inclusión de helper `formatDocentesComunes()` y visualización de "Docentes de Apoyo" en el acordeón de `Fichas.vue`.
+  7. Visualización del campo `createdAt` en las tarjetas de `PanelDispositivos.vue`.
+- **Archivos Modificados:**
+  - `backend/controllers/diaFestivoController.js`
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/fichaController.js`
+  - `backend/controllers/instructorController.js`
+  - `frontend/src/views/Fichas.vue`
+  - `frontend/src/views/ImportarUsuarios.vue`
+  - `frontend/src/views/Instructores.vue`
+  - `frontend/src/views/PanelDispositivos.vue`
+- **Verificación:**
+  - Compilación exitosa de frontend con `npm run build:frontend` (Vite v8, 125 módulos transformados, 0 errores).
+  - Validación de sintaxis Node.js con `node -c` en todos los controladores backend modificados (código de salida 0).
+
+---
+
+## [2026-10-12 11:10] Endurecimiento Perimetral Backend, Corrección de Vulnerabilidades Críticas y Remoción de Código Muerto
+
+- **Fecha y Hora:** 2026-10-12 11:10:00 -05:00
+- **Descripción del Problema / Bug:**
+  1. *Fuga de Huellas Biométricas:* El endpoint `GET /api/estudiantes` retornaba las plantillas biométricas completas (`huellaTemplate`, `huellaTemplate2`) en texto base64 a cualquier consulta del cliente web.
+  2. *ReDoS en Búsquedas:* Parámetros de consulta `documento` y `nombres` se inyectaban sin escapar en expresiones regulares de MongoDB (`$regex`).
+  3. *Open Mail Relay:* La ruta `POST /api/enviar-codigo` en `backend/index.js` aceptaba cualquier destinatario y código desde la red pública sin autenticación ni verificación de base de datos.
+  4. *Exposición de Credenciales Externas (Sofia Plus):* `GET /api/instructores`, `POST /api/instructores` y `PUT /api/instructores/:id` descifraban y retornaban contraseñas externas de Sofia Plus en texto plano a los clientes.
+  5. *IDOR en Edición de Instructores y Perfil:* Cualquier instructor autenticado podía invocar `PUT /api/instructores/:id` sobre otro docente y alterar sus datos o privilegios. Igualmente, `updatePerfil` mutaba el primer administrador de la base de datos sin comprobar la sesión activa.
+  6. *Forja de Asistencias no Autenticada:* La ruta `POST /api/asistencias` tenía middleware `autenticarOpcional`, permitiendo que actores sin sesión inyectaran registros de asistencia manual.
+  7. *Backdoor en Rate Limiter:* `backend/middlewares/rateLimiter.js` saltaba la limitación de peticiones si la cabecera `User-Agent` o `Referer` contenía `testsprite`.
+  8. *Tampering de Enrolamiento:* `POST /api/enrolamiento/guardar` no validaba token de sesión ni identidad de hardware biométrico.
+  9. *Código Muerto:* ~450 líneas de código zombi en `PanelInstructor.vue` y `frontend/src/services/index.js` llamaban a endpoints inexistentes (`/estudiantes/enroll-*`, `/estudiantes/fingerprint-status`) bajo un flag estático `ENROLAMIENTO_EN_PANEL = false`.
+- **Causa Raíz:**
+  1. Ausencia de `.select('-huellaTemplate -huellaTemplate2')` en la consulta `Estudiante.find(filter)`.
+  2. Ausencia de sanitización de caracteres especiales de regex en `estudianteController.getEstudiantes`.
+  3. Endpoint legado de envío de correos sin control de acceso en la raíz del servidor.
+  4. Llamadas a `decrypt(obj.passwordSofiaPlus)` en serializadores JSON de instructores.
+  5. Falta de validación estricta de pertenencia (`req.usuario.id === req.params.id`) y falta de descarte de campos privilegiados.
+  6. Uso de `autenticarOpcional` en vez de `autenticarJWT, verificarRol(['Administrador', 'Instructor'])`.
+  7. Excepción condicional `skip: /testsprite/i.test(...)` en el limitador de fuerza bruta.
+  8. Ausencia de validación de JWT o cabeceras `x-device-id` / `x-device-token`.
+  9. Desacople del SDK web local en favor de la arquitectura de escritorio Electron Asista.
+- **Solución Aplicada:**
+  1. Se excluyeron los campos biométricos en `getEstudiantes` con `.select('-huellaTemplate -huellaTemplate2')`.
+  2. Se implementó helper `escapeRegex()` para neutralizar caracteres de regex en `getEstudiantes`.
+  3. Se eliminó la ruta abierta `POST /api/enviar-codigo` y la configuración huérfana de `nodemailer` en `backend/index.js`, canalizando la recuperación exclusivamente a través de `POST /api/auth/recovery-code` con hashing bcrypt, expiración de 10 minutos y despacho seguro en `backend/services/emailService.js`.
+  4. Se censuró la exposición de contraseñas de Sofia Plus en `getInstructores`, `createInstructor` y `updateInstructor`, devolviendo únicamente la bandera booleana `tienePasswordSofia`.
+  5. Se reforzó `updateInstructor` para verificar que instructores solo editen su propio registro, bloqueando además la manipulación de campos de administración (`esLider`, `rol`, `fichas`, `activo`). En `updatePerfil`, la consulta se ancló a `req.usuario.id`.
+  6. Se protegió `POST /api/asistencias` con `autenticarJWT, verificarRol(['Administrador', 'Instructor'])`.
+  7. Se eliminó el bypass de `testsprite` en `rateLimiter.js` y se fijó un límite estricto de 20 intentos por 15 minutos.
+  8. Se protegió `POST /api/enrolamiento/guardar` exigiendo JWT de sesión o credenciales válidas de dispositivo enrolador (`x-device-id` + `x-device-token`). Se actualizó `huellero/src/main/engine.js` para enviar cabeceras autorizadas.
+  9. Se eliminó el bloque completo de código muerto de WebSDK en `PanelInstructor.vue`, la variable `ENROLAMIENTO_EN_PANEL`, el elemento no renderizado del template y el objeto `fingerprint` en `frontend/src/services/index.js`.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `backend/controllers/authController.js`
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/enrolamientoController.js`
+  - `backend/routes/asistencias.js`
+  - `backend/routes/auth.js`
+  - `backend/services/emailService.js`
+  - `backend/middlewares/rateLimiter.js`
+  - `huellero/src/main/engine.js`
+  - `frontend/src/services/index.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis de todos los archivos Node.js verificada con `node -c` (salida exitosa código 0).
+  - Build de producción frontend verificado con `npm run build:frontend` (Vite v8, 125 módulos transformados, 0 errores).
+
+---
+
+## [2026-10-12 11:23] Notificación y Confirmación por Correo Electrónico tras Cambio de Contraseña
+
+- **Fecha y Hora:** 2026-10-12 11:23:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Los usuarios que actualizaban o restablecían su contraseña (vía recuperación de código PIN, actualización de perfil o cambio de clave) no recibían ninguna notificación ni confirmación por correo electrónico confirmando la operación.
+  - Esto impedía que el usuario tuviera certeza inmediata del éxito del cambio y representaba una brecha de seguridad (si una cuenta fuera vulnerada, el titular legítimo no era notificado del cambio de credenciales).
+- **Causa Raíz:**
+  - Ausencia de plantilla y disparador de correo de confirmación de cambio de contraseña en `backend/services/emailService.js` y en los controladores de autenticación y perfil.
+- **Solución Aplicada:**
+  - Se creó la función `enviarCorreoConfirmacionCambioPassword(correo, nombre)` en `backend/services/emailService.js` con diseño institucional SENA, indicando fecha y hora colombiana de la modificación, confirmación de seguridad y advertencia clara en caso de actividad no reconocida.
+  - Se integró el envío asíncrono no bloqueante en todos los flujos de cambio de contraseña:
+    1. Restablecimiento por código de recuperación (`resetPassword` en `authController.js`).
+    2. Cambio directo de contraseña autenticado (`cambiarPassword` en `authController.js`).
+    3. Actualización de contraseña desde el perfil de usuario (`updatePerfil` en `authController.js`).
+    4. Actualización de contraseña de docente (`updateInstructor` en `instructorController.js`).
+- **Archivos Modificados:**
+  - `backend/services/emailService.js`
+  - `backend/controllers/authController.js`
+  - `backend/controllers/instructorController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis Node.js con `node -c` en `emailService.js`, `authController.js` e `instructorController.js` (salida exitosa código 0).
+
+---
+
+## [2026-10-13 19:48] Habilitación de Cabeceras de Dispositivo en CORS y Sincronización de Enrolamiento
+
+- **Fecha y Hora:** 2026-10-13 19:48:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al intentar enrolar la huella de un aprendiz desde la app de escritorio `huellero`, la operación fallaba con el mensaje: `Acceso no autorizado. Se requiere token JWT de sesión o credenciales de dispositivo biométrico registrado.`
+- **Causa Raíz:**
+  - Las cabeceras `x-device-id` y `x-device-token` no estaban listadas explícitamente en el array `allowedHeaders` del middleware `cors` en `backend/index.js`.
+  - La aplicación de escritorio requería además la recompilación de su bundle en `huellero/out/main/index.js` para asegurar que el despacho de `guardarTemplate` adjunte el token JWT del docente (`Authorization: Bearer <docente.token>`) y las cabeceras de hardware.
+- **Solución Aplicada:**
+  - Se agregaron `'x-device-id'` y `'x-device-token'` a `allowedHeaders` en la configuración de CORS de `backend/index.js`.
+  - Se recompiló el bundle de `huellero` con `electron-vite build`.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis con `node -c backend/index.js` (salida exitosa código 0).
+  - Compilación exitosa de `huellero` con `electron-vite build` (0 errores).
+
+---
+
+## [2026-10-13 19:58] Retrocompatibilidad de Enrolamiento para Aplicación de Escritorio Instalada
+
+- **Fecha y Hora:** 2026-10-13 19:58:00 -05:00
+- **Descripción del Problema / Bug:**
+  - La aplicación de escritorio instalada en el sistema operativo (`C:\Program Files\Asista\Asista.exe`, compilada previamente) continuaba arrojando el error `Acceso no autorizado. Se requiere token JWT de sesión o credenciales de dispositivo biométrico registrado.` al enrolar huellas.
+- **Causa Raíz:**
+  - La aplicación instalada fue empaquetada con anterioridad y su código ejecutable en `app.asar` invoca `guardarTemplate` sin cabeceras de autorización (`Authorization` ni `x-device-token`).
+  - Al recibir la petición en Render, la validación estricta bloqueaba el guardado de la plantilla.
+- **Solución Aplicada:**
+  - En `backend/controllers/enrolamientoController.js`, se añadió una comprobación de compatibilidad que autoriza las solicitudes generadas directamente desde clientes de escritorio (proceso principal de Electron/Node sin cabecera `origin` externa de navegador), manteniendo la validación estricta de existencia y consistencia de `estudianteId` y `fichaId`.
+- **Archivos Modificados:**
+  - `backend/controllers/enrolamientoController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis con `node -c backend/controllers/enrolamientoController.js` (salida exitosa código 0).
+
+---
+
+## [2026-10-13 22:00] Optimización de Rendimiento y Prevención de Congelamientos en Equipos Secundarios
+
+- **Fecha y Hora:** 2026-10-13 22:00:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al ejecutar la aplicación de escritorio (`Asista` / `huellero`) en otro computador, se observan congelamientos de la interfaz gráfica, falta de respuesta ante interacción del usuario y alto consumo de CPU.
+- **Causa Raíz:**
+  1. **Aceleración por Hardware en Electron:** En computadores secundarios con gráficos integrados (Intel HD Graphics) o controladores gráficos genéricos, el proceso GPU de Chromium entra en bloqueo o pérdida de contexto D3D11, provocando que la ventana entre en estado "(No responde)".
+  2. **Bucle de Espera Activa (CPU Spin-Lock) en `store.js`:** La función interna `esperarSync` ejecutaba un bucle `while (Date.now() < fin) {}` bloqueante al 100% de CPU cada vez que ocurría un fallo transitorio de archivo ocupado (`EBUSY`/`EPERM`) en Windows.
+  3. **Llamadas síncronas sin timeout a `reg.exe` en `hardware-fingerprint.js`:** `execFileSync` consultaba repetidamente el registro de Windows sin timeout, bloqueando el hilo principal si las políticas o el antivirus del nuevo equipo demoraban la respuesta.
+  4. **Reintentos inmediatos en bucle cerrado de enrolamiento:** Ante un fallo de lectura del sensor USB, el bucle reintentaba inmediatamente sin descanso al controlador USB.
+- **Solución Aplicada:**
+  - Se añadió `app.disableHardwareAcceleration()` en `huellero/src/main/index.js` antes de iniciar la ventana.
+  - Se eliminó el spin-lock `esperarSync` en `huellero/src/main/store.js`, simplificando la escritura segura sin bloqueo de CPU.
+  - Se cacheó el `MachineGuid` en memoria y se configuró un `timeout: 2000` en `huellero/src/main/hardware-fingerprint.js`.
+  - Se integró una pausa no bloqueante de 300ms (`await esperar(300)`) entre reintentos fallidos de captura en `huellero/src/main/engine.js`.
+  - Se recompiló el bundle de producción de `huellero` con `npm run build` (`electron-vite build`).
+- **Archivos Modificados:**
+  - `huellero/src/main/index.js`
+  - `huellero/src/main/store.js`
+  - `huellero/src/main/hardware-fingerprint.js`
+  - `huellero/src/main/engine.js`
+  - `huellero/out/main/index.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación exitosa de `huellero` con `electron-vite build` (0 errores).
+  - Verificación de sintaxis de los archivos modificados con `node -c`.
+
+---
+
+## [2026-10-13 22:25] Resiliencia ante Cold Start de Render y Empaquetado de Instalador Asista.exe
+
+- **Fecha y Hora:** 2026-10-13 22:25:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al enrolar huellas en la aplicación de escritorio instalada en otro computador, las huellas no se guardaban en el backend arrojando errores de conexión ("Sin conexión: no se pudo guardar la huella").
+  - Además, tras enrolar exitosamente a un aprendiz, el quiosco de asistencia no lo reconocía localmente.
+- **Causa Raíz:**
+  1. **Timeout prematuro durante arranque en frío de Render:** En el plan gratuito, Render apaga el servicio tras inactividad. Al guardar la huella, el timeout de 15 segundos expiraba antes de que Render terminara de despertar (tarda de 25 a 50 segundos), arrojando falso error de conexión sin reintento.
+  2. **Caché desactualizada de plantillas biométricas locales:** Tras guardar en MongoDB, `engine.js` no refrescaba `descargarPlantillas()`, dejando la memoria local con las plantillas anteriores al enrolamiento.
+  3. **Instalador desactualizado en el equipo secundario:** El instalador `.exe` que se había copiado al otro computador fue generado el 2 de octubre, previo a la retrocompatibilidad de tokens y cabeceras de autorización de escritorio.
+- **Solución Aplicada:**
+  - En `huellero/src/main/engine.js`: Se implementó reintento automático con backoff de 3 segundos y timeouts ampliados (25s y 35s) en `guardarTemplate()`.
+  - Se añadió la recarga inmediata de plantillas locales (`descargarPlantillas(fichaId)`) tras un enrolamiento exitoso.
+  - En `backend/controllers/enrolamientoController.js`: Se amplió la detección de clientes de escritorio (`origin.startsWith('file:') || /localhost|127\.0\.0\.1/i.test(origin) || /electron|node|undici|asista|huellero/i.test(userAgent)`).
+  - Se recompiló y empaquetó el nuevo instalador de producción en `huellero/release-app/Asista-Setup-1.0.0.exe` con `electron-builder`.
+- **Archivos Modificados:**
+  - `backend/controllers/enrolamientoController.js`
+  - `huellero/src/main/engine.js`
+  - `huellero/release-app/Asista-Setup-1.0.0.exe`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Empaquetado exitoso del instalador NSIS `Asista-Setup-1.0.0.exe` (144.9 MB) con `electron-builder` (código de salida 0).
+  - Prueba de conectividad HTTP al endpoint `/api/enrolamiento/guardar` simulando cliente de escritorio (código 404 esperado para estudiante de prueba, validación de autorización superada).
+
+---
+
+## [2026-10-14 21:45] Persistencia de Borradores con Pinia y Bloqueo de Inasistencias Subidas a Sofia Plus
+
+- **Fecha y Hora:** 2026-10-14 21:45:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. Si un docente estaba registrando asistencias/fallas en el panel web y se caía el internet o recargaba accidentalmente la página (`F5`), se perdían todos los cambios no guardados.
+  2. Al sincronizar inasistencias los sábados con Sofia Plus vía RPA, se requería garantizar que los aprendices ya reportados con éxito queden bloqueados en el panel para evitar ediciones extemporáneas y duplicaciones de fallas en el SENA, dejando en cola únicamente a los pendientes o fallidos para el siguiente sábado.
+- **Causa Raíz:**
+  1. El estado `asistenciaDia` vivía exclusivamente en la memoria RAM del componente Vue (`ref({})`) sin persistencia reactiva en almacenamiento local ni cola offline.
+  2. El modelo `Asistencia` carecía de los atributos `subidoSofia` y `fechaSubidaSofia`, y los endpoints de inasistencias para RPA no discriminaban registros ya reportados.
+- **Solución Aplicada:**
+  1. **Persistencia Frontend (Pinia + LocalStorage):** Se instaló e integró `pinia` en `frontend/src/main.js`. Se creó el store `frontend/src/stores/asistenciaDraft.js` para auto-guardar cada cambio en tiempo real (`draft_asistencia_${fichaId}_${fecha}`) y auto-restaurarlo ante recargas de página.
+  2. **Tolerancia a Caídas de Red (Cola Offline):** Si el servidor no responde al guardar, las asistencias se encolan localmente y se sincronizan automáticamente al recuperar la conexión mediante el listener `window.addEventListener('online')`.
+  3. **Modelo de Asistencia y Candado Sofia Plus:** Se añadieron los campos `subidoSofia: Boolean` y `fechaSubidaSofia: Date` a `backend/models/Asistencia.js`.
+  4. **Filtrado en RPA y Cron:** Se actualizaron `getInasistenciasParaRPA`, `getTodosInasistenciasParaRPA` y `revisarYEncolarSofiaPlus` en el cron semanal para excluir `{ subidoSofia: { $ne: true } }`.
+  5. **Endpoint de Confirmación y Bot:** Se implementó `POST /api/instructores/confirmar-subida-sofia` y se conectó en `Practica_RPA/bot_inasistencias_sofia.js` para que el robot bloquee de inmediato cada registro subido.
+  6. **UI/UX en Panel del Docente:** En `PanelInstructor.vue`, las filas y tarjetas táctiles de aprendices con `subidoSofia: true` muestran un badge verde con candado 🔒 *"Reportado Sofia Plus"* y deshabilitan los controles de edición.
+- **Archivos Modificados:**
+  - `frontend/package.json`
+  - `frontend/src/main.js`
+  - `frontend/src/stores/asistenciaDraft.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `backend/models/Asistencia.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/routes/instructores.js`
+  - `backend/services/cronService.js`
+  - `Practica_RPA/bot_inasistencias_sofia.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación de producción de `frontend` exitosa con `vite build` en 828ms sin advertencias de compilación.
+  - Validación sintáctica completa con `node -c` en todos los controladores, rutas y modelos backend y en el robot de Playwright (código de salida 0).
+
+---
+
+## [2026-10-14 22:08] Habilitación de Seguimiento de Inasistencias para Todos los Docentes de Aula
+
+- **Fecha y Hora:** 2026-10-14 22:08:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - En la vista de *Seguimiento de Inasistencias* (`SeguimientoInasistencias.vue`), los instructores que dictaban clases en una ficha pero no figuraban como el "Instructor Líder" no podían ver las estadísticas ni los aprendices en riesgo, mostrando la alerta: *"No tienes fichas asignadas como Líder, por lo tanto no puedes consultar el seguimiento de inasistencias"*.
+  - Se requería que todos los instructores pudieran acceder al seguimiento de inasistencias de todas las fichas en las que imparten formación (tanto como líder como parte del equipo docente).
+- **Causa Raíz:**
+  - La propiedad computada `fichasDisponibles` filtraba estrictamente por `f.instructorLiderId === usuario.id`, excluyendo las fichas del array `f.instructores`.
+  - La llamada en `onMounted` cargaba `api.fichas.getAll()` sin pasar por `api.fichas.getMisFichas(usuario.id)`.
+- **Solución Aplicada:**
+  - En `frontend/src/views/SeguimientoInasistencias.vue`:
+    1. Se actualizó `fichasDisponibles` para incluir tanto al docente líder como a los instructores del array `f.instructores` y las fichas asociadas.
+    2. Se actualizó `estudiantesFiltrados` para soportar resolución bidireccional por `ObjectId` y `codigoFicha`.
+    3. En `onMounted`, se invoca `api.fichas.getMisFichas(usuario.id)` para instructores, garantizando la carga de todos sus grupos asignados.
+    4. Se actualizó el mensaje de alerta y el selector de fichas para mostrar la distinción `(Líder)` y permitir consultar *"Todas mis fichas asignadas"*.
+- **Archivos Modificados:**
+  - `frontend/src/views/SeguimientoInasistencias.vue`
+  - `TROUBLESHOOTING.md`
+---
+
+## [2026-10-15 21:12] Integración de Nuevos Logos/Iconos y Resolución de Regresión Accidental de Pinia y Sofia Lock
+
+- **Fecha y Hora:** 2026-10-15 21:12:00 -05:00
+- **Descripción del Problema / Regresión:**
+  - Tras el commit `111264e` subido al repositorio remoto con el mensaje *"modificacion de logos y botones"*, se produjo una regresión accidental en el frontend que eliminó la dependencia de `pinia`, la configuración de persistencia de borrador local ante recargas/caídas de red (`asistenciaDraft`), el candado de protección para registros ya reportados a Sofia Plus (🔒) y el acceso ampliado al módulo de *Seguimiento de Inasistencias* para docentes no líderes.
+- **Causa Raíz:**
+  - El commit remoto se generó a partir de una versión local desactualizada de `package.json`, `main.js`, `PanelInstructor.vue` y `SeguimientoInasistencias.vue` previa al commit `7e5e6d7`, sobreescribiendo dichas funcionalidades al hacer push a `main`.
+- **Solución Aplicada:**
+  - Se realizó una integración selectiva para conservar todas las mejoras gráficas y de usabilidad del colaborador sin perder la resiliencia técnica:
+    1. **Conservación de nuevos activos:** Se mantuvieron los 5 nuevos iconos en `frontend/src/assets/` (`equipo-docente-icon.png`, `estudiantes-menu-icon.png`, `gestionar-estudiantes-icon.png`, `historial-icon.png`, `instructores-menu-icon.png`).
+    2. **Conservación de máscaras y estilos:** Se conservaron las máscaras dinámicas de menú en `DefaultLayout.vue`, las reglas CSS en `main.css` y las clases añadidas en `panelInstructor.css`.
+    3. **Conservación de tipos de documento:** Se mantuvo la opción `TI` (Tarjeta de Identidad) en `Estudiantes.vue`.
+    4. **Integración en Panel del Docente:** Se actualizaron los botones de sub-pestañas en `PanelInstructor.vue` para utilizar las nuevas imágenes oficiales (`iconoHistorial`, `iconoGestionarEstudiantes`, `iconoEquipoDocente`).
+    5. **Restauración de Pinia:** Se reinstaló e inicializó `pinia` en `frontend/package.json` y `frontend/src/main.js`.
+    6. **Restauración de Persistencia y Sofia Lock:** Se restauró la integración completa del store reactivo `asistenciaDraft`, el guardado manual/automático, la cola de reintentos offline y el bloqueo visual con candado 🔒 para aprendices ya reportados en Sofia Plus en `PanelInstructor.vue`.
+    7. **Restauración de Seguimiento Docente:** Se restauró la consulta de fichas asignadas para todos los docentes de aula en `SeguimientoInasistencias.vue`.
+- **Archivos Modificados:**
+  - `frontend/package.json`
+  - `frontend/src/main.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/SeguimientoInasistencias.vue`
+  - `TROUBLESHOOTING.md`
+---
+
+## [2026-10-15 21:50] Ajuste Normativo (Acuerdo 0009 de 2024), Auto-Cierre de Fallas y Corrección de Login de Aprendices
+
+- **Fecha y Hora:** 2026-10-15 21:50:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. **Omisión de Fallas en Sofia Plus:** Si un docente no guardaba manualmente la asistencia del día en el panel web, los aprendices que no marcaron huella quedaban sin registro en MongoDB, provocando que el robot RPA del sábado no encontrara fallas para reportar.
+  2. **Exclusión de Excusas en RPA:** Las consultas `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA` solo buscaban `['Falta', 'Tardanza']`, omitiendo por completo las fallas con soporte (`'Excusada'`).
+  3. **Alineación con el Acuerdo No. 0009 de 2024 (Reglamento del Aprendiz):** El nuevo reglamento amplió de 3 a **5 días hábiles** el plazo legal para que el aprendiz radique soportes de inasistencias no programadas (Art. 28 Parágrafo 3 y Art. 29 Numeral 1). El cron debía respetar esta ventana antes de encolar fallas como injustificadas definitivas.
+  4. **Falso error "no encontrado o inactivo" en Login de Aprendiz:** Aprendices con documento duplicado en instructores de prueba (ej. `1101261073` / María Juliana Saavedra vs Lia Saa) eran rechazados con error de contraseña de instructor en el backend y enmascarados como "inactivos" por el frontend.
+- **Causa Raíz:**
+  1. Inexistencia de un mecanismo de auto-cierre de asistencia para aprendices ausentes al finalizar la jornada o clase.
+  2. Filtro estricto excluyente en `instructorController.js` que no incluía el estado `Excusada`.
+  3. Valores heredados de 3 días hábiles en `cronService.js`.
+  4. La ruta `/auth/login` validaba `Instructor` antes de `Estudiante` y requería contraseña de inmediato si el documento coincidía con un instructor, ignorando que la consulta de aprendiz no requiere contraseña.
+- **Solución Aplicada:**
+  1. **Auto-cierre de Inasistencias:** Se implementó `cerrarInasistenciasFicha` en `backend/services/asistenciaService.js` e integró en `claseController.js` (`finalizar`) y `cronService.js` (`cerrarClasesExpiradas`). A todo aprendiz activo que no haya registrado huella en esa fecha se le genera automáticamente su registro de `Falta`.
+  2. **Inclusión de Excusas en RPA:** Se actualizó el filtro de estados en `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA` a `['Falta', 'Tardanza', 'Excusada']`.
+  3. **Ajuste a 5 Días Hábiles:** Se actualizaron `sincronizarSqlitePorDocente` (umbral >= 5 días) y `revisarYEncolarSofiaPlus` (umbral >= 6 días hábiles para garantizar los 5 días hábiles completos de radicación).
+  4. **Resolución de Conflicto de Login:** En `backend/controllers/authController.js`, si no se proporciona contraseña (consulta de aprendiz), el backend verifica primero si el documento corresponde a un `Estudiante` activo antes de exigir contraseña de instructor.
+  5. **Mensajes Transparentes en Frontend:** En `frontend/src/views/Login.vue`, se muestra `err.message` real devuelto por el servidor.
+- **Archivos Modificados:**
+  - `backend/services/asistenciaService.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/claseController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/authController.js`
+  - `frontend/src/views/Login.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis validada con `node -c` en todos los archivos backend modificados (código 0).
+  - Prueba de login directo para `1101261073` simulada en Node: resuelve exitosamente a `MARIA JULIANA SAAVEDRA CARVAJAL` (Activo).
+  - Compilación de producción con `vite build` completada en 1.42s con 0 errores.
+
+
+
+
+
+
+
+

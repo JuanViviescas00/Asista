@@ -161,6 +161,15 @@ function toggleDetalle(id) {
   expandidos.value[id] = !expandidos.value[id]
 }
 
+function formatDocentesComunes(lista) {
+  if (!lista || !lista.length) return 'Ninguno'
+  return lista.map(i => {
+    if (typeof i === 'object') return `${i.nombres || ''} ${i.apellidos || ''}`.trim() || i.correo
+    const inst = instructoresList.value.find(ins => ins._id === i)
+    return inst ? `${inst.nombres || ''} ${inst.apellidos || ''}`.trim() : String(i)
+  }).filter(Boolean).join(', ')
+}
+
 function estaActiva(ficha) {
   return ficha.estado !== 'Inactivo'
 }
@@ -283,6 +292,10 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Aula</span><span>{{ f.aulaAsignada || '—' }}</span></div>
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Jornada</span><span><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></span></div>
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Estado</span><span><span class="fichas-badge" :class="estaActiva(f) ? 'fichas-badge-success' : 'fichas-badge-inactive'">{{ estaActiva(f) ? 'Activa' : 'Inactiva' }}</span></span></div>
+                  <div class="fichas-detalle-item" v-if="f.instructores && f.instructores.length">
+                    <span class="fichas-detalle-label">Docentes de Apoyo</span>
+                    <span>{{ formatDocentesComunes(f.instructores) }}</span>
+                  </div>
                 </div>
               </td>
             </tr>

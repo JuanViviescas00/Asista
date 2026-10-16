@@ -38,6 +38,22 @@ let plantillas = {}
 let pendientes = []
 let asistenciasDia = {}
 
+// Callback opcional para notificar cambios en la cola de pendientes (alta o baja).
+// Lo usa engine.js para reemitir el estado a la interfaz sin acoplar store con engine.
+let onPendientesChange = null
+
+export function setOnPendientesChange(cb) {
+  onPendientesChange = typeof cb === 'function' ? cb : null
+}
+
+function notificarPendientesChange() {
+  if (onPendientesChange) {
+    try {
+      onPendientesChange()
+    } catch (_) {}
+  }
+}
+
 function asegurarDirectorio() {
   if (!existsSync(DATA_DIR)) {
     mkdirSync(DATA_DIR, { recursive: true })
@@ -53,41 +69,19 @@ function leerJSON(ruta, porDefecto) {
   }
 }
 
-function esperarSync(ms) {
-  const fin = Date.now() + ms
-  while (Date.now() < fin) {}
-}
-
 function escribirJSON(ruta, valor) {
   const tmp = `${ruta}.tmp`
   writeFileSync(tmp, JSON.stringify(valor, null, 2), 'utf8')
 
-  const reintentables = new Set(['EPERM', 'EBUSY', 'EACCES'])
-  for (let intento = 1; intento <= 3; intento++) {
+  try {
+    renameSync(tmp, ruta)
+  } catch {
+    // Si Windows o el antivirus bloquean temporalmente el renombrado atómico (EBUSY/EPERM),
+    // escribir directamente en el destino sin bloquear el hilo principal con bucles de espera.
     try {
-      renameSync(tmp, ruta)
-      return
-    } catch (err) {
-      const reintentable = reintentables.has(err.code)
-
-      if (reintentable && intento < 3) {
-        esperarSync(50)
-        continue
-      }
-
-      if (reintentable) {
-        if (existsSync(tmp)) {
-          try { unlinkSync(tmp) } catch (_) {}
-        }
-        writeFileSync(ruta, JSON.stringify(valor, null, 2), 'utf8')
-        return
-      }
-
-      if (existsSync(tmp)) {
-        try { unlinkSync(tmp) } catch (_) {}
-      }
-      throw err
-    }
+      if (existsSync(tmp)) unlinkSync(tmp)
+    } catch (_) {}
+    writeFileSync(ruta, JSON.stringify(valor, null, 2), 'utf8')
   }
 }
 
@@ -167,6 +161,7 @@ export function guardarPendiente(asistencia) {
   if (!asistencia) return
   pendientes.push(asistencia)
   persistirPendientes()
+  notificarPendientesChange()
 }
 
 export function getPendientes() {
@@ -178,6 +173,7 @@ export function marcarSincronizadas(uuids) {
   const conjunto = new Set(uuids.map((u) => String(u)))
   pendientes = pendientes.filter((p) => !conjunto.has(String(p.uuid)))
   persistirPendientes()
+  notificarPendientesChange()
 }
 
 export function yaTieneAsistenciaHoy(fichaId, estudianteId, timestamp) {

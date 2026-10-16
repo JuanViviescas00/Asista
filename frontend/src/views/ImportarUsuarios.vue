@@ -319,7 +319,6 @@ async function ejecutarImportacion() {
           especialidad: primeraFicha ? primeraFicha.nombrePrograma : 'Docente SENA',
           fichas: listaFichas,
           esLider: esLiderVal,
-          password: 'sena2026',
           rol: 'Instructor',
           estado: 'Activo',
         }
@@ -359,29 +358,19 @@ function descargarPlantilla() {
   let nombreArchivo = ''
 
   if (tipoImportacion.value === 'fichas') {
-    nombreArchivo = 'carga_masiva_fichas.xlsx'
+    nombreArchivo = 'plantilla_fichas.xlsx'
     filas = [
       ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Aula_Asignada', 'Fecha_Inicio', 'Fecha_Fin'],
-      ['2670123', 'Análisis y Desarrollo de Software (ADSO)', 'Mañana', 'Aula 302 Bloque A', '2026-02-01', '2026-11-30'],
-      ['2891234', 'Gestión de Redes de Datos', 'Tarde', 'Laboratorio 105 Bloque B', '2026-02-01', '2026-11-30'],
-      ['2901122', 'Diseño Gráfico Digital', 'Noche', 'Taller de Diseño Bloque C', '2026-02-15', '2026-12-15'],
     ]
   } else if (tipoImportacion.value === 'instructores') {
-    nombreArchivo = 'carga_masiva_instructores.xlsx'
+    nombreArchivo = 'plantilla_instructores.xlsx'
     filas = [
       ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider', 'Jornada'],
-      ['CC', '1055443301', 'Carlos Alberto', 'Mendoza Pérez', 'Masculino', 'carlos.mendoza@sena.edu.co', '3104567890', '2670123, 2891234', 'SI', 'Mañana'],
-      ['CC', '1055443302', 'Patricia Elena', 'Jaramillo Morales', 'Femenino', 'patricia.jaramillo@sena.edu.co', '3156789012', '2891234', 'SI', 'Tarde'],
-      ['CC', '1055443303', 'Roberto Antonio', 'Gómez Restrepo', 'Masculino', 'roberto.gomez@sena.edu.co', '3123456789', '2901122 / 2670123', 'NO', 'Noche'],
-      ['CC', '1055443304', 'María Fernanda', 'Suárez Castro', 'Femenino', 'maria.suarez@sena.edu.co', '3189012345', '2670123', 'NO', 'Mañana'],
     ]
   } else {
-    nombreArchivo = 'carga_masiva_estudiantes.xlsx'
+    nombreArchivo = 'plantilla_estudiantes.xlsx'
     filas = [
       ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Jornada'],
-      ['CC', '1098765432', 'Alejandro', 'Morales Ríos', 'Masculino', 'alejandro.morales@misena.edu.co', '3112345678', '2670123', 'Mañana'],
-      ['CC', '1098765433', 'Valentina', 'Ospina Gutiérrez', 'Femenino', 'valentina.ospina@misena.edu.co', '3123456789', '2670123', 'Mañana'],
-      ['CC', '1098765434', 'Santiago', 'Cardona Henao', 'Masculino', 'santiago.cardona@misena.edu.co', '3134567890', '2670123', 'Mañana'],
     ]
   }
 
@@ -421,8 +410,9 @@ function limpiarTodo() {
       <div class="import-users-card-header">
         <h3>Configuración de Importación</h3>
         <div class="import-users-header-actions">
-          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla" title="Descargar Plantilla">
+          <button class="import-users-button import-users-button-outline import-users-button-small" @click="descargarPlantilla" title="Descargar Plantilla" aria-label="Descargar Plantilla">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Descargar Plantilla</span>
           </button>
           <span v-if="usuario.rol === 'Instructor'" class="import-users-badge import-users-badge-success">
              Docente Líder Autorizado
@@ -433,9 +423,9 @@ function limpiarTodo() {
         <div class="import-users-form-group">
           <label>Tipo de Datos a Importar</label>
           <select v-model="tipoImportacion" :disabled="archivoNombre !== ''" @change="limpiarTodo">
-            <option value="estudiantes">‍ Estudiantes (Aprendices)</option>
-            <option value="instructores">‍ Instructores / Docentes</option>
-            <option value="fichas" v-if="usuario.rol === 'Administrador'"> Fichas / Programas</option>
+            <option value="estudiantes">Estudiantes (Aprendices)</option>
+            <option value="instructores">Instructores / Docentes</option>
+            <option value="fichas" v-if="usuario.rol === 'Administrador'">Fichas / Programas</option>
           </select>
         </div>
         <div class="import-users-form-group">
