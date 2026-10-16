@@ -263,8 +263,33 @@
 - **Archivos Modificados:**
   - `frontend/src/views/SeguimientoInasistencias.vue`
   - `TROUBLESHOOTING.md`
+---
+
+## [2026-10-15 21:12] Integración de Nuevos Logos/Iconos y Resolución de Regresión Accidental de Pinia y Sofia Lock
+
+- **Fecha y Hora:** 2026-10-15 21:12:00 -05:00
+- **Descripción del Problema / Regresión:**
+  - Tras el commit `111264e` subido al repositorio remoto con el mensaje *"modificacion de logos y botones"*, se produjo una regresión accidental en el frontend que eliminó la dependencia de `pinia`, la configuración de persistencia de borrador local ante recargas/caídas de red (`asistenciaDraft`), el candado de protección para registros ya reportados a Sofia Plus (🔒) y el acceso ampliado al módulo de *Seguimiento de Inasistencias* para docentes no líderes.
+- **Causa Raíz:**
+  - El commit remoto se generó a partir de una versión local desactualizada de `package.json`, `main.js`, `PanelInstructor.vue` y `SeguimientoInasistencias.vue` previa al commit `7e5e6d7`, sobreescribiendo dichas funcionalidades al hacer push a `main`.
+- **Solución Aplicada:**
+  - Se realizó una integración selectiva para conservar todas las mejoras gráficas y de usabilidad del colaborador sin perder la resiliencia técnica:
+    1. **Conservación de nuevos activos:** Se mantuvieron los 5 nuevos iconos en `frontend/src/assets/` (`equipo-docente-icon.png`, `estudiantes-menu-icon.png`, `gestionar-estudiantes-icon.png`, `historial-icon.png`, `instructores-menu-icon.png`).
+    2. **Conservación de máscaras y estilos:** Se conservaron las máscaras dinámicas de menú en `DefaultLayout.vue`, las reglas CSS en `main.css` y las clases añadidas en `panelInstructor.css`.
+    3. **Conservación de tipos de documento:** Se mantuvo la opción `TI` (Tarjeta de Identidad) en `Estudiantes.vue`.
+    4. **Integración en Panel del Docente:** Se actualizaron los botones de sub-pestañas en `PanelInstructor.vue` para utilizar las nuevas imágenes oficiales (`iconoHistorial`, `iconoGestionarEstudiantes`, `iconoEquipoDocente`).
+    5. **Restauración de Pinia:** Se reinstaló e inicializó `pinia` en `frontend/package.json` y `frontend/src/main.js`.
+    6. **Restauración de Persistencia y Sofia Lock:** Se restauró la integración completa del store reactivo `asistenciaDraft`, el guardado manual/automático, la cola de reintentos offline y el bloqueo visual con candado 🔒 para aprendices ya reportados en Sofia Plus en `PanelInstructor.vue`.
+    7. **Restauración de Seguimiento Docente:** Se restauró la consulta de fichas asignadas para todos los docentes de aula en `SeguimientoInasistencias.vue`.
+- **Archivos Modificados:**
+  - `frontend/package.json`
+  - `frontend/src/main.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/SeguimientoInasistencias.vue`
+  - `TROUBLESHOOTING.md`
 - **Verificación:**
-  - Compilación de producción con `vite build` exitosa en 1.50s (código de salida 0).
+  - Compilación de producción con `vite build` (`npm run build`) completada con éxito en 1.32s sin advertencias de sintaxis ni errores de importación.
+
 
 
 
