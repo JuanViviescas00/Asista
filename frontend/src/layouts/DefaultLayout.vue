@@ -6,6 +6,8 @@ import { useSistemaEstado } from '../composables/useSistemaEstado.js'
 import { getCurrentView, navigate, viewsForRole, currentComponentFor } from '../router/index.js'
 import senaLogo from '../assets/sena-logo.png'
 import instructorAvatar from '../assets/instructor-avatar.png'
+import iconoEstudiantesMenu from '../assets/estudiantes-menu-icon.png'
+import iconoInstructoresMenu from '../assets/instructores-menu-icon.png'
 
 const $q = useQuasar()
 const { usuario, headerTitulo, headerSubtitulo, cerrarSesion } = useAuth()
@@ -51,6 +53,18 @@ const iconosPorVista = {
   reportes: 'description',
   seguimiento: 'warning',
   diasFestivos: 'event_busy',
+}
+
+// Íconos de imagen propia (en lugar de Material Icons). Se pintan como máscara,
+// así toman el mismo color que el resto de íconos del menú (normal / activo / hover).
+// Por ahora solo el menú del Administrador usa íconos propios: "Estudiantes" e "Instructores".
+const iconosImagenAdmin = {
+  estudiantes: iconoEstudiantesMenu,
+  instructores: iconoInstructoresMenu,
+}
+function iconoImagenDeVista(key) {
+  if (rolActual.value === 'Administrador') return iconosImagenAdmin[key] || null
+  return null
 }
 
 // Título partido en dos para pintar "Panel" en un color y el resto en verde,
@@ -153,7 +167,13 @@ function irA(key) {
             @click.stop="irA(key)"
           >
             <span class="nav-item-icon">
-              <q-icon :name="iconosPorVista[key] || 'circle'" size="20px" />
+              <span
+                v-if="iconoImagenDeVista(key)"
+                class="nav-item-icon-mask"
+                :style="{ '--nav-icon': `url(${iconoImagenDeVista(key)})` }"
+                aria-hidden="true"
+              ></span>
+              <q-icon v-else :name="iconosPorVista[key] || 'circle'" size="20px" />
             </span>
             <span v-if="!miniEfectivo" class="nav-item-label">{{ view.label }}</span>
             <q-icon v-if="!miniEfectivo && currentView === key" name="chevron_right" class="nav-item-arrow" size="18px" />

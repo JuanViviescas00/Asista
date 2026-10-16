@@ -4,11 +4,10 @@ import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
-import { useAsistenciaDraftStore } from '../stores/asistenciaDraft.js'
 import '../styles/panelInstructor.css'
-
-const draftStore = useAsistenciaDraftStore()
-
+import iconoHistorial from '../assets/historial-icon.png'
+import iconoGestionarEstudiantes from '../assets/gestionar-estudiantes-icon.png'
+import iconoEquipoDocente from '../assets/equipo-docente-icon.png'
 
 const usuarioStr = sessionStorage.getItem('user_data')
 const usuario = ref(usuarioStr ? JSON.parse(usuarioStr) : { id: '', nombre: 'Instructor', rol: 'Instructor' })
@@ -37,28 +36,13 @@ function showToast(message, type = 'success') {
   setTimeout(() => { toast.show = false }, 3000)
 }
 
-async function onConexionRecuperada() {
-  const res = await draftStore.sincronizarColaOffline(api)
-  if (res.totalSincronizados > 0) {
-    showToast(`Conexión recuperada: ${res.totalSincronizados} asistencias sincronizadas automáticamente.`, 'success')
-    if (fichaSeleccionada.value?._id) {
-      await cargarDatosFicha(fichaSeleccionada.value._id)
-    }
-  }
-}
-
 onMounted(async () => {
-  window.addEventListener('online', onConexionRecuperada)
   await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
-  if (draftStore.pendientesOfflineCount > 0) {
-    onConexionRecuperada()
-  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('online', onConexionRecuperada)
   if (fichaSeleccionada.value?._id) {
     salirDeSalaFicha(fichaSeleccionada.value._id)
   }
@@ -70,6 +54,8 @@ function iniciarSocketDocente() {
     if (asistenciaDia.value[data.estudianteId]) {
       asistenciaDia.value[data.estudianteId].estado = data.estado
       asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
+      asistenciaDia.value[data.estudianteId].excusa = false
+      asistenciaDia.value[data.estudianteId].previo = null
     }
     feedEnVivoDocente.value.unshift({
       id: data.estudianteId,
@@ -237,7 +223,6 @@ function getHoyLocalISO() {
 const fechaHoyMax = computed(() => getHoyLocalISO())
 const fechaAsistencia = ref(getHoyLocalISO())
 const asistenciaDia = ref({})
-const guardandoAsistencia = ref(false)
 
 const esFechaActualOHoy = computed(() => {
   return fechaAsistencia.value >= fechaHoyMax.value
@@ -443,12 +428,6 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
   }
 }
 
-function autoGuardarBorrador() {
-  if (fichaSeleccionada.value?._id && fechaAsistencia.value) {
-    draftStore.guardarBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, asistenciaDia.value)
-  }
-}
-
 function inicializarAsistenciaDia() {
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
@@ -457,7 +436,10 @@ function inicializarAsistenciaDia() {
     const existente = asistenciasFicha.value.find(
       a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === hoy
     )
-    const estado = existente ? existente.estado : 'Ninguno'
+    const estadoDB = existente ? existente.estado : 'Presente'
+    const esExcusada = estadoDB === 'Excusada'
+    // La excusa ahora convive con la falla: una 'Excusada' guardada se muestra como Falta + Excusa
+    const estado = esExcusada ? 'Falta' : estadoDB
     const hora = existente ? (existente.hora || '') : ''
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
@@ -465,36 +447,17 @@ function inicializarAsistenciaDia() {
 
     registros[est._id] = {
       estado,
-      excusa: existente ? existente.estado === 'Excusada' : false,
+      excusa: esExcusada,
+      previo: null,
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
-      subidoSofia: existente ? !!existente.subidoSofia : false,
     }
   }
-
-  // Comprobar si existe un borrador no guardado en Pinia / LocalStorage
-  const borrador = draftStore.obtenerBorrador(fichaSeleccionada.value?._id, hoy)
-  if (borrador && borrador.registros) {
-    let restaurados = 0
-    for (const estId in borrador.registros) {
-      if (registros[estId]) {
-        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios
-        if (!registros[estId].subidoSofia && (borrador.registros[estId].estado !== 'Ninguno' || borrador.registros[estId].excusa)) {
-          registros[estId] = { ...registros[estId], ...borrador.registros[estId] }
-          restaurados++
-        }
-      }
-    }
-    if (restaurados > 0) {
-      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios no guardados.`, 'info')
-    }
-  }
-
   asistenciaDia.value = registros
 }
 
-function marcarPresente(estId) {
+function marcarFalta(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para tomar asistencia.', 'warning')
     return
@@ -502,32 +465,27 @@ function marcarPresente(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
 
-  if (reg.subidoSofia) {
-    showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
-    return
-  }
-
-  if (reg.estado === 'Presente' || reg.estado === 'Tardanza') {
-    // Desmarcar al hacer clic de nuevo
-    reg.estado = 'Ninguno'
+  if (reg.estado === 'Falta') {
+    // Desmarcar la falla: se quita también la excusa y se restaura el estado previo
+    const previo = reg.previo
+    reg.estado = previo?.estado || 'Presente'
+    reg.horaMarcacion = previo?.horaMarcacion || ''
+    reg.horasTardanza = previo?.horasTardanza || 0
+    reg.tiempoTardanza = previo?.tiempoTardanza || '0 horas'
+    reg.excusa = false
+    reg.previo = null
+  } else {
+    reg.previo = {
+      estado: reg.estado,
+      horaMarcacion: reg.horaMarcacion,
+      horasTardanza: reg.horasTardanza,
+      tiempoTardanza: reg.tiempoTardanza,
+    }
+    reg.estado = 'Falta'
     reg.horaMarcacion = ''
     reg.horasTardanza = 0
     reg.tiempoTardanza = '0 horas'
-  } else {
-    const ahora = new Date()
-    const horaFormateada = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    const ahoraMs = ahora.getTime()
-    const minutos = calcularMinutosTranscurridos(claseIniciadaAt.value || ahoraMs, ahoraMs)
-    const tardanzaInfo = calcularEstadoPorTiempo(minutos)
-
-    reg.estado = tardanzaInfo.estado
-    reg.horaMarcacion = horaFormateada
-    reg.horasTardanza = tardanzaInfo.horasTardanza
-    reg.tiempoTardanza = tardanzaInfo.tiempoTardanza
-    reg.excusa = false
   }
-
-  autoGuardarBorrador()
 }
 
 function toggleExcusa(estId) {
@@ -537,99 +495,9 @@ function toggleExcusa(estId) {
   }
   const reg = asistenciaDia.value[estId]
   if (!reg) return
-
-  if (reg.subidoSofia) {
-    showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
-    return
-  }
-
+  // La excusa solo aplica sobre una falla
+  if (reg.estado !== 'Falta') return
   reg.excusa = !reg.excusa
-  if (reg.excusa) {
-    reg.estado = 'Excusada'
-  } else {
-    reg.estado = 'Ninguno'
-    reg.horaMarcacion = ''
-    reg.horasTardanza = 0
-    reg.tiempoTardanza = '0 horas'
-  }
-
-  autoGuardarBorrador()
-}
-
-async function guardarAsistenciaDia() {
-  if (jornadaInhabilitada.value) {
-    showToast('Esta sesión ya se encuentra guardada como inhabilitada.', 'info')
-    return
-  }
-  if (fechaAsistencia.value > fechaHoyMax.value) {
-    showToast('No es posible registrar ni finalizar asistencias en fechas futuras.', 'warning')
-    return
-  }
-  guardandoAsistencia.value = true
-  const hoy = fechaAsistencia.value
-  const horaActual = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
-  let exitosos = 0
-  let errores = 0
-  const fallidosParaOffline = []
-
-  for (const est of estudiantesFicha.value) {
-    const reg = asistenciaDia.value[est._id]
-    let estadoFinal = 'Falta'
-    let horaMarcada = horaActual
-    let hTardanza = 0
-    let tTardanza = '0 horas'
-
-    if (reg) {
-      if (reg.excusa) {
-        estadoFinal = 'Excusada'
-        horaMarcada = reg.horaMarcacion || horaActual
-      } else if (['Presente', 'Tardanza', 'Excusada'].includes(reg.estado)) {
-        estadoFinal = reg.estado
-        horaMarcada = reg.horaMarcacion || horaActual
-        if (estadoFinal === 'Tardanza') {
-          const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
-          hTardanza = reg.horasTardanza || calc.horas
-          tTardanza = reg.tiempoTardanza || calc.texto
-        }
-      }
-    }
-
-    const itemAsistencia = {
-      estudianteId: est._id,
-      fichaId: fichaSeleccionada.value._id,
-      estado: estadoFinal,
-      fecha: hoy,
-      hora: horaMarcada,
-      horasTardanza: hTardanza,
-      tiempoTardanza: tTardanza,
-      instructorId: usuario.value.id || null,
-    }
-
-    try {
-      await api.asistencias.create(itemAsistencia)
-      exitosos++
-    } catch (err) {
-      errores++
-      fallidosParaOffline.push(itemAsistencia)
-      console.error(`Error asistencia ${est.nombres}:`, err.message)
-    }
-  }
-
-  if (errores === 0) {
-    draftStore.limpiarBorrador(fichaSeleccionada.value._id, hoy)
-    await cargarDatosFicha(fichaSeleccionada.value._id)
-    showToast(`Jornada finalizada. Asistencias guardadas exitosamente.`)
-  } else {
-    // Si hubo errores (ej: fallo de conexión/internet), encolar en Pinia offline
-    draftStore.encolarOffline(fallidosParaOffline)
-    showToast(
-      `${exitosos} guardados. ${errores} guardados localmente por corte de conexión (se enviarán automáticamente al reconectar).`,
-      'warning'
-    )
-  }
-
-  guardandoAsistencia.value = false
 }
 
 // Contadores de asistencia del día
@@ -640,15 +508,13 @@ const conteoAsistencia = computed(() => {
   const conteo = { Presente: 0, Tardanza: 0, Falta: 0, Excusada: 0 }
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
-    if (reg) {
-      const estado = reg.excusa ? 'Excusada' : reg.estado
-      if (['Presente', 'Tardanza', 'Excusada'].includes(estado)) {
-        conteo[estado]++
-      } else {
-        conteo.Falta++ // Los no marcados cuentan como Falta automática
-      }
-    } else {
+    if (reg?.estado === 'Falta') {
       conteo.Falta++
+      if (reg.excusa) conteo.Excusada++ // Excusada es un subconjunto de las fallas
+    } else if (reg?.estado === 'Tardanza') {
+      conteo.Tardanza++
+    } else {
+      conteo.Presente++
     }
   }
   return conteo
@@ -713,31 +579,6 @@ async function guardarEstudiante() {
 // =============================================
 // EXPORTAR A EXCEL
 // =============================================
-function exportarAsistenciaDia() {
-  const hoy = fechaAsistencia.value
-  const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
-  const data = estudiantesFicha.value.map(est => {
-    const reg = asistenciaDia.value[est._id]
-    const estadoStr = jornadaInhabilitada.value ? 'Inhabilitada' : (reg ? (reg.excusa ? 'Excusada' : reg.estado) : 'Sin registro')
-    let tardanzaStr = '0 horas'
-    if (estadoStr === 'Tardanza') {
-      tardanzaStr = reg?.tiempoTardanza || calcularHorasTardanza(reg?.horaMarcacion, jornadaFicha).texto
-    }
-    return {
-      'Aprendiz': `${est.nombres} ${est.apellidos}`,
-      'Tipo Doc.': est.tipoDocumento,
-      'Documento': est.numeroDocumento,
-      'Estado': estadoStr,
-      'Hora Marcación': jornadaInhabilitada.value ? '—' : (reg?.horaMarcacion || '—'),
-      'Tiempo de Tardanza': tardanzaStr,
-      'Excusa': reg?.excusa ? 'Sí' : 'No',
-      'Fecha': hoy,
-      'Observación / Motivo': jornadaInhabilitada.value ? motivoInhabilitacionDia.value : ''
-    }
-  })
-  descargarExcel(data, `Asistencia_${fichaSeleccionada.value.codigoFicha}_${hoy}`)
-}
-
 function exportarHistorial() {
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
   const data = asistenciasFicha.value.map(asis => {
@@ -901,7 +742,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'editar_asistencia'"
               title="Historial"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
+              <img :src="iconoHistorial" alt="Historial" class="tab-icon-img" width="16" height="16" />
             </button>
             <!-- BOTÓN GESTIONAR ESTUDIANTES -->
             <button
@@ -910,7 +751,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'gestionar_estudiantes'"
               title="Gestionar Estudiantes"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
+              <img :src="iconoGestionarEstudiantes" alt="Gestionar Estudiantes" class="tab-icon-img" width="16" height="16" />
             </button>
             <button
               class="tab-btn"
@@ -918,7 +759,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'docentes'"
               title="Equipo Docente"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3.3"/><path d="M2.5 19c1.2-3.4 3.8-5.2 6.5-5.2s5.3 1.8 6.5 5.2z"/><circle cx="17" cy="8.5" r="2.6" opacity="0.75"/><path d="M15 13.6c2.2.4 4 2 5 5H18" opacity="0.75"/></svg>
+              <img :src="iconoEquipoDocente" alt="Equipo Docente" class="tab-icon-img" width="16" height="16" />
             </button>
           </div>
         </div>
@@ -1131,7 +972,7 @@ function descargarExcel(data, nombreArchivo) {
 
           <div v-if="!jornadaInhabilitada" class="info-alert-bar" style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 8px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
-            <span><strong>Cálculo Automático de Tardanza:</strong> Al marcar a un aprendiz como <strong>Presente</strong>, se captura la hora exacta. Si supera los 10 minutos de inicio de jornada ({{ fichaSeleccionada.jornada }}), se asignará automáticamente como <strong>Tardanza</strong>. Quienes queden sin marcar se registrarán como <strong>Falta</strong> al finalizar la jornada.</span>
+            <span><strong>Cálculo Automático de Tardanza:</strong> Los aprendices se consideran <strong>Presentes</strong> por defecto. Marca la casilla <strong>Falla</strong> para quienes no asistieron y, si presentan soporte, activa también la <strong>Excusa</strong> (solo disponible cuando hay falla). Si el huellero registra a un aprendiz después de los 10 minutos de inicio de jornada ({{ fichaSeleccionada.jornada }}), se asigna como <strong>Tardanza</strong>.</span>
           </div>
 
           <!-- Contenedor de la Tabla con estilo Disabled/Overlay si la jornada está inhabilitada -->
@@ -1146,9 +987,8 @@ function descargarExcel(data, nombreArchivo) {
                 <tr>
                   <th>Aprendiz</th>
                   <th>Documento</th>
-                  <th>Marcar Presente</th>
+                  <th>Marcar Falla</th>
                   <th>Excusa (F2F)</th>
-                  <th>Hora Marcación</th>
                   <th>Estado Asignado</th>
                 </tr>
               </thead>
@@ -1158,59 +998,55 @@ function descargarExcel(data, nombreArchivo) {
                   <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="jornadaInhabilitada ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
-                        :checked="asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza'"
-                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
-                        @change="marcarPresente(est._id)"
+                        :checked="asistenciaDia[est._id]?.estado === 'Falta'"
+                        :disabled="jornadaInhabilitada"
+                        @change="marcarFalta(est._id)"
                       />
-                      <span class="checkbox-custom radio-presente"></span>
+                      <span class="checkbox-custom checkbox-falta"></span>
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.estado !== 'Falta') ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
-                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.estado !== 'Falta'"
                         @change="toggleExcusa(est._id)"
                       />
                       <span class="checkbox-custom"></span>
                     </label>
                   </td>
-                  <td style="font-size: 12px; font-weight: 600; color: #475569;">
-                    {{ jornadaInhabilitada ? '—' : (asistenciaDia[est._id]?.horaMarcacion || '—') }}
-                  </td>
                   <td>
-                    <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge" style="background: #ecfdf5; color: #047857; border: 1px solid #10b981; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;" title="Inasistencia ya reportada en Sofia Plus. Bloqueada para edición.">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                      Reportado Sofia Plus ({{ asistenciaDia[est._id]?.estado }})
-                    </span>
-                    <span v-else-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
+                    <span v-if="jornadaInhabilitada" class="badge" style="background: #fed7aa; color: #9a3412; font-weight: 700; border: 1px solid #f97316; display: inline-flex; align-items: center; gap: 5px;">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
                       Inhabilitada
                     </span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge badge-warning">
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta' && asistenciaDia[est._id]?.excusa" class="badge badge-warning">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                      Excusada
+                      Falta (Excusada)
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge badge-success">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
-                      Presente (A tiempo)
+                      Presente
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge badge-warning">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
                       Tardanza ({{ asistenciaDia[est._id]?.tiempoTardanza || '1 hora' }})
                     </span>
-                    <span v-else class="badge badge-danger">
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge badge-danger">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
-                      Falta (Automática)
+                      Falta
+                    </span>
+                    <span v-else class="badge badge-success">
+                      Presente
                     </span>
                   </td>
                 </tr>
                 <tr v-if="estudiantesFicha.length === 0">
-                  <td colspan="6" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
+                  <td colspan="5" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
                 </tr>
               </tbody>
             </table>
@@ -1223,8 +1059,9 @@ function descargarExcel(data, nombreArchivo) {
                 class="mobile-student-card"
                 :class="{
                   'mob-card-presente': asistenciaDia[est._id]?.estado === 'Presente',
+                  'mob-card-falta': asistenciaDia[est._id]?.estado === 'Falta' && !asistenciaDia[est._id]?.excusa,
                   'mob-card-tardanza': asistenciaDia[est._id]?.estado === 'Tardanza',
-                  'mob-card-excusada': asistenciaDia[est._id]?.excusa,
+                  'mob-card-excusada': asistenciaDia[est._id]?.estado === 'Falta' && asistenciaDia[est._id]?.excusa,
                   'mob-card-inhabilitada': jornadaInhabilitada,
                 }"
               >
@@ -1237,32 +1074,27 @@ function descargarExcel(data, nombreArchivo) {
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
                   </div>
                   <div class="mob-status-badge">
-                    <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
-                    <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
+                    <span v-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta' && asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Falta excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge-mob-pres">Presente</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
-                    <span v-else class="badge-mob-falta">Falta</span>
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
+                    <span v-else class="badge-mob-pres">Presente</span>
                   </div>
                 </div>
 
                 <div class="mob-card-footer">
-                  <div class="mob-time-info">
-                    <span class="time-label">Hora:</span>
-                    <span class="time-val">{{ jornadaInhabilitada ? '—' : (asistenciaDia[est._id]?.horaMarcacion || 'Sin registro') }}</span>
-                  </div>
-
                   <div class="mob-actions-row">
                     <!-- Botón Marcar Asistencia Táctil -->
                     <button
                       type="button"
-                      class="btn-mob-presente"
-                      :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
-                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
-                      @click="marcarPresente(est._id)"
-                      title="Marcar presente"
+                      class="btn-mob-falta"
+                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
+                      :disabled="jornadaInhabilitada"
+                      @click="marcarFalta(est._id)"
+                      title="Marcar falla"
                     >
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
 
                     <!-- Botón Excusa Táctil -->
@@ -1270,7 +1102,7 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-excusa"
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
-                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.estado !== 'Falta'"
                       @click="toggleExcusa(est._id)"
                       title="Registrar excusa"
                     >
@@ -1285,38 +1117,11 @@ function descargarExcel(data, nombreArchivo) {
             </div>
           </div>
 
-          <div class="action-bar" v-if="estudiantesFicha.length > 0">
-            <!-- Indicador de cola offline si hay asistencias pendientes por enviar -->
-            <button
-              v-if="draftStore.pendientesOfflineCount > 0"
-              class="btn"
-              @click="onConexionRecuperada"
-              title="Haz clic para intentar sincronizar las asistencias guardadas localmente"
-              style="background: #fffbeb; border: 1.5px solid #fcd34d; color: #b45309; font-weight: 700; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 8px;"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span>{{ draftStore.pendientesOfflineCount }} offline (Reintentar envío)</span>
-            </button>
-
-            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <div v-if="jornadaInhabilitada" style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
+          <div class="action-bar" v-if="estudiantesFicha.length > 0 && jornadaInhabilitada">
+            <div style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
               Sesión Inhabilitada — Guardada en MongoDB y SQLite
             </div>
-            <button
-              v-else
-              class="btn btn-primary btn-guardar"
-              @click="guardarAsistenciaDia"
-              :disabled="guardandoAsistencia"
-              title="Guardar"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            </button>
           </div>
         </div>
 

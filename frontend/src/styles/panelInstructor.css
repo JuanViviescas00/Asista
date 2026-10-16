@@ -122,7 +122,19 @@
   font-size: 11px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: 999px;
+}
+
+/* Etiqueta "Docente Líder / Docente Común" del encabezado de la ficha (forma de píldora) */
+.badge-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .badge-lider { background: #dcfce7; color: #15803d; }
@@ -179,6 +191,18 @@
   background: #2563eb;
   color: #ffffff;
   border-color: #2563eb;
+}
+
+.tab-icon-img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.tab-btn.active .tab-icon-img {
+  background: #ffffff;
+  border-radius: 4px;
 }
 
 .tab-btn.disabled {
@@ -332,6 +356,11 @@
 .checkbox-label input:checked ~ .checkbox-custom {
   border-color: #3b82f6;
   background: #3b82f6;
+}
+
+.checkbox-label input:checked ~ .checkbox-custom.checkbox-falta {
+  border-color: #ef4444;
+  background: #ef4444;
 }
 
 .checkbox-label input:checked ~ .checkbox-custom::after {
@@ -1138,6 +1167,11 @@
     background: #f0fdf4;
   }
 
+  .mob-card-falta {
+    border-color: #fca5a5;
+    background: #fef2f2;
+  }
+
   .mob-card-tardanza {
     border-color: #fde047;
     background: #fefce8;
@@ -1217,7 +1251,7 @@
 
   .mob-card-footer {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     padding-top: 8px;
     border-top: 1px solid #f1f5f9;
@@ -1254,6 +1288,28 @@
     background: #16a34a;
     color: white;
     border-color: #15803d;
+  }
+
+  .btn-mob-falta {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .btn-mob-falta.btn-mob-falta-active {
+    background: #dc2626;
+    color: white;
+    border-color: #b91c1c;
+  }
+
+  .btn-mob-excusa:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .btn-mob-excusa {
