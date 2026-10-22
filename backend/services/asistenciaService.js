@@ -1,6 +1,5 @@
 import mongoose from 'mongoose'
 import Ficha from '../models/Ficha.js'
-import Asistencia from '../models/Asistencia.js'
 import Estudiante from '../models/Estudiante.js'
 import Clase from '../models/Clase.js'
 import Inasistencia from '../models/Inasistencia.js'
@@ -9,6 +8,7 @@ import DiaFestivo from '../models/DiaFestivo.js'
 import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
 import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import { asegurarJornada } from './jornadaService.js'
+import { construirFilasResumenPorEstudiante } from '../utils/inasistenciaResumen.js'
 
 /**
  * Retorna la fecha actual en zona horaria de Colombia (America/Bogota) en formato YYYY-MM-DD
@@ -214,12 +214,15 @@ export function calcularResumenDesdeAsistencias(asistencias = [], jornada = '') 
  * cálculo puro, respetando las horas por jornada).
  */
 export async function calcularResumenAsistencia(estudianteId) {
-  const [asistencias, estudiante] = await Promise.all([
-    Asistencia.find({ estudianteId }).sort({ fecha: 1 }),
+  const [inasistencias, jornadas, estudiante] = await Promise.all([
+    Inasistencia.find({ estudianteId }).sort({ fecha: 1 }),
+    Jornada.find({ 'presentes.estudianteId': estudianteId }),
     Estudiante.findById(estudianteId).populate('fichaId', 'jornada')
   ])
+  const porEstudiante = construirFilasResumenPorEstudiante({ inasistencias, jornadas })
+  const filas = porEstudiante.get(String(estudianteId)) || []
   const jornada = estudiante?.fichaId?.jornada || ''
-  return calcularResumenDesdeAsistencias(asistencias, jornada)
+  return calcularResumenDesdeAsistencias(filas, jornada)
 }
 
 /**

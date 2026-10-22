@@ -6,7 +6,7 @@ import Inasistencia from '../models/Inasistencia.js'
 import Jornada from '../models/Jornada.js'
 import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'
-import { cerrarInasistenciasFicha, finalizarClase } from './asistenciaService.js'
+import { cerrarInasistenciasFicha, finalizarClase, calcularResumenAsistencia } from './asistenciaService.js'
 
 const fichaId = '111111111111111111111111'
 const est1 = '222222222222222222222222'
@@ -20,11 +20,13 @@ const fichaFake = { _id: fichaId, jornada: 'Mañana', instructorLiderId: null }
 const orig = {
   fichaOne: Ficha.findOne,
   estFind: Estudiante.find,
+  estFindById: Estudiante.findById,
   inaFind: Inasistencia.find,
   inaBulk: Inasistencia.bulkWrite,
   inaDeleteMany: Inasistencia.deleteMany,
   jorFindOne: Jornada.findOne,
   jorFindOneAndUpdate: Jornada.findOneAndUpdate,
+  jorFind: Jornada.find,
   diaFind: DiaFestivo.find,
   claseFindOneAndUpdate: Clase.findOneAndUpdate,
 }
@@ -44,11 +46,13 @@ function base() {
 after(() => {
   Ficha.findOne = orig.fichaOne
   Estudiante.find = orig.estFind
+  Estudiante.findById = orig.estFindById
   Inasistencia.find = orig.inaFind
   Inasistencia.bulkWrite = orig.inaBulk
   Inasistencia.deleteMany = orig.inaDeleteMany
   Jornada.findOne = orig.jorFindOne
   Jornada.findOneAndUpdate = orig.jorFindOneAndUpdate
+  Jornada.find = orig.jorFind
   DiaFestivo.find = orig.diaFind
   Clase.findOneAndUpdate = orig.claseFindOneAndUpdate
 })
@@ -167,4 +171,78 @@ test('bulkWrite E11000: toma upsertedCount y continúa (limpia carrera)', async 
   assert.equal(r.creados, 1)
   assert.equal(r.error, undefined)
   assert.equal(deleteManyCalled, true)
+})
+
+test('calcularResumenAsistencia: Falta + Tardanza + Excusada + presentes => mismo resumen', async () => {
+  base()
+  Inasistencia.find = () => ({ sort: () => Promise.resolve([
+    { estudianteId: est1, fecha: '2026-01-05', tipo: 'Falta', horas: 6 },
+    { estudianteId: est1, fecha: '2026-01-06', tipo: 'Tardanza', horas: 2 },
+    { estudianteId: est1, fecha: '2026-01-07', tipo: 'Excusada', horas: 6 },
+  ]) })
+  Jornada.find = () => Promise.resolve([
+    { fichaId, fecha: '2026-01-08', presentes: [{ estudianteId: est1 }] },
+    { fichaId, fecha: '2026-01-09', presentes: [{ estudianteId: est1 }] },
+  ])
+  Estudiante.findById = () => ({ populate: () => Promise.resolve({ _id: est1, fichaId: { jornada: 'Mañana' } }) })
+
+  const r = await calcularResumenAsistencia(est1)
+  assert.equal(r.diasFallaLiteral, 1)        // solo la Falta
+  assert.equal(r.horasTardanzaAcumuladas, 2) // solo la Tardanza
+  assert.equal(r.diasFallaPorHoras, 0)       // 2 // 6
+  assert.equal(r.horasPendientes, 2)
+  assert.equal(r.diasFallaTotales, 1)
+  assert.equal(r.rachaConsecutivaActual, 0)  // termina en Presente
+  assert.equal(r.critico, false)
+})
+
+test('calcularResumenAsistencia: horas de Tardanza acumulan y no se leen horas de Falta/Excusada', async () => {
+  base()
+  Inasistencia.find = () => ({ sort: () => Promise.resolve([
+    { estudianteId: est1, fecha: '2026-01-05', tipo: 'Tardanza', horas: 3 },
+    { estudianteId: est1, fecha: '2026-01-06', tipo: 'Tardanza', horas: 3 },
+    { estudianteId: est1, fecha: '2026-01-07', tipo: 'Falta', horas: 6 },
+    { estudianteId: est1, fecha: '2026-01-08', tipo: 'Excusada', horas: 6 },
+  ]) })
+  Jornada.find = () => Promise.resolve([])
+  Estudiante.findById = () => ({ populate: () => Promise.resolve({ _id: est1, fichaId: { jornada: 'Mañana' } }) })
+
+  const r = await calcularResumenAsistencia(est1)
+  assert.equal(r.horasTardanzaAcumuladas, 6)
+  assert.equal(r.diasFallaLiteral, 1)
+  assert.equal(r.diasFallaPorHoras, 1) // 6 // 6
+  assert.equal(r.horasPendientes, 0)
+  assert.equal(r.diasFallaTotales, 2)
+})
+
+test('racha: Presente 01-05 + Faltas 01-06 y 01-07 => racha 2', async () => {
+  base()
+  Inasistencia.find = () => ({ sort: () => Promise.resolve([
+    { estudianteId: est1, fecha: '2026-01-06', tipo: 'Falta', horas: 6 },
+    { estudianteId: est1, fecha: '2026-01-07', tipo: 'Falta', horas: 6 },
+  ]) })
+  Jornada.find = () => Promise.resolve([
+    { fichaId, fecha: '2026-01-05', presentes: [{ estudianteId: est1 }] },
+  ])
+  Estudiante.findById = () => ({ populate: () => Promise.resolve({ _id: est1, fichaId: { jornada: 'Mañana' } }) })
+
+  const r = await calcularResumenAsistencia(est1)
+  assert.equal(r.rachaConsecutivaActual, 2)
+  assert.equal(r.diasFallaLiteral, 2)
+})
+
+test('racha: Faltas 01-05 y 01-06 + Presente 01-07 => racha 0', async () => {
+  base()
+  Inasistencia.find = () => ({ sort: () => Promise.resolve([
+    { estudianteId: est1, fecha: '2026-01-05', tipo: 'Falta', horas: 6 },
+    { estudianteId: est1, fecha: '2026-01-06', tipo: 'Falta', horas: 6 },
+  ]) })
+  Jornada.find = () => Promise.resolve([
+    { fichaId, fecha: '2026-01-07', presentes: [{ estudianteId: est1 }] },
+  ])
+  Estudiante.findById = () => ({ populate: () => Promise.resolve({ _id: est1, fichaId: { jornada: 'Mañana' } }) })
+
+  const r = await calcularResumenAsistencia(est1)
+  assert.equal(r.rachaConsecutivaActual, 0)
+  assert.equal(r.diasFallaLiteral, 2)
 })

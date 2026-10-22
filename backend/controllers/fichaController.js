@@ -1,10 +1,12 @@
 import Ficha from '../models/Ficha.js'
 import Estudiante from '../models/Estudiante.js'
 import Dispositivo from '../models/Dispositivo.js'
-import Asistencia from '../models/Asistencia.js'
+import Inasistencia from '../models/Inasistencia.js'
+import Jornada from '../models/Jornada.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
 import { calcularResumenDesdeAsistencias } from '../services/asistenciaService.js'
+import { construirFilasResumenPorEstudiante } from '../utils/inasistenciaResumen.js'
 import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textUtils.js'
 
 export async function getFichas(req, res) {
@@ -149,14 +151,12 @@ export async function getTardanzasResumen(req, res) {
     }).select('_id')
 
     const estudianteIds = estudiantes.map(e => e._id)
-    const asistencias = await Asistencia.find({ estudianteId: { $in: estudianteIds } }).sort({ fecha: 1 })
+    const [inasistencias, jornadas] = await Promise.all([
+      Inasistencia.find({ estudianteId: { $in: estudianteIds } }).sort({ fecha: 1 }),
+      Jornada.find({ 'presentes.estudianteId': { $in: estudianteIds } })
+    ])
 
-    const porEstudiante = new Map()
-    for (const a of asistencias) {
-      const key = String(a.estudianteId)
-      if (!porEstudiante.has(key)) porEstudiante.set(key, [])
-      porEstudiante.get(key).push(a)
-    }
+    const porEstudiante = construirFilasResumenPorEstudiante({ inasistencias, jornadas })
 
     const resumen = {}
     for (const est of estudiantes) {

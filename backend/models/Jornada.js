@@ -27,4 +27,7 @@ jornadaSchema.index(
 // Índice para la idempotencia de marcaciones del huellero (presentes.uuid).
 jornadaSchema.index({ 'presentes.uuid': 1 })
 
+// Índice para consultar jornadas por aprendiz presente.
+jornadaSchema.index({ 'presentes.estudianteId': 1 })
+
 export default mongoose.model('Jornada', jornadaSchema)
