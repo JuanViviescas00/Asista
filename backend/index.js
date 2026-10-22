@@ -14,6 +14,7 @@ import instructoresRoutes from './routes/instructores.js'
 import fichasRoutes from './routes/fichas.js'
 import estudiantesRoutes from './routes/estudiantes.js'
 import asistenciasRoutes from './routes/asistencias.js'
+import jornadasRoutes from './routes/jornadas.js'
 import diasFestivosRoutes from './routes/diasFestivos.js'
 import excusasRoutes from './routes/excusas.js'
 import clasesRoutes from './routes/clases.js'
@@ -118,6 +119,7 @@ app.use('/api/instructores', instructoresRoutes)
 app.use('/api/fichas', fichasRoutes)
 app.use('/api/estudiantes', estudiantesRoutes)
 app.use('/api/asistencias', asistenciasRoutes)
+app.use('/api/jornadas', jornadasRoutes)
 app.use('/api/dias-festivos', diasFestivosRoutes)
 app.use('/api/excusas', excusasRoutes)
 app.use('/api/clases', clasesRoutes)

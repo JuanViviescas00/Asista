@@ -4,10 +4,12 @@ import Instructor from '../models/Instructor.js'
 import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
+import Inasistencia from '../models/Inasistencia.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
 import { getHoyString, formatearFechaColombia, cerrarInasistenciasFicha } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 import { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA } from '../utils/diasHabiles.js'
+import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
 
 // Reexportados para no romper a quienes ya importaban estas utilidades desde cronService.
 export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA }
@@ -79,6 +81,41 @@ export async function cerrarClasesExpiradas() {
 }
 
 /**
+ * Recalcula el estado de carga (EN_ESPERA -> LISTO_PARA_SUBIR) de las
+ * Inasistencias pendientes. Nunca toca las que ya están en 'SUBIDA'.
+ */
+export async function actualizarEstadosCarga() {
+  const hoyStr = getHoyString()
+
+  const festivosDocs = await DiaFestivo.find().select('fecha')
+  const festivosSet = new Set(festivosDocs.map((f) => f.fecha))
+
+  const enEspera = await Inasistencia.find({ estadoCarga: 'EN_ESPERA' }).populate('fichaId', 'jornada')
+
+  const actualizaciones = []
+  for (const ina of enEspera) {
+    const jornada = ina.fichaId?.jornada || ''
+    const nuevo = calcularEstadoCarga({ fecha: ina.fecha, tipo: ina.tipo, jornada, festivosSet, hoyStr })
+    if (nuevo === 'LISTO_PARA_SUBIR') {
+      actualizaciones.push({
+        updateOne: {
+          filter: { _id: ina._id },
+          update: { $set: { estadoCarga: 'LISTO_PARA_SUBIR' } },
+        },
+      })
+    }
+  }
+
+  let actualizadas = 0
+  if (actualizaciones.length > 0) {
+    const res = await Inasistencia.bulkWrite(actualizaciones)
+    actualizadas = res.modifiedCount || 0
+  }
+
+  return { revisadas: enEspera.length, actualizadas }
+}
+
+/**
  * Servicio Cron Job para:
  * 1. Auto-cierre de clases que superen las 3 horas (cada minuto).
  * 2. Exportación y sincronización nocturna de asistencias agrupadas por Docente (medianoche).
@@ -99,6 +136,12 @@ export function iniciarCronJobs() {
   // 2. Cron nocturno de sincronización SQLite por Docente
   cron.schedule(schedule, async () => {
     console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando procesamiento nocturno de SQLite por DOCENTE (filtro ${DIAS_HABILES_VENTANA_EXCUSA} días hábiles)...`)
+    try {
+      const estados = await actualizarEstadosCarga()
+      console.log(`[CRON] Estados de carga: ${estados.revisadas} revisadas, ${estados.actualizadas} pasaron a LISTO_PARA_SUBIR.`)
+    } catch (err) {
+      console.error('[CRON] Error actualizando estados de carga:', err.message)
+    }
     try {
       const resultado = await sincronizarSqlitePorDocente()
       console.log(`[CRON] ✅ Proceso finalizado. Docentes: ${resultado.totalDocentes}, Clases/Registros: ${resultado.totalRegistros}, Elegibles subida: ${resultado.totalElegiblesSubida}`)

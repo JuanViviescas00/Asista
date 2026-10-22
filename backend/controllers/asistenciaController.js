@@ -1,12 +1,17 @@
 import Asistencia from '../models/Asistencia.js'
+import Inasistencia from '../models/Inasistencia.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
+import DiaFestivo from '../models/DiaFestivo.js'
 import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
 import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada, formatearFechaColombia, formatearHoraColombia } from '../services/asistenciaService.js'
 import { emitirAsistenciaRegistrada } from '../services/socketService.js'
+import { topeHorasPorJornada, validarHorasInasistencia } from '../utils/jornadaUtils.js'
+import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { asegurarJornada } from '../services/jornadaService.js'
 import {
   upsertAsistenciaSQLite,
   upsertAsistenciasBatchSQLite,
@@ -14,6 +19,38 @@ import {
   getSqliteFilePath,
   checkpointSQLite
 } from '../services/sqliteExport.js'
+
+// Shim de compatibilidad: expone la misma forma que el modelo Asistencia.
+function toAsistenciaShape(a) {
+  const obj = a.toObject ? a.toObject() : a
+  return {
+    ...obj,
+    estado: a.tipo,
+    horasTardanza: a.tipo === 'Tardanza' ? a.horas : 0,
+    motivoInhabilitacion: '',
+    subidoSofia: a.estadoCarga === 'SUBIDA',
+    estadoCarga: a.estadoCarga,
+  }
+}
+
+// Upsert con candado anti-carrera: no inserta ni actualiza si la novedad ya está SUBIDA.
+async function upsertInasistencia(filter, update) {
+  const filterConCandado = { ...filter, estadoCarga: { $ne: 'SUBIDA' } }
+  try {
+    return await Inasistencia.findOneAndUpdate(filterConCandado, update, { new: true, upsert: true })
+  } catch (err) {
+    if (err?.code !== 11000) throw err
+    // Carrera de inserción: comprobar si el documento ya pasó a SUBIDA.
+    const existente = await Inasistencia.findOne(filter)
+    if (existente?.estadoCarga === 'SUBIDA') {
+      const conflict = new Error('Esta inasistencia ya fue reportada a Sofía Plus y no se puede modificar.')
+      conflict.status = 409
+      throw conflict
+    }
+    if (!existente) throw err
+    return Inasistencia.findOneAndUpdate(filterConCandado, update, { new: true })
+  }
+}
 
 export async function getAsistencias(req, res) {
   try {
@@ -32,11 +69,12 @@ export async function getAsistencias(req, res) {
       if (fechaDesde) filter.fecha.$gte = fechaDesde
       if (fechaHasta) filter.fecha.$lte = fechaHasta
     }
-    const asistencias = await Asistencia.find(filter)
+    const inasistencias = await Inasistencia.find(filter)
       .populate('estudianteId')
       .populate('instructorId')
       .sort({ fecha: 1, createdAt: 1 })
-    res.json(asistencias)
+
+    res.json(inasistencias.map(toAsistenciaShape))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -52,7 +90,6 @@ export async function createAsistencia(req, res) {
       hora,
       horasTardanza,
       tiempoTardanza,
-      motivoInhabilitacion,
       instructorId
     } = req.body
 
@@ -68,8 +105,10 @@ export async function createAsistencia(req, res) {
       return res.status(400).json({ error: 'El estudiante está inactivo o retirado, no se puede registrar asistencia' })
     }
 
+    const fichaDoc = await Ficha.findById(fichaId)
+
     // Verificar propiedad y permisos de solo lectura entre docentes
-    const existente = await Asistencia.findOne({ estudianteId, fichaId, fecha })
+    const existente = await Inasistencia.findOne({ estudianteId, fichaId, fecha })
     const esAdmin = req.usuario?.rol === 'Administrador'
     const usuarioId = req.usuario?.id ? String(req.usuario.id) : (instructorId ? String(instructorId) : null)
 
@@ -84,79 +123,100 @@ export async function createAsistencia(req, res) {
 
     const instructorFinal = usuarioId || existente?.instructorId || null
 
-    // Bloqueo por subida a Sofía Plus: una novedad ya reportada no puede editarse
+    // Bloqueo por subida a Sofía Plus: una novedad ya subida no puede editarse
     // ni quitarse, sin importar su origen (manual o huellero).
-    if (existente?.subidoSofia) {
+    if (existente?.estadoCarga === 'SUBIDA') {
       return res.status(409).json({
         error: 'Esta inasistencia ya fue reportada a Sofía Plus y no se puede modificar.'
       })
     }
 
-    // Solo se persisten novedades (Falta, Tardanza, Excusada, Inhabilitada). "Presente"
-    // no se guarda: si el docente desmarca una novedad previa, se elimina el registro.
-    // Las filas "Presente" (aún creadas por el huellero vía procesarAsistencia) no se borran.
-    if (estado === 'Presente') {
-      const debeBorrar = existente && existente.estado !== 'Presente'
+    // Tardanza con 0 horas equivale a "Presente": no hay novedad que guardar.
+    const esPresente = estado === 'Presente' || (estado === 'Tardanza' && (horasTardanza || 0) === 0)
+
+    if (esPresente) {
+      const debeBorrar = !!existente
       if (debeBorrar) {
-        const [estudianteDoc, fichaDoc] = await Promise.all([
-          Estudiante.findById(estudianteId),
-          Ficha.findById(fichaId)
-        ])
-        await Asistencia.deleteOne({ estudianteId, fichaId, fecha })
+        const borrado = await Inasistencia.deleteOne({ estudianteId, fichaId, fecha, estadoCarga: { $ne: 'SUBIDA' } })
+        if (borrado.deletedCount === 0) {
+          const doc = await Inasistencia.findOne({ estudianteId, fichaId, fecha })
+          if (doc?.estadoCarga === 'SUBIDA') {
+            return res.status(409).json({ error: 'Esta inasistencia ya fue reportada a Sofía Plus y no se puede modificar.' })
+          }
+        }
         await Estudiante.findByIdAndUpdate(estudianteId, { estadoAsistencia: 'Presente' })
 
-        // Eliminar también la fila en SQLite para que el RPA/Sofía Plus nunca la suba.
-        if (estudianteDoc && fichaDoc) {
+        if (fichaDoc) {
           deleteAsistenciaSQLite({
             fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
-            documentoAprendiz: estudianteDoc.numeroDocumento || '',
+            documentoAprendiz: estudiante.numeroDocumento || '',
             fecha
           })
         }
       }
-      return res.json({ ok: true, estado: 'Presente', eliminado: !!debeBorrar })
+      return res.json({ ok: true, estado: 'Presente', eliminado: debeBorrar })
     }
+
+    if (!['Falta', 'Tardanza', 'Excusada'].includes(estado)) {
+      return res.status(400).json({ error: 'Estado de asistencia no válido.' })
+    }
+
+    // Derivar y validar las horas según el tipo y el tope de la jornada.
+    const jornada = fichaDoc?.jornada || ''
+    const tope = topeHorasPorJornada(jornada)
+    const horasPropuestas = estado === 'Tardanza' ? (horasTardanza || 0) : tope
+    const validacion = validarHorasInasistencia(horasPropuestas, jornada)
+    if (!validacion.ok) {
+      return res.status(400).json({ error: validacion.error })
+    }
+    const horas = validacion.horas
+
+    // Calcular el estado de carga (ciclo EN_ESPERA -> LISTO_PARA_SUBIR -> SUBIDA).
+    const festivosDocs = await DiaFestivo.find().select('fecha')
+    const festivosSet = new Set(festivosDocs.map((d) => d.fecha))
+    const estadoCarga = calcularEstadoCarga({ fecha, tipo: estado, jornada, festivosSet, hoyStr: getHoyString() })
 
     // 1. Guardar en MongoDB Atlas (upsert de la novedad)
-    const asistencia = await Asistencia.findOneAndUpdate(
+    const inasistencia = await upsertInasistencia(
       { estudianteId, fichaId, fecha },
       {
-        estudianteId,
-        fichaId,
-        fecha,
-        estado,
-        hora: hora || formatearHoraColombia(),
-        horasTardanza: horasTardanza || 0,
-        tiempoTardanza: tiempoTardanza || (horasTardanza ? `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}` : '0 horas'),
-        motivoInhabilitacion: motivoInhabilitacion || '',
-        instructorId: instructorFinal
-      },
-      { new: true, upsert: true }
+        $set: {
+          tipo: estado,
+          horas,
+          hora: hora || formatearHoraColombia(),
+          tiempoTardanza: tiempoTardanza || (estado === 'Tardanza' ? `${horas} ${horas === 1 ? 'hora' : 'horas'}` : '0 horas'),
+          instructorId: instructorFinal,
+          estadoCarga,
+        },
+        $setOnInsert: {
+          origen: 'manual',
+        },
+      }
     )
 
-    if (estado !== 'Inhabilitada') {
-      await Estudiante.findByIdAndUpdate(estudianteId, { estadoAsistencia: estado })
+    await Estudiante.findByIdAndUpdate(estudianteId, { estadoAsistencia: estado })
+
+    // 2. Asegurar la Jornada (un documento por ficha + fecha)
+    try {
+      await asegurarJornada({ fichaId, fecha, instructorId: instructorFinal, origen: 'manual' })
+    } catch (jornadaErr) {
+      console.warn('[Jornada] Error asegurando jornada:', jornadaErr.message)
     }
 
-    // 2. Sincronizar automáticamente con el archivo SQLite único
+    // 3. Sincronizar automáticamente con el archivo SQLite único
     try {
-      const [estudianteDoc, fichaDoc] = await Promise.all([
-        Estudiante.findById(estudianteId),
-        Ficha.findById(fichaId)
-      ])
-
-      if (estudianteDoc && fichaDoc) {
+      if (fichaDoc) {
         upsertAsistenciaSQLite({
           fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
           nombrePrograma: fichaDoc.nombrePrograma || '',
           jornada: fichaDoc.jornada || '',
-          documentoAprendiz: estudianteDoc.numeroDocumento || '',
-          nombreAprendiz: `${estudianteDoc.nombres || ''} ${estudianteDoc.apellidos || ''}`.trim(),
-          correoAprendiz: estudianteDoc.correo || '',
+          documentoAprendiz: estudiante.numeroDocumento || '',
+          nombreAprendiz: `${estudiante.nombres || ''} ${estudiante.apellidos || ''}`.trim(),
+          correoAprendiz: estudiante.correo || '',
           fecha: fecha,
           estado: estado,
           hora: hora || '—',
-          horasTardanza: horasTardanza || 0,
+          horasTardanza: estado === 'Tardanza' ? horas : 0,
           tiempoTardanza: tiempoTardanza || '0 horas'
         })
       }
@@ -164,27 +224,29 @@ export async function createAsistencia(req, res) {
       console.warn('[SQLite] Error en sincronización individual:', sqliteErr.message)
     }
 
-    // 3. Emitir evento por Socket.io para actualización en tiempo real en otros computadores
+    // 4. Emitir evento por Socket.io para actualización en tiempo real en otros computadores
     try {
-      const estudianteData = await Estudiante.findById(estudianteId).select('nombres apellidos').lean()
       emitirAsistenciaRegistrada(String(fichaId), {
-        asistenciaId: asistencia._id,
+        asistenciaId: inasistencia._id,
         estudianteId,
-        nombres: estudianteData?.nombres || '',
-        apellidos: estudianteData?.apellidos || '',
+        nombres: estudiante.nombres || '',
+        apellidos: estudiante.apellidos || '',
         estado,
-        hora: asistencia.hora,
-        tiempoTardanza: asistencia.tiempoTardanza,
-        horasTardanza: asistencia.horasTardanza,
-        metodo: asistencia.metodo || 'MANUAL',
+        hora: inasistencia.hora,
+        tiempoTardanza: inasistencia.tiempoTardanza,
+        horasTardanza: estado === 'Tardanza' ? inasistencia.horas : 0,
+        metodo: 'MANUAL',
         fecha
       })
     } catch (wsErr) {
       console.warn('[Socket] Error emitiendo asistencia registrada:', wsErr.message)
     }
 
-    res.status(201).json(asistencia)
+    res.status(201).json(toAsistenciaShape(inasistencia))
   } catch (err) {
+    if (err?.status === 409) {
+      return res.status(409).json({ error: err.message })
+    }
     res.status(500).json({ error: err.message })
   }
 }
@@ -540,7 +602,7 @@ export async function ejecutarSincronizacionDocentes(req, res) {
   try {
     const { sincronizarSqlitePorDocente } = await import('../services/cronService.js')
     const resultado = await sincronizarSqlitePorDocente()
-    res.json({ ok: true, mensaje: 'Sincronización por Docente (regla 3 días hábiles) ejecutada con éxito', ...resultado })
+    res.json({ ok: true, mensaje: 'Sincronización por Docente (regla 5 días hábiles) ejecutada con éxito', ...resultado })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
