@@ -6,8 +6,8 @@ import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 import { useAsistenciaDraftStore } from '../stores/asistenciaDraft.js'
 import '../styles/panelInstructor.css'
+import iconoTomarAsistencia from '../assets/tomar-asistencia-icon.png'
 import iconoHistorial from '../assets/historial-icon.png'
-import iconoGestionarEstudiantes from '../assets/gestionar-estudiantes-icon.png'
 import iconoEquipoDocente from '../assets/equipo-docente-icon.png'
 
 const draftStore = useAsistenciaDraftStore()
@@ -771,59 +771,6 @@ const conteoAsistencia = computed(() => {
 
 
 // =============================================
-// GESTIONAR ESTUDIANTES (Solo Líder)
-// =============================================
-const showEditEstudianteModal = ref(false)
-const estudianteEditando = ref(null)
-const editForm = reactive({
-  nombres: '',
-  apellidos: '',
-  tipoDocumento: 'CC',
-  numeroDocumento: '',
-  correo: '',
-  telefono: '',
-  genero: '',
-  estado: 'Activo',
-})
-const guardandoEstudiante = ref(false)
-
-function abrirEditarEstudiante(est) {
-  estudianteEditando.value = est
-  editForm.nombres = est.nombres
-  editForm.apellidos = est.apellidos
-  editForm.tipoDocumento = est.tipoDocumento || 'CC'
-  editForm.numeroDocumento = est.numeroDocumento
-  editForm.correo = est.correo
-  editForm.telefono = est.telefono
-  editForm.genero = est.genero || ''
-  editForm.estado = est.estado || 'Activo'
-  showEditEstudianteModal.value = true
-}
-
-async function guardarEstudiante() {
-  guardandoEstudiante.value = true
-  try {
-    await api.estudiantes.update(estudianteEditando.value._id, {
-      nombres: editForm.nombres,
-      apellidos: editForm.apellidos,
-      tipoDocumento: editForm.tipoDocumento,
-      numeroDocumento: editForm.numeroDocumento,
-      correo: editForm.correo,
-      telefono: editForm.telefono,
-      genero: editForm.genero,
-      estado: editForm.estado,
-    })
-    await cargarDatosFicha(fichaSeleccionada.value._id)
-    showEditEstudianteModal.value = false
-    showToast('Datos del aprendiz actualizados correctamente')
-  } catch (err) {
-    showToast('Error al actualizar: ' + err.message, 'error')
-  } finally {
-    guardandoEstudiante.value = false
-  }
-}
-
-// =============================================
 // EXPORTAR A EXCEL
 // =============================================
 function exportarAsistenciaDia() {
@@ -848,7 +795,7 @@ function exportarAsistenciaDia() {
       'Observación / Motivo': jornadaInhabilitada.value ? motivoInhabilitacionDia.value : ''
     }
   })
-  descargarExcel(data, `Asistencia_${fichaSeleccionada.value.codigoFicha}_${hoy}`)
+  descargarDatos(data, `Asistencia_${fichaSeleccionada.value.codigoFicha}_${hoy}`, `Asistencia del día ${hoy}`)
 }
 
 function exportarHistorial() {
@@ -871,37 +818,56 @@ function exportarHistorial() {
       'Motivo Inhabilitación': asis.motivoInhabilitacion || '—',
     }
   })
-  descargarExcel(data, `Historial_${fichaSeleccionada.value.codigoFicha}`)
+  descargarDatos(data, `Historial_${fichaSeleccionada.value.codigoFicha}`, 'Historial de asistencias')
 }
 
-function exportarListaEstudiantes() {
-  const data = estudiantesFicha.value.map(est => ({
-    'Nombres': est.nombres,
-    'Apellidos': est.apellidos,
-    'Tipo Doc.': est.tipoDocumento,
-    'Documento': est.numeroDocumento,
-    'Correo': est.correo,
-    'Teléfono': est.telefono,
-    'Género': est.genero || '',
-    'Estado': est.estado,
-    'Huella Enrolada': est.huellaEnrolada ? 'Sí' : 'No',
-  }))
-  descargarExcel(data, `Estudiantes_${fichaSeleccionada.value.codigoFicha}`)
+// Formato elegido para descargar ('excel' | 'pdf')
+const formatoDescarga = ref('excel')
+
+async function descargarDatos(data, nombreArchivo, titulo) {
+  if (formatoDescarga.value === 'pdf') {
+    await descargarPDF(data, nombreArchivo, titulo)
+  } else {
+    descargarExcel(data, nombreArchivo)
+  }
 }
 
-function descargarSQLite() {
+async function descargarPDF(data, nombreArchivo, titulo) {
+  if (data.length === 0) {
+    showToast('No hay datos para exportar', 'warning')
+    return
+  }
   try {
-    const url = api.asistencias.downloadSqliteUrl()
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'asistencias_institucion.sqlite'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    showToast('Descargando base de datos SQLite institucional...', 'success')
+    const [{ jsPDF }, autoTableModule] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
+    const autoTable = autoTableModule.default || autoTableModule.autoTable
+    const limpiar = v => String(v ?? '').replace(/[—–]/g, '-')
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+    const ficha = fichaSeleccionada.value
+    doc.setFontSize(14)
+    doc.text(limpiar(titulo), 40, 40)
+    doc.setFontSize(10)
+    doc.setTextColor(100)
+    doc.text(limpiar(`Ficha ${ficha.codigoFicha} - ${ficha.nombrePrograma} | Jornada: ${ficha.jornada || ''}`), 40, 58)
+
+    const columnas = Object.keys(data[0])
+    autoTable(doc, {
+      startY: 72,
+      head: [columnas.map(limpiar)],
+      body: data.map(row => columnas.map(c => limpiar(row[c]))),
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [57, 169, 0], textColor: 255 },
+      alternateRowStyles: { fillColor: [242, 249, 237] },
+    })
+
+    doc.save(`${nombreArchivo}.pdf`)
+    showToast(`Archivo "${nombreArchivo}.pdf" descargado`)
   } catch (err) {
-    console.error('Error al descargar SQLite:', err)
-    showToast('Error al descargar SQLite: ' + err.message, 'error')
+    console.error('Error al generar PDF:', err)
+    showToast('Error al generar el PDF: ' + err.message, 'error')
   }
 }
 
@@ -1006,7 +972,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'asistencia'"
               title="Tomar Asistencia"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              <img :src="iconoTomarAsistencia" alt="Tomar Asistencia" class="tab-icon-img" width="16" height="16" />
             </button>
             <button
               class="tab-btn"
@@ -1015,15 +981,6 @@ function descargarExcel(data, nombreArchivo) {
               title="Historial"
             >
               <img :src="iconoHistorial" alt="Historial" class="tab-icon-img" width="16" height="16" />
-            </button>
-            <!-- BOTÓN GESTIONAR ESTUDIANTES -->
-            <button
-              class="tab-btn"
-              :class="{ active: vistaFicha === 'gestionar_estudiantes' }"
-              @click="vistaFicha = 'gestionar_estudiantes'"
-              title="Gestionar Estudiantes"
-            >
-              <img :src="iconoGestionarEstudiantes" alt="Gestionar Estudiantes" class="tab-icon-img" width="16" height="16" />
             </button>
             <button
               class="tab-btn"
@@ -1447,10 +1404,8 @@ function descargarExcel(data, nombreArchivo) {
               <span>{{ draftStore.pendientesOfflineCount }} offline (Reintentar envío)</span>
             </button>
 
-            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+            <select v-model="formatoDescarga" class="form-input" title="Formato de descarga" style="width: auto; height: 38px; padding: 0 10px; font-size: 13px; cursor: pointer;"><option value="excel">Excel</option><option value="pdf">PDF</option></select>
+            <button class="btn-export" @click="exportarAsistenciaDia" :title="formatoDescarga === 'pdf' ? 'Descargar PDF' : 'Descargar Excel'">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <div v-if="jornadaInhabilitada" style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
@@ -1479,12 +1434,12 @@ function descargarExcel(data, nombreArchivo) {
               <p class="section-desc">Registros de asistencia de esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+              <template v-if="asistenciasFicha.length > 0">
+                <select v-model="formatoDescarga" class="form-input" title="Formato de descarga" style="width: auto; height: 38px; padding: 0 10px; font-size: 13px; cursor: pointer;"><option value="excel">Excel</option><option value="pdf">PDF</option></select>
+                <button class="btn-export" @click="exportarHistorial" :title="formatoDescarga === 'pdf' ? 'Descargar PDF' : 'Descargar Excel'">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
-              <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0" title="Exportar historial a Excel">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </button>
+              </template>
             </div>
           </div>
 
@@ -1516,63 +1471,6 @@ function descargarExcel(data, nombreArchivo) {
               </tr>
             </tbody>
           </table>
-          </div>
-        </div>
-
-        <!-- ========================================= -->
-        <!-- VISTA 4: GESTIONAR ESTUDIANTES            -->
-        <!-- ========================================= -->
-        <div v-if="vistaFicha === 'gestionar_estudiantes'" class="section-body">
-          <div>
-            <div class="section-header-row">
-              <div>
-                <h4 style="display: flex; align-items: center; gap: 8px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
-                  Gestionar Datos de Aprendices
-                </h4>
-                <p class="section-desc">Información y edición de los aprendices de la Ficha {{ fichaSeleccionada.codigoFicha }}:</p>
-              </div>
-              <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0" title="Exportar lista a Excel">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </button>
-            </div>
-
-            <div class="table-scroll">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Aprendiz</th>
-                  <th>Documento</th>
-                  <th>Correo</th>
-                  <th>Teléfono</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="est in estudiantesFicha" :key="est._id">
-                  <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
-                  <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
-                  <td>{{ est.correo }}</td>
-                  <td>{{ est.telefono }}</td>
-                  <td>
-                    <span class="status-pill" :class="'status-' + (est.estado || '').toLowerCase()">
-                      {{ est.estado }}
-                    </span>
-                  </td>
-                  <td>
-                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)" title="Editar estudiante">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                    </button>
-                    <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder</span>
-                  </td>
-                </tr>
-                <tr v-if="estudiantesFicha.length === 0">
-                  <td colspan="6" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
-                </tr>
-              </tbody>
-            </table>
-            </div>
           </div>
         </div>
 
@@ -1654,80 +1552,6 @@ function descargarExcel(data, nombreArchivo) {
       </div>
     </div>
 
-    <!-- ========================================= -->
-    <!-- MODAL EDITAR ESTUDIANTE (LÍDER)           -->
-    <!-- ========================================= -->
-    <div v-if="showEditEstudianteModal" class="modal-overlay" @click.self="showEditEstudianteModal = false">
-      <div class="modal modal-edit">
-        <h3 style="display: flex; align-items: center; gap: 9px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
-          Editar Datos del Aprendiz
-        </h3>
-        <div class="modal-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Nombres</label>
-              <input v-model="editForm.nombres" type="text" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Apellidos</label>
-              <input v-model="editForm.apellidos" type="text" class="form-input" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="flex: 0.4;">
-              <label>Tipo Doc.</label>
-              <select v-model="editForm.tipoDocumento" class="form-input">
-                <option value="CC">CC</option>
-                <option value="CE">CE</option>
-                <option value="PEP">PEP</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Número de Documento</label>
-              <input v-model="editForm.numeroDocumento" type="text" class="form-input" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Correo Electrónico</label>
-              <input v-model="editForm.correo" type="email" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Teléfono</label>
-              <input v-model="editForm.telefono" type="text" class="form-input" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Género</label>
-              <select v-model="editForm.genero" class="form-input">
-                <option value="">Sin especificar</option>
-                <option value="Masculino">Masculino</option>
-                <option value="Femenino">Femenino</option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Estado</label>
-              <select v-model="editForm.estado" class="form-input">
-                <option value="Activo">Activo</option>
-                <option value="Inactivo">Inactivo</option>
-                <option value="Retirado">Retirado</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-outline" @click="showEditEstudianteModal = false" title="Cancelar">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-          <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante" title="Guardar">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
     <!-- ========================================= -->
     <!-- MODAL INHABILITAR JORNADA                 -->
     <!-- ========================================= -->

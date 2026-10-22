@@ -194,7 +194,7 @@ async function restablecerPassword() {
             :class="{ 'is-active': tipoAcceso === 'personal' }"
             @click="cambiarTipoAcceso('personal')"
           >
-            <span class="login-carnet-label">Instructores /<br />Personal SENA</span>
+            <span class="login-carnet-label">Instructor</span>
             <span class="login-carnet-avatar login-carnet-avatar-instructor">
               <img :src="instructorIcon" alt="Instructor" />
             </span>
@@ -250,7 +250,7 @@ async function restablecerPassword() {
           </div>
 
           <button class="login-button login-button-primary login-button-full" @click="iniciarSesionPersonal" :disabled="loading" title="Ingresar al Sistema">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Iniciar sesión
           </button>
 
           <p class="login-recovery-link">

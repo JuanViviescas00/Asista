@@ -179,8 +179,8 @@
   height: 52px;
   padding: 10px 20px;
   border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
+  border: none;
+  background: transparent;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -193,14 +193,19 @@
 }
 
 .tab-btn:hover:not(.disabled) {
-  border-color: #3b82f6;
-  color: #2563eb;
+  background: var(--verde-suave, #E8F5E0);
+  color: var(--verde-hover, #2F8C00);
 }
 
 .tab-btn.active {
-  background: #2563eb;
+  background: var(--verde, #39A900);
   color: #ffffff;
-  border-color: #2563eb;
+}
+
+/* El botón activo conserva su fondo verde aunque el cursor pase por encima */
+.tab-btn.active:hover:not(.disabled) {
+  background: var(--verde, #39A900);
+  color: #ffffff;
 }
 
 .tab-icon-img {

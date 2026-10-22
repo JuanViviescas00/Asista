@@ -331,6 +331,10 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         <select v-model="filtroEstado" class="filtro-select">
           <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
         </select>
+        <select v-if="esInstructor" v-model="busqueda.fichaId" class="filtro-select" title="Filtrar por ficha">
+          <option :value="null">Todas las fichas</option>
+          <option v-for="f in fichasList" :key="f._id" :value="f._id">Ficha {{ f.codigoFicha }}{{ f.esLider ? ' (Líder)' : '' }}</option>
+        </select>
       </div>
       <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
