@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/importarUsuarios.css'
 import * as XLSX from 'xlsx'
+import { capitalizarTexto } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const tipoImportacion = ref('estudiantes') // 'estudiantes', 'instructores', 'fichas'
@@ -19,7 +20,7 @@ const esLider = ref(false)
 const permisoCarga = ref(true)
 
 const HEADERS_ESTUDIANTES = ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Jornada']
-const HEADERS_INSTRUCTORES = ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider', 'Jornada']
+const HEADERS_INSTRUCTORES = ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider']
 const HEADERS_FICHAS = ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Aula_Asignada', 'Fecha_Inicio', 'Fecha_Fin']
 
 const headersEsperados = computed(() => {
@@ -106,8 +107,8 @@ function validarFila(row) {
       errs.push(`Jornada inválida: "${row.Jornada}". Debe ser Mañana, Tarde o Noche`)
     }
   } else {
-    if (row.Tipo_Doc && !['CC', 'TI', 'PEP'].includes(row.Tipo_Doc.toUpperCase())) {
-      errs.push(`Tipo_Doc inválido: "${row.Tipo_Doc}". Debe ser CC, CE o PEP`)
+    if (row.Tipo_Doc && !['CC', 'TI', 'PPT'].includes(row.Tipo_Doc.toUpperCase())) {
+      errs.push(`Tipo_Doc inválido: "${row.Tipo_Doc}". Debe ser CC, TI o PPT`)
     }
     if (row.Correo && !row.Correo.includes('@')) {
       errs.push(`Correo inválido: "${row.Correo}"`)
@@ -310,12 +311,12 @@ async function ejecutarImportacion() {
         const primeraFicha = fichasBuscadas[0]?.ficha
 
         return {
-          nombres: r.Nombres,
-          apellidos: r.Apellidos,
+          nombres: capitalizarTexto(r.Nombres),
+          apellidos: capitalizarTexto(r.Apellidos),
           tipoDocumento: r.Tipo_Doc.toUpperCase(),
-          numeroDocumento: r.Num_Doc,
-          correo: r.Correo,
-          telefono: r.Telefono,
+          numeroDocumento: String(r.Num_Doc).trim(),
+          correo: String(r.Correo).trim().toLowerCase(),
+          telefono: String(r.Telefono).trim(),
           especialidad: primeraFicha ? primeraFicha.nombrePrograma : 'Docente SENA',
           fichas: listaFichas,
           esLider: esLiderVal,
@@ -329,12 +330,12 @@ async function ejecutarImportacion() {
       const items = registros.value.map(r => {
         const ficha = getFichaPorCodigo(r.Ficha)
         return {
-          nombres: r.Nombres,
-          apellidos: r.Apellidos,
+          nombres: capitalizarTexto(r.Nombres),
+          apellidos: capitalizarTexto(r.Apellidos),
           tipoDocumento: r.Tipo_Doc.toUpperCase(),
-          numeroDocumento: r.Num_Doc,
-          correo: r.Correo,
-          telefono: r.Telefono,
+          numeroDocumento: String(r.Num_Doc).trim(),
+          correo: String(r.Correo).trim().toLowerCase(),
+          telefono: String(r.Telefono).trim(),
           fichaId: ficha ? ficha._id : null,
           genero: r.Genero,
           estado: 'Activo',
@@ -365,7 +366,7 @@ function descargarPlantilla() {
   } else if (tipoImportacion.value === 'instructores') {
     nombreArchivo = 'plantilla_instructores.xlsx'
     filas = [
-      ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider', 'Jornada'],
+      ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider'],
     ]
   } else {
     nombreArchivo = 'plantilla_estudiantes.xlsx'
@@ -446,7 +447,7 @@ function limpiarTodo() {
           <li><strong>Tipo_Doc:</strong> CC, CE o PEP</li>
           <li><strong>Ficha:</strong> Código(s) de la ficha asignada. Para que un docente dicte <strong>más de una clase / ficha</strong>, puedes separar los códigos con comas o barras (ej: <code>"2670123, 2891234"</code>) o registrar al docente en filas separadas.</li>
           <li><strong>Es_Lider:</strong> Pon <code>SI</code> si el docente es el Líder de la ficha, o <code>NO</code> si es Docente Común</li>
-          <li><strong>Jornada:</strong> Debe coincidir con la jornada de la ficha</li>
+          <li><strong>Jornada:</strong> Los instructores imparten en cualquier jornada (no se restringe por jornada).</li>
         </ul>
         <ul v-else-if="tipoImportacion === 'fichas'" class="import-users-info-list">
           <li><strong>Codigo_Ficha:</strong> Número identificador único de la ficha (ej. 2901122)</li>

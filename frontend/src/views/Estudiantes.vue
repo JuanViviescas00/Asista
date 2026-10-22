@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { nombreProgramaLimpio, truncar, formatearNumeroDocumento } from '../utils/textos.js'
+import { nombreProgramaLimpio, truncar, formatearNumeroDocumento, capitalizarTexto } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
@@ -153,7 +153,15 @@ async function guardarEstudiante() {
   }
   loading.value = true
   try {
-    const body = { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, fichaId }
+    const body = {
+      nombres: capitalizarTexto(nombres),
+      apellidos: capitalizarTexto(apellidos),
+      tipoDocumento,
+      numeroDocumento: String(numeroDocumento).trim(),
+      correo: String(correo).trim().toLowerCase(),
+      telefono: String(telefono).trim(),
+      fichaId
+    }
     if (editingId.value) {
       await api.estudiantes.update(editingId.value, body)
       showToastFn('Estudiante actualizado correctamente')

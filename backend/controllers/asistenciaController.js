@@ -67,6 +67,22 @@ export async function createAsistencia(req, res) {
       return res.status(400).json({ error: 'El estudiante está inactivo o retirado, no se puede registrar asistencia' })
     }
 
+    // Verificar propiedad y permisos de solo lectura entre docentes
+    const existente = await Asistencia.findOne({ estudianteId, fichaId, fecha })
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    const usuarioId = req.usuario?.id ? String(req.usuario.id) : (instructorId ? String(instructorId) : null)
+
+    if (existente && existente.instructorId) {
+      const creadorId = String(existente.instructorId)
+      if (!esAdmin && usuarioId && creadorId !== usuarioId) {
+        return res.status(403).json({
+          error: 'Solo de lectura: No puedes modificar la asistencia registrada por otro docente.'
+        })
+      }
+    }
+
+    const instructorFinal = usuarioId || existente?.instructorId || null
+
     // 1. Guardar en MongoDB Atlas
     const asistencia = await Asistencia.findOneAndUpdate(
       { estudianteId, fichaId, fecha },
@@ -79,7 +95,7 @@ export async function createAsistencia(req, res) {
         horasTardanza: horasTardanza || 0,
         tiempoTardanza: tiempoTardanza || (horasTardanza ? `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}` : '0 horas'),
         motivoInhabilitacion: motivoInhabilitacion || '',
-        instructorId: instructorId || null
+        instructorId: instructorFinal
       },
       { new: true, upsert: true }
     )

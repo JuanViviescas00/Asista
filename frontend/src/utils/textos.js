@@ -25,3 +25,24 @@ export function formatearNumeroDocumento(numero) {
   if (!/^\d+$/.test(s)) return s
   return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 }
+
+/**
+ * Estandariza un texto en formato Capitalize / Title Case.
+ * Maneja mayúsculas sostenidas, minúsculas, espacios y palabras con guiones.
+ * Ejemplo: "JUAN CARLOS PÉREZ" -> "Juan Carlos Pérez"
+ */
+export function capitalizarTexto(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map(palabra => {
+      if (!palabra) return ''
+      return palabra
+        .split('-')
+        .map(p => p ? p.charAt(0).toUpperCase() + p.slice(1) : '')
+        .join('-')
+    })
+    .join(' ')
+}

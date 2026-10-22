@@ -70,6 +70,9 @@ onUnmounted(() => {
 function iniciarSocketDocente() {
   socket.on('ATTENDANCE_REGISTERED', (data) => {
     if (!data || !data.estudianteId) return
+    if (data.fichaId && fichaSeleccionada.value?._id && String(data.fichaId) !== String(fichaSeleccionada.value._id)) {
+      return
+    }
     if (asistenciaDia.value[data.estudianteId]) {
       asistenciaDia.value[data.estudianteId].estado = data.estado
       asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
@@ -224,7 +227,11 @@ async function cargarDatosFicha(fichaId) {
     const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
 
     estudiantesFicha.value = Array.isArray(estRes) ? estRes : []
-    asistenciasFicha.value = Array.isArray(asisRes) ? asisRes : []
+    const sFichaId = String(fichaId)
+    asistenciasFicha.value = (Array.isArray(asisRes) ? asisRes : []).filter(a => {
+      const aFicha = String(a.fichaId?._id || a.fichaId)
+      return aFicha === sFichaId
+    })
     memoriaBiometricaRAM.value = Array.isArray(bioRes) ? bioRes : []
     inicializarAsistenciaDia()
   } catch (err) {
@@ -525,7 +532,7 @@ function actualizarEstadoPorHoras(reg, n) {
 // Mientras escribe: se actualiza el estado (Tardanza/Falta/Presente) y los chips en vivo
 function onHorasInput(estId, ev) {
   const reg = asistenciaDia.value[estId]
-  if (!reg || jornadaInhabilitada.value) return
+  if (!reg || !reg.esMio || jornadaInhabilitada.value) return
   const n = parseInt(ev.target.value, 10)
   if (Number.isNaN(n)) return // campo vacío mientras escribe
   actualizarEstadoPorHoras(reg, n)
@@ -536,6 +543,11 @@ function onHorasInput(estId, ev) {
 async function onHorasChange(estId, ev) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
+  if (!reg.esMio) {
+    showToast(`Solo de lectura: Registrado por Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    ev.target.value = reg.horasFallidas || 0
+    return
+  }
   const n = parseInt(ev.target.value, 10)
   const valorFinal = Number.isNaN(n) ? (reg.horasFallidas || 0) : n
   actualizarEstadoPorHoras(reg, valorFinal)
@@ -547,16 +559,36 @@ async function onHorasChange(estId, ev) {
 function inicializarAsistenciaDia() {
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
+  const currentFichaId = fichaSeleccionada.value ? String(fichaSeleccionada.value._id) : null
+  const currentUserId = usuario.value?.id ? String(usuario.value.id) : null
+  const esAdmin = usuario.value?.rol === 'Administrador'
   const registros = {}
+
   for (const est of estudiantesFicha.value) {
     const existente = asistenciasFicha.value.find(
-      a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === hoy
+      a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) &&
+           a.fecha === hoy &&
+           (!currentFichaId || String(a.fichaId?._id || a.fichaId) === currentFichaId)
     )
     const estado = existente ? existente.estado : 'Presente'
     const hora = existente ? (existente.hora || '') : (new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
       : { horas: 0, texto: '0 horas' }
+
+    // Verificación de propiedad docente (Solo lectura para otros docentes)
+    const instructorAsignado = existente?.instructorId
+    const instructorAsignadoId = instructorAsignado ? String(instructorAsignado._id || instructorAsignado) : null
+    const esMio = !existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId)
+
+    let nombreDocenteCreador = ''
+    if (!esMio && instructorAsignado) {
+      if (typeof instructorAsignado === 'object' && instructorAsignado.nombres) {
+        nombreDocenteCreador = `${instructorAsignado.nombres} ${instructorAsignado.apellidos || ''}`.trim()
+      } else {
+        nombreDocenteCreador = 'otro docente'
+      }
+    }
 
     registros[est._id] = {
       estado,
@@ -566,6 +598,8 @@ function inicializarAsistenciaDia() {
       tiempoTardanza: tardanzaInfo.texto,
       subidoSofia: existente ? !!existente.subidoSofia : false,
       previo: null,
+      esMio,
+      nombreDocenteCreador,
     }
     registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
@@ -655,6 +689,11 @@ async function marcarFalta(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
 
+  if (!reg.esMio) {
+    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    return
+  }
+
   if (reg.subidoSofia) {
     showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
     return
@@ -697,6 +736,11 @@ async function toggleExcusa(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
 
+  if (!reg.esMio) {
+    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    return
+  }
+
   if (reg.subidoSofia) {
     showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
     return
@@ -734,6 +778,9 @@ async function guardarAsistenciaDia() {
 
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
+    if (reg && !reg.esMio) {
+      continue
+    }
     let estadoFinal = 'Presente'
     let horaMarcada = horaActual
     let hTardanza = 0
@@ -856,6 +903,7 @@ function exportarHistorial() {
     const est = estudiantesFicha.value.find(e => String(e._id) === String(asis.estudianteId?._id || asis.estudianteId))
     const nombreEst = est ? `${est.nombres} ${est.apellidos}` : (asis.estudianteId?.nombres ? `${asis.estudianteId.nombres} ${asis.estudianteId.apellidos}` : 'Aprendiz')
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
+    const nombreDocente = asis.instructorId?.nombres ? `${asis.instructorId.nombres} ${asis.instructorId.apellidos || ''}`.trim() : 'Sistema / Lector'
     let tardanzaStr = '0 horas'
     if (asis.estado === 'Tardanza') {
       tardanzaStr = asis.tiempoTardanza || calcularHorasTardanza(asis.hora, jornadaFicha).texto
@@ -865,6 +913,7 @@ function exportarHistorial() {
       'Hora': asis.hora || '—',
       'Aprendiz': nombreEst,
       'Documento': docEst,
+      'Docente Responsable': nombreDocente,
       'Estado': asis.estado,
       'Tiempo de Tardanza': tardanzaStr,
       'Motivo Inhabilitación': asis.motivoInhabilitacion || '—',
@@ -1281,22 +1330,22 @@ function descargarExcel(data, nombreArchivo) {
                   <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente') + ')') : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.estado === 'Falta'"
-                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                         @change="marcarFalta(est._id)"
                       />
                       <span class="checkbox-custom checkbox-falta"></span>
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente') + ')') : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
-                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                         @change="toggleExcusa(est._id)"
                       />
                       <span class="checkbox-custom"></span>
@@ -1330,6 +1379,10 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
                       Presente (A tiempo)
                     </span>
+                    <span v-if="!asistenciaDia[est._id]?.esMio" class="badge" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; font-size: 11px; margin-left: 6px; display: inline-flex; align-items: center; gap: 3px;" :title="'Registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente')">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      {{ asistenciaDia[est._id]?.nombreDocenteCreador || 'Solo lectura' }}
+                    </span>
                   </td>
                   <td class="td-horas">
                     <div class="horas-wrap">
@@ -1342,8 +1395,8 @@ function descargarExcel(data, nombreArchivo) {
                         step="1"
                         inputmode="numeric"
                         :value="asistenciaDia[est._id]?.horasFallidas || 0"
-                        :disabled="jornadaInhabilitada"
-                        :title="`Horas fallidas (máximo ${horasClaseFicha})`"
+                        :disabled="jornadaInhabilitada || !asistenciaDia[est._id]?.esMio"
+                        :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura: registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente')) : (`Horas fallidas (máximo ${horasClaseFicha})`)"
                         @keydown="bloquearNoEnteros"
                         @input="onHorasInput(est._id, $event)"
                         @change="onHorasChange(est._id, $event)"
@@ -1402,7 +1455,7 @@ function descargarExcel(data, nombreArchivo) {
                       step="1"
                       inputmode="numeric"
                       :value="asistenciaDia[est._id]?.horasFallidas || 0"
-                      :disabled="jornadaInhabilitada"
+                      :disabled="jornadaInhabilitada || !asistenciaDia[est._id]?.esMio"
                       @keydown="bloquearNoEnteros"
                       @input="onHorasInput(est._id, $event)"
                       @change="onHorasChange(est._id, $event)"
@@ -1416,9 +1469,9 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-falta"
                       :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
-                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="marcarFalta(est._id)"
-                      title="Marcar falla"
+                      :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || '') + ')') : 'Marcar falla'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -1428,9 +1481,9 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-excusa"
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
-                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="toggleExcusa(est._id)"
-                      title="Registrar excusa"
+                      :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || '') + ')') : 'Registrar excusa'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </button>
@@ -1501,6 +1554,7 @@ function descargarExcel(data, nombreArchivo) {
               <tr>
                 <th>Fecha / Hora</th>
                 <th>Aprendiz</th>
+                <th>Docente</th>
                 <th>Estado</th>
                 <th>Tiempo Tardanza</th>
               </tr>
@@ -1509,6 +1563,12 @@ function descargarExcel(data, nombreArchivo) {
               <tr v-for="asis in asistenciasFicha" :key="asis._id">
                 <td>{{ asis.fecha }} {{ asis.hora }}</td>
                 <td>{{ asis.estudianteId?.nombres || '' }} {{ asis.estudianteId?.apellidos || '' }}</td>
+                <td>
+                  <span v-if="asis.instructorId?.nombres" style="font-size: 12px; font-weight: 600; color: #4338ca;">
+                    {{ asis.instructorId.nombres }} {{ asis.instructorId.apellidos || '' }}
+                  </span>
+                  <span v-else style="font-size: 12px; color: #94a3b8;">Sistema / Lector</span>
+                </td>
                 <td>
                   <span class="status-pill" :class="'status-' + (asis.estado || asis.tipo || '').toLowerCase()">
                     {{ asis.estado || asis.tipo }}
@@ -1519,7 +1579,7 @@ function descargarExcel(data, nombreArchivo) {
                 </td>
               </tr>
               <tr v-if="asistenciasFicha.length === 0">
-                <td colspan="4" class="empty-cell">No hay registros de asistencias pasadas.</td>
+                <td colspan="5" class="empty-cell">No hay registros de asistencias pasadas.</td>
               </tr>
             </tbody>
           </table>

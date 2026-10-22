@@ -1,5 +1,52 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 08:55] Estandarización Capitalize, Excel Multijornada, Solo Lectura entre Docentes y Reportes Críticos Multi-Docente
+
+- **Fecha y Hora:** 2026-10-22 08:55:00 -05:00
+- **Descripción del Problema / Bug:**
+  1. *Excel Instructores:* La plantilla y validación de importación masiva exigían obligatoriamente la columna `Jornada` para docentes, cuando en el SENA los instructores imparten formación indistintamente en cualquier jornada (Mañana, Tarde o Noche) según las fichas asignadas.
+  2. *Inconsistencia de Nombres:* Los nombres y apellidos de aprendices e instructores presentaban desorden tipográfico (mayúsculas sostenidas, minúsculas o mezclas) tanto al registrarse manualmente en formularios como al cargarse vía archivos Excel.
+  3. *Historial de Ficha y Permisos entre Docentes:* Al navegar por la barra de fechas o el historial de una ficha, podían visualizarse registros huérfanos o de otras fichas, y un docente podía modificar o sobreescribir las inasistencias marcadas por otro instructor que comparte la misma ficha.
+  4. *Reportes Restringidos:* La pantalla de Reportes (`Reportes.vue`) limitaba el selector únicamente a fichas donde el docente fuera líder, impidiendo a los docentes de apoyo consultar reportes, y carecía de las alertas de seguimiento crítico (3+ faltas consecutivas y 5+ acumuladas).
+- **Causa Raíz:**
+  1. `HEADERS_INSTRUCTORES` en `ImportarUsuarios.vue` obligaba la presencia de `Jornada`, a pesar de que el modelo `Instructor` no almacena jornada fija (la jornada reside en la Ficha).
+  2. Ausencia de sanitización y hooks de estandarización en Title Case (`capitalizarTexto`) en los modelos Mongoose y en los formularios frontend de carga y edición.
+  3. `PanelInstructor.vue` no filtraba con igualdad estricta por `fichaId` en `asistenciasFicha` ni validaba la autoría de `instructorId`, permitiendo edición cruzada sin restricciones. El backend no rechazaba la modificación por parte de un docente par.
+  4. `Reportes.vue` utilizaba la propiedad computada `fichasLideradas`, excluía a los docentes de apoyo, realizaba comparaciones estrictas por referencia de objetos de ficha en lugar de identificadores normalizados, y no calculaba los indicadores de inasistencias graves de `inasistencias.js`.
+- **Solución Aplicada:**
+  1. *Importación Multijornada:* Se eliminó `Jornada` de las cabeceras requeridas en `HEADERS_INSTRUCTORES` en `ImportarUsuarios.vue` y en `descargarPlantilla()`, permitiendo que el docente sea asignado libremente a fichas de cualquier jornada.
+  2. *Estandarización Title Case (Capitalize):*
+     - Creación de utilidad `capitalizarTexto` en backend (`backend/utils/textUtils.js`) y frontend (`frontend/src/utils/textos.js`) con soporte de caracteres en español y acentos.
+     - Adición de hooks Mongoose `pre('validate')` y `pre('findOneAndUpdate')` en `Estudiante.js` e `Instructor.js` para capitalizar nombres/apellidos y pasar correos a minúsculas limpias.
+     - Aplicación de `capitalizarTexto` en `Estudiantes.vue` y en `ImportarUsuarios.vue`.
+     - Ejecución de script de migración en la base de datos MongoDB Atlas (`backend/scripts/normalizar-nombres.js`), actualizando 43 aprendices y 3 docentes a formato oficial Title Case.
+  3. *Aislamiento Estricto y Solo Lectura entre Docentes:*
+     - En `PanelInstructor.vue`, filtrado estricto en `cargarDatosFicha` por `fichaId` y validación de coincidencia de ficha en eventos de socket `ATTENDANCE_REGISTERED`.
+     - Lógica de propiedad `esMio` en `inicializarAsistenciaDia`: si la asistencia de esa jornada fue tomada por otro instructor y el usuario no es Administrador, los checkboxes, botones de falla/excusa y campo de horas se deshabilitan (`disabled`), mostrando el indicador `🔒 Prof. [Nombre Docente]`.
+     - Inclusión de la columna "Docente" en la tabla de historial y en el reporte exportable.
+     - En `backend/controllers/asistenciaController.js` (`createAsistencia`), protección contra sobreescritura con respuesta HTTP 403 Forbidden cuando un docente intenta modificar registros de otro docente.
+  4. *Reportes para Todos los Docentes y Seguimiento Crítico:*
+     - Sustitución de `fichasLideradas` por `fichasDisponibles` en `Reportes.vue`, otorgando acceso a instructores líderes y de apoyo.
+     - Normalización de comparaciones de `fichaId` mediante `String(id?._id || id)`.
+     - Integración de `analizarInasistenciasGraves`: cálculo de racha máxima consecutiva y faltas acumuladas, StatCards de alerta en el resumen, filtros de "Crítico (3+ consecutivos)" y "Alerta (5+ acumuladas)" en la interfaz, distintivos de riesgo de deserción en la tabla de aprendices, y métricas de criticidad en las exportaciones a PDF y CSV/Excel.
+- **Archivos Modificados:**
+  - `backend/controllers/asistenciaController.js`
+  - `backend/controllers/estudianteController.js`
+  - `backend/models/Estudiante.js`
+  - `backend/models/Instructor.js`
+  - `backend/scripts/normalizar-nombres.js`
+  - `backend/utils/textUtils.js`
+  - `frontend/src/utils/textos.js`
+  - `frontend/src/views/Estudiantes.vue`
+  - `frontend/src/views/ImportarUsuarios.vue`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Reportes.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución de script de migración `normalizar-nombres.js` contra MongoDB Atlas completada exitosamente.
+  - Compilación de producción con `npm run build:prod` completada en 1.89s sin errores.
+
+---
 ## [2026-10-10 22:55] Mejoras de Plantillas Excel, Validaciones de Jerarquía Académica y Manejo de Conflictos (QA TestSprite)
 
 - **Fecha y Hora:** 2026-10-10 22:55:00 -05:00

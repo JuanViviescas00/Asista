@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import { capitalizarTexto } from '../utils/textUtils.js'
 
 const estudianteSchema = new mongoose.Schema({
   nombres: { type: String, required: true },
@@ -20,5 +21,25 @@ const estudianteSchema = new mongoose.Schema({
   dedoEnrolado2: { type: String, default: '' },
   fechaEnrolamiento2: { type: String, default: '' },
 }, { timestamps: true, collection: 'estudiantes' })
+
+// Estandarización automática a Capitalize / Title Case al crear o guardar
+estudianteSchema.pre('validate', function(next) {
+  if (this.nombres) this.nombres = capitalizarTexto(this.nombres)
+  if (this.apellidos) this.apellidos = capitalizarTexto(this.apellidos)
+  next()
+})
+
+// Estandarización automática a Capitalize / Title Case al actualizar
+estudianteSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate()
+  if (!update) return next()
+  if (update.nombres) update.nombres = capitalizarTexto(update.nombres)
+  if (update.apellidos) update.apellidos = capitalizarTexto(update.apellidos)
+  if (update.$set) {
+    if (update.$set.nombres) update.$set.nombres = capitalizarTexto(update.$set.nombres)
+    if (update.$set.apellidos) update.$set.apellidos = capitalizarTexto(update.$set.apellidos)
+  }
+  next()
+})
 
 export default mongoose.model('Estudiante', estudianteSchema)
