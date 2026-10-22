@@ -10,6 +10,8 @@ import iconoTomarAsistencia from '../assets/tomar-asistencia-icon.png'
 import iconoHistorial from '../assets/historial-icon.png'
 import iconoEquipoDocente from '../assets/equipo-docente-icon.png'
 
+const INTERVALO_COLA_OFFLINE_MS = 5000
+
 const draftStore = useAsistenciaDraftStore()
 
 
@@ -40,9 +42,24 @@ function showToast(message, type = 'success') {
   setTimeout(() => { toast.show = false }, 3000)
 }
 
+const sincronizandoCola = ref(false)
+
+// Sincroniza la cola offline con guardia de reentrada (el timer y el evento
+// 'online' pueden dispararla a la vez). Devuelve el resultado o null si ya
+// hay una sincronización en curso.
+async function procesarColaOffline() {
+  if (sincronizandoCola.value) return null
+  sincronizandoCola.value = true
+  try {
+    return await draftStore.sincronizarColaOffline(api)
+  } finally {
+    sincronizandoCola.value = false
+  }
+}
+
 async function onConexionRecuperada() {
-  const res = await draftStore.sincronizarColaOffline(api)
-  if (res.totalSincronizados > 0) {
+  const res = await procesarColaOffline()
+  if (res && res.totalSincronizados > 0) {
     showToast(`Conexión recuperada: ${res.totalSincronizados} asistencias sincronizadas automáticamente.`, 'success')
     if (fichaSeleccionada.value?._id) {
       await cargarDatosFicha(fichaSeleccionada.value._id)
@@ -54,10 +71,10 @@ let timerColaOffline = null
 function iniciarTimerColaOffline() {
   if (timerColaOffline) return
   timerColaOffline = setInterval(() => {
-    if (draftStore.pendientesOfflineCount > 0) {
-      draftStore.sincronizarColaOffline(api)
+    if (navigator.onLine && draftStore.pendientesOfflineCount > 0) {
+      procesarColaOffline()
     }
-  }, 30000)
+  }, INTERVALO_COLA_OFFLINE_MS)
 }
 
 onMounted(async () => {
@@ -517,12 +534,6 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
   }
 }
 
-function autoGuardarBorrador() {
-  if (fichaSeleccionada.value?._id && fechaAsistencia.value) {
-    draftStore.guardarBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, asistenciaDia.value)
-  }
-}
-
 // Horas de clase por día según la jornada de la ficha (mismo criterio del módulo Reportes:
 // Noche = 5 horas, Mañana / Tarde = 6 horas).
 const horasClaseFicha = computed(() => {
@@ -620,7 +631,6 @@ function onHorasInput(estId, ev) {
   const n = parseInt(ev.target.value, 10)
   if (Number.isNaN(n)) return // campo vacío mientras escribe
   actualizarEstadoPorHoras(reg, n)
-  autoGuardarBorrador()
   programarDebounceHoras(estId)
 }
 
@@ -638,7 +648,6 @@ async function onHorasChange(estId, ev) {
   const valorFinal = Number.isNaN(n) ? (reg.horasFallidas || 0) : n
   actualizarEstadoPorHoras(reg, valorFinal)
   ev.target.value = reg.horasFallidas
-  autoGuardarBorrador()
   await sincronizarCambioNube(estId)
 }
 
@@ -692,36 +701,29 @@ function inicializarAsistenciaDia() {
     registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
 
-  // Comprobar si existe un borrador no guardado en Pinia / LocalStorage
-  const borrador = draftStore.obtenerBorrador(fichaSeleccionada.value?._id, hoy)
-  if (borrador && borrador.registros) {
-    const borradorTime = borrador.updatedAt || 0
-    let restaurados = 0
-    for (const estId in borrador.registros) {
-      if (registros[estId]) {
-        const existente = asistenciasFicha.value.find(
-          a => (String(a.estudianteId?._id || a.estudianteId) === String(estId)) && a.fecha === hoy
-        )
-        const serverTime = existente?.updatedAt ? new Date(existente.updatedAt).getTime() : 0
+  // Superponer los items pendientes de la cola offline de esta ficha y fecha,
+  // para que una recarga sin conexión siga mostrando las marcas pendientes.
+  const sFichaId = String(fichaSeleccionada.value?._id || '')
+  const itemsCola = draftStore.colaOffline
+    .flatMap((lote) => (Array.isArray(lote.items) ? lote.items : []))
+    .filter((it) => String(it.fichaId) === sFichaId && it.fecha === hoy)
 
-        // Si el servidor en la nube tiene datos más recientes o iguales, prevalece la nube
-        if (serverTime >= borradorTime) {
-          continue
-        }
-
-        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios no guardados
-        if (!registros[estId].subidoSofia && (borrador.registros[estId].estado !== 'Ninguno' || borrador.registros[estId].excusa)) {
-          registros[estId] = { ...registros[estId], ...borrador.registros[estId] }
-          restaurados++
-        }
-      }
+  for (const item of itemsCola) {
+    const estId = String(item.estudianteId)
+    const reg = registros[estId]
+    if (!reg) continue
+    // subidoSofia y esMio salen SIEMPRE del servidor. Si el servidor ya marcó
+    // la fila como subida a Sofía Plus, se ignora el item y se quita de la cola.
+    if (reg.subidoSofia) {
+      draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, item.fecha)
+      continue
     }
-    if (restaurados > 0) {
-      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios locales.`, 'info')
-    } else if (asistenciasFicha.value.length > 0) {
-      // Limpiar borrador obsoleto si el servidor ya está al día
-      draftStore.limpiarBorrador(fichaSeleccionada.value?._id, hoy)
-    }
+    reg.estado = item.estado
+    reg.excusa = item.estado === 'Excusada'
+    reg.horaMarcacion = item.hora || '—'
+    reg.horasTardanza = item.horasTardanza || 0
+    reg.tiempoTardanza = item.tiempoTardanza || '0 horas'
+    reg.horasFallidas = horasAuto(reg)
   }
 
   asistenciaDia.value = registros
@@ -823,13 +825,11 @@ async function enviarEstado(estId) {
           asistenciasFicha.value.push(res)
         }
       }
-      draftStore.quitarRegistroBorrador(item.fichaId, fecha, estId)
       draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, fecha)
       setEstadoFila(estId, 'guardado')
       return
     } catch (err) {
       if (err.status === 409) {
-        draftStore.quitarRegistroBorrador(item.fichaId, fecha, estId)
         showToast(err.message, 'error')
         await cargarDatosFicha(item.fichaId)
         delete estadoFilaSync.value[estId]
@@ -926,7 +926,6 @@ async function marcarFalta(estId) {
     reg.excusa = false
   }
   reg.horasFallidas = horasAuto(reg)
-  autoGuardarBorrador()
 
   await sincronizarCambioNube(estId)
 }
@@ -956,7 +955,6 @@ async function toggleExcusa(estId) {
     reg.estado = reg.previo ? 'Falta' : 'Presente'
   }
   reg.horasFallidas = horasAuto(reg)
-  autoGuardarBorrador()
 
   await sincronizarCambioNube(estId)
 }

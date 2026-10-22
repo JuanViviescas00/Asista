@@ -1,8 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-const PREFIX_DRAFT = 'asista_draft_'
 const KEY_COLA_OFFLINE = 'asista_cola_offline_asistencias'
+const PREFIX_DRAFT_LEGACY = 'asista_draft_'
+
+// Al arrancar la app se eliminan las claves de borradores legacy (el sistema de
+// borradores ya no se usa). Se conserva intacta la clave de la cola offline.
+function limpiarBorradoresLegacy() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    const claves = []
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i)
+      if (key && key.startsWith(PREFIX_DRAFT_LEGACY)) claves.push(key)
+    }
+    for (const key of claves) window.localStorage.removeItem(key)
+  } catch (e) {
+    console.warn('[DraftStore] Error al limpiar borradores legacy:', e)
+  }
+}
+limpiarBorradoresLegacy()
 
 export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
   const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -17,10 +34,6 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     window.addEventListener('offline', () => {
       isOnline.value = false
     })
-  }
-
-  function generarClave(fichaId, fecha) {
-    return `${PREFIX_DRAFT}${fichaId}_${fecha}`
   }
 
   function cargarColaOffline() {
@@ -38,79 +51,6 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
       localStorage.setItem(KEY_COLA_OFFLINE, JSON.stringify(colaOffline.value))
     } catch (e) {
       console.error('[DraftStore] Error al guardar cola offline:', e)
-    }
-  }
-
-  /**
-   * Guarda un borrador local de la asistencia de una ficha y fecha específica.
-   */
-  function guardarBorrador(fichaId, fecha, registros) {
-    if (!fichaId || !fecha || !registros) return
-    const key = generarClave(fichaId, fecha)
-    try {
-      const payload = {
-        fichaId,
-        fecha,
-        registros,
-        updatedAt: Date.now()
-      }
-      localStorage.setItem(key, JSON.stringify(payload))
-    } catch (e) {
-      console.warn('[DraftStore] No se pudo guardar borrador local:', e)
-    }
-  }
-
-  /**
-   * Obtiene el borrador guardado para una ficha y fecha, si existe.
-   */
-  function obtenerBorrador(fichaId, fecha) {
-    if (!fichaId || !fecha) return null
-    const key = generarClave(fichaId, fecha)
-    try {
-      const data = localStorage.getItem(key)
-      if (!data) return null
-      return JSON.parse(data)
-    } catch (e) {
-      console.warn('[DraftStore] Error al recuperar borrador:', e)
-      return null
-    }
-  }
-
-  /**
-   * Elimina el borrador una vez guardado exitosamente en el backend.
-   */
-  function limpiarBorrador(fichaId, fecha) {
-    if (!fichaId || !fecha) return
-    const key = generarClave(fichaId, fecha)
-    try {
-      localStorage.removeItem(key)
-    } catch (e) {
-      console.warn('[DraftStore] Error al limpiar borrador:', e)
-    }
-  }
-
-  /**
-   * Elimina solo el registro de un aprendiz del borrador (ficha + fecha).
-   * Se usa tras sincronizar con éxito o tras un 409, para que un borrador
-   * viejo no se reaplique encima del estado del servidor.
-   */
-  function quitarRegistroBorrador(fichaId, fecha, estId) {
-    if (!fichaId || !fecha || !estId) return
-    const key = generarClave(fichaId, fecha)
-    try {
-      const data = localStorage.getItem(key)
-      if (!data) return
-      const borrador = JSON.parse(data)
-      if (borrador && borrador.registros && borrador.registros[estId]) {
-        delete borrador.registros[estId]
-        if (Object.keys(borrador.registros).length === 0) {
-          localStorage.removeItem(key)
-        } else {
-          localStorage.setItem(key, JSON.stringify(borrador))
-        }
-      }
-    } catch (e) {
-      console.warn('[DraftStore] Error al quitar registro del borrador:', e)
     }
   }
 
@@ -206,10 +146,6 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     sincronizando,
     colaOffline,
     pendientesOfflineCount,
-    guardarBorrador,
-    obtenerBorrador,
-    limpiarBorrador,
-    quitarRegistroBorrador,
     quitarDeColaOffline,
     encolarOffline,
     sincronizarColaOffline
