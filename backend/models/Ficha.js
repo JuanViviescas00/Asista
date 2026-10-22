@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento } from '../utils/textUtils.js'
+import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textUtils.js'
 
 const fichaSchema = new mongoose.Schema({
   codigoFicha: { type: String, required: true, unique: true },
@@ -18,7 +18,7 @@ const fichaSchema = new mongoose.Schema({
 // Normalización automática al crear o validar
 fichaSchema.pre('validate', function(next) {
   if (this.codigoFicha) this.codigoFicha = normalizarNumeroDocumento(this.codigoFicha)
-  if (this.nombrePrograma) this.nombrePrograma = capitalizarTexto(this.nombrePrograma)
+  if (this.nombrePrograma) this.nombrePrograma = normalizarNombrePrograma(this.nombrePrograma)
   if (this.jornada) this.jornada = normalizarJornada(this.jornada)
   if (this.aulaAsignada) this.aulaAsignada = capitalizarTexto(this.aulaAsignada)
   next()
@@ -32,8 +32,8 @@ fichaSchema.pre('findOneAndUpdate', function(next) {
   if (update.codigoFicha) update.codigoFicha = normalizarNumeroDocumento(update.codigoFicha)
   if (update.$set?.codigoFicha) update.$set.codigoFicha = normalizarNumeroDocumento(update.$set.codigoFicha)
 
-  if (update.nombrePrograma) update.nombrePrograma = capitalizarTexto(update.nombrePrograma)
-  if (update.$set?.nombrePrograma) update.$set.nombrePrograma = capitalizarTexto(update.$set.nombrePrograma)
+  if (update.nombrePrograma) update.nombrePrograma = normalizarNombrePrograma(update.nombrePrograma)
+  if (update.$set?.nombrePrograma) update.$set.nombrePrograma = normalizarNombrePrograma(update.$set.nombrePrograma)
 
   if (update.jornada) update.jornada = normalizarJornada(update.jornada)
   if (update.$set?.jornada) update.$set.jornada = normalizarJornada(update.$set.jornada)

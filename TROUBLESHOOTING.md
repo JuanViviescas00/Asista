@@ -1,5 +1,56 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 09:35] Estandarización y Catálogo Dinámico de Programas de Formación (Eliminación de Disparidades en Fichas)
+
+- **Fecha y Hora:** 2026-10-22 09:35:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Disparidades en Nombres de Fichas:* Existían disparidades ortográficas y de conectores en los programas de las fichas (ej. la ficha 3139319 tenía `"Analisis Y Desarrollo Del Software"` sin tilde y con "Del", mientras que la 3598464 tenía `"Análisis Y Desarrollo De Software"` con tilde y con "De", y la 3589565 tenía `"Iitic"`).
+  2. *Falta de Catálogo Centralizado:* El campo `nombrePrograma` era texto libre en los formularios y en la importación de Excel, sin una lista oficial donde el administrador pudiera adjuntar o modificar programas a futuro (Cocina, Construcción, ADSO, IITIC, etc.).
+  3. *Requerimiento:* Estandarizar todos los nombres de programas para que no existan discrepancias con/sin tildes, permitir adjuntar nuevos programas o modificarlos en cualquier momento, y sincronizar automáticamente las fichas existentes.
+- **Causa Raíz:**
+  - Ausencia de un modelo/colección de `Programa` en backend.
+  - La función anterior `capitalizarTexto` únicamente ponía mayúsculas iniciales a las palabras pero no podía agregar tildes omitidas ni corregir conectores ("del" vs "de") ni expandir siglas ("iitic").
+- **Solución Aplicada:**
+  1. *Modelo y API de Programas:*
+     - Creación de `backend/models/Programa.js` (`nombre`, `codigo`, `sigla`, `nivel`, `alias`, `estado`, `descripcion`).
+     - Creación de controlador `backend/controllers/programaController.js` y rutas `backend/routes/programas.js` montadas en `/api/programas`.
+     - *Sincronización en cascada:* Al editar o corregir el nombre de un programa en el catálogo, el backend actualiza automáticamente todas las fichas vinculadas en MongoDB (`Ficha.updateMany`).
+     - Protección de integridad: no se permite eliminar un programa si tiene fichas asociadas (debe inactivarse).
+  2. *Algoritmo de Normalización Canónica (`normalizarNombrePrograma`):*
+     - Implementado en `backend/utils/textUtils.js` y `frontend/src/utils/textos.js`.
+     - Reconoce variantes mediante `quitarAcentos`: `"ANALISIS Y DESARROLLO DE SOFTWARE"`, `"adso"`, `"analisis y desarrollo del software"` -> `"Análisis y Desarrollo de Software"`.
+     - `"cocina"`, `"gastronomia"` -> `"Cocina"`.
+     - `"construccion"`, `"construccion de edificaciones"` -> `"Construcción"`.
+     - `"iitic"`, `"infraestructura de ti"` -> `"Infraestructura de TI y Comunicaciones (IITIC)"`.
+  3. *Gestión Frontend en `Fichas.vue` y `ImportarUsuarios.vue`:*
+     - Botón `Gestionar Programas` en el listado de fichas con modal completo para administrar el catálogo (con buscador, edición, alta y cambio de estado).
+     - Campo de programa en formulario de fichas con autocompletado oficial (`<datalist>`) y enlace directo `+ Nuevo Programa` para registrar un programa nuevo sin salir de la ficha.
+     - Normalización automática en blur, creación manual e importación masiva por Excel.
+  4. *Migración y Sembrado en Base de Datos (`seed-programas.js`):*
+     - Creación de los 4 programas canónicos en Atlas.
+     - Migración exitosa de las 3 fichas existentes (3139319, 3598464 y 3589565) a sus denominaciones uniformes.
+- **Archivos Modificados:**
+  - `backend/controllers/fichaController.js`
+  - `backend/controllers/programaController.js` (Nuevo)
+  - `backend/index.js`
+  - `backend/models/Ficha.js`
+  - `backend/models/Programa.js` (Nuevo)
+  - `backend/routes/programas.js` (Nuevo)
+  - `backend/scripts/seed-programas.js` (Nuevo)
+  - `backend/utils/textUtils.js`
+  - `frontend/src/services/index.js`
+  - `frontend/src/styles/fichas.css`
+  - `frontend/src/utils/textos.js`
+  - `frontend/src/views/Fichas.vue`
+  - `frontend/src/views/ImportarUsuarios.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución de `seed-programas.js` y comprobación en MongoDB Atlas: 3 fichas normalizadas, 4 programas creados.
+  - Ejecución de suite de pruebas de normalización con 10 variantes de texto (todas resueltas exitosamente).
+  - Compilación de producción `npm run build:prod` completada en 935 ms (0 errores) y desplegada a `backend/public/`.
+
+---
+
 ## [2026-10-22 09:20] Reubicación Superior de Docente Responsable en Toma de Asistencia y Reportes (Eliminación de Redundancia por Jornada)
 
 - **Fecha y Hora:** 2026-10-22 09:20:00 -05:00

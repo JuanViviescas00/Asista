@@ -87,3 +87,129 @@ export function normalizarNumeroDocumento(doc) {
   if (doc === null || doc === undefined) return ''
   return String(doc).trim().replace(/[\.\s-]/g, '')
 }
+
+/**
+ * Elimina marcas diacríticas / acentos de una cadena para comparaciones insensibles.
+ * Ejemplo: "Análisis" -> "Analisis"
+ */
+export function quitarAcentos(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+}
+
+/**
+ * Catálogo canónico predeterminado de programas de formación del SENA.
+ */
+export const PROGRAMAS_ESTANDAR = [
+  {
+    nombre: 'Análisis y Desarrollo de Software',
+    sigla: 'ADSO',
+    codigo: '228106',
+    nivel: 'Tecnólogo',
+    alias: [
+      'analisis y desarrollo de software',
+      'analisis y desarrollo del software',
+      'analisis y desarrollo',
+      'desarrollo de software',
+      'adso',
+    ],
+  },
+  {
+    nombre: 'Cocina',
+    sigla: 'COC',
+    codigo: '635503',
+    nivel: 'Técnico',
+    alias: [
+      'cocina',
+      'gastronomia',
+      'gastronomía',
+      'arte culinario',
+      'servicios de cocina',
+    ],
+  },
+  {
+    nombre: 'Construcción',
+    sigla: 'CONS',
+    codigo: '836118',
+    nivel: 'Técnico',
+    alias: [
+      'construccion',
+      'construcción',
+      'construccion de edificaciones',
+      'construcción de edificaciones',
+      'construcciones',
+      'obras civiles',
+    ],
+  },
+  {
+    nombre: 'Infraestructura de TI y Comunicaciones (IITIC)',
+    sigla: 'IITIC',
+    codigo: '228120',
+    nivel: 'Tecnólogo',
+    alias: [
+      'iitic',
+      'infraestructura de ti y comunicaciones',
+      'infraestructura ti',
+      'redes y comunicaciones',
+      'infraestructura de tecnologias de la informacion y las comunicaciones',
+      'infraestructura de tecnologías de la información y las comunicaciones',
+    ],
+  },
+]
+
+const CONECTORES_PROGRAMA = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'y', 'e', 'en', 'para', 'por', 'con', 'a', 'al'])
+
+function capitalizarPrograma(str) {
+  const palabras = str.trim().toLowerCase().split(/\s+/)
+  return palabras.map((p, index) => {
+    if (!p) return ''
+    if (index > 0 && CONECTORES_PROGRAMA.has(p)) return p
+    if (p.startsWith('(') && p.endsWith(')')) {
+      return '(' + p.slice(1, -1).toUpperCase() + ')'
+    }
+    return p.charAt(0).toUpperCase() + p.slice(1)
+  }).join(' ')
+}
+
+/**
+ * Normaliza el nombre de un programa de formación contra el catálogo canónico o dinámico.
+ * Resuelve tildes faltantes, variaciones ("de" vs "del"), siglas (ADSO, IITIC) y mayúsculas.
+ * @param {string} nombre
+ * @param {Array} catalogoBD Lista opcional de programas activos cargados de la base de datos
+ * @returns {string} Nombre estandarizado canónico
+ */
+export function normalizarNombrePrograma(nombre, catalogoBD = []) {
+  if (!nombre || typeof nombre !== 'string') return ''
+  const limpio = nombre.trim()
+  if (!limpio) return ''
+
+  const sinAcentos = quitarAcentos(limpio).toLowerCase()
+
+  // 1. Buscar en catálogo dinámico de la base de datos si fue proporcionado
+  if (Array.isArray(catalogoBD) && catalogoBD.length > 0) {
+    for (const prog of catalogoBD) {
+      if (!prog || !prog.nombre) continue
+      if (quitarAcentos(prog.nombre).toLowerCase() === sinAcentos) return prog.nombre
+      if (prog.sigla && quitarAcentos(prog.sigla).toLowerCase() === sinAcentos) return prog.nombre
+      if (Array.isArray(prog.alias)) {
+        for (const al of prog.alias) {
+          if (quitarAcentos(al).toLowerCase() === sinAcentos) return prog.nombre
+        }
+      }
+    }
+  }
+
+  // 2. Buscar en catálogo canónico predeterminado
+  for (const prog of PROGRAMAS_ESTANDAR) {
+    if (quitarAcentos(prog.nombre).toLowerCase() === sinAcentos) return prog.nombre
+    if (prog.sigla && quitarAcentos(prog.sigla).toLowerCase() === sinAcentos) return prog.nombre
+    if (Array.isArray(prog.alias)) {
+      for (const al of prog.alias) {
+        if (quitarAcentos(al).toLowerCase() === sinAcentos) return prog.nombre
+      }
+    }
+  }
+
+  // 3. Fallback: aplicar formato Capitalize inteligente respetando conectores
+  return capitalizarPrograma(limpio)
+}

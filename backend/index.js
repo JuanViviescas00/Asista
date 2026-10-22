@@ -19,6 +19,7 @@ import excusasRoutes from './routes/excusas.js'
 import clasesRoutes from './routes/clases.js'
 import enrolamientoRoutes from './routes/enrolamiento.js'
 import dispositivosRoutes from './routes/dispositivos.js'
+import programasRoutes from './routes/programas.js'
 import { initSocket } from './services/socketService.js'
 import { hashPassword } from './services/passwordService.js'
 import { iniciarCronJobs } from './services/cronService.js'
@@ -122,6 +123,7 @@ app.use('/api/excusas', excusasRoutes)
 app.use('/api/clases', clasesRoutes)
 app.use('/api/enrolamiento', enrolamientoRoutes)
 app.use('/api/dispositivos', dispositivosRoutes)
+app.use('/api/programas', programasRoutes)
 
 // Servir estáticos del frontend compilado (Single Service para Render)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

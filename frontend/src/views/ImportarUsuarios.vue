@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/importarUsuarios.css'
 import * as XLSX from 'xlsx'
-import { capitalizarTexto, normalizarTipoDocumento, normalizarJornada, normalizarNumeroDocumento, TIPOS_DOCUMENTO_CODIGOS } from '../utils/textos.js'
+import { capitalizarTexto, normalizarTipoDocumento, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma, TIPOS_DOCUMENTO_CODIGOS } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const tipoImportacion = ref('estudiantes') // 'estudiantes', 'instructores', 'fichas'
@@ -319,7 +319,7 @@ async function ejecutarImportacion() {
     if (tipoImportacion.value === 'fichas') {
       const items = registros.value.map(r => ({
         codigoFicha: normalizarNumeroDocumento(r.Codigo_Ficha),
-        nombrePrograma: capitalizarTexto(r.Nombre_Programa),
+        nombrePrograma: normalizarNombrePrograma(r.Nombre_Programa),
         jornada: normalizarJornada(r.Jornada),
         aulaAsignada: capitalizarTexto(r.Aula_Asignada || 'Aula General'),
         fechaInicio: r.Fecha_Inicio || '2026-02-01',

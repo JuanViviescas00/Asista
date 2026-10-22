@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
-import { nombreProgramaLimpio, capitalizarTexto, normalizarJornada, normalizarNumeroDocumento } from '../utils/textos.js'
+import { nombreProgramaLimpio, capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -15,6 +15,25 @@ const expandidos = ref({})
 const showInhabilitarModal = ref(false)
 const inhabilitarTarget = ref(null)
 const inhabilitarMotivo = ref('')
+
+// Estados para Catálogo de Programas
+const programasList = ref([])
+const busquedaPrograma = ref('')
+const showModalProgramas = ref(false)
+const showModalEditarPrograma = ref(false)
+const loadingPrograma = ref(false)
+const vieneDeFichaForm = ref(false)
+
+const programaForm = reactive({
+  id: null,
+  nombre: '',
+  sigla: '',
+  codigo: '',
+  nivel: 'Tecnólogo',
+  aliasStr: '',
+  descripcion: '',
+  estado: 'Activo'
+})
 
 const fichaForm = reactive({
   codigoFicha: '',
@@ -31,7 +50,7 @@ const fichas = ref([])
 const instructoresList = ref([])
 
 onMounted(async () => {
-  await Promise.all([loadFichas(), loadInstructores()])
+  await Promise.all([loadFichas(), loadInstructores(), loadProgramas()])
 })
 
 async function loadFichas() {
@@ -47,6 +66,29 @@ async function loadInstructores() {
     instructoresList.value = await api.instructores.getAll()
   } catch (e) {}
 }
+
+async function loadProgramas() {
+  try {
+    programasList.value = await api.programas.getAll()
+  } catch (e) {
+    console.error('Error al cargar programas:', e)
+  }
+}
+
+const programasActivos = computed(() => {
+  return (programasList.value || []).filter(p => p.estado !== 'Inactivo')
+})
+
+const programasFiltrados = computed(() => {
+  const q = busquedaPrograma.value.toLowerCase().trim()
+  if (!q) return programasList.value || []
+  return (programasList.value || []).filter(p =>
+    (p.nombre || '').toLowerCase().includes(q) ||
+    (p.sigla || '').toLowerCase().includes(q) ||
+    (p.codigo || '').toLowerCase().includes(q) ||
+    (p.nivel || '').toLowerCase().includes(q)
+  )
+})
 
 const instructoresFiltrados = computed(() => {
   const query = busquedaDocente.value.toLowerCase().trim()
@@ -122,7 +164,7 @@ async function guardarFicha() {
     const comunesFiltrados = instructores.filter(id => id !== instructorLiderId)
     const body = {
       codigoFicha: normalizarNumeroDocumento(codigoFicha),
-      nombrePrograma: capitalizarTexto(nombrePrograma),
+      nombrePrograma: normalizarNombrePrograma(nombrePrograma, programasList.value),
       jornada: normalizarJornada(jornada),
       aulaAsignada: capitalizarTexto(aulaAsignada),
       instructorLiderId,
@@ -138,11 +180,137 @@ async function guardarFicha() {
       showToastFn('Ficha creada correctamente')
     }
     await loadFichas()
+    await loadProgramas()
     closeModal()
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   } finally {
     loading.value = false
+  }
+}
+
+function onProgramaBlur() {
+  if (fichaForm.nombrePrograma) {
+    fichaForm.nombrePrograma = normalizarNombrePrograma(fichaForm.nombrePrograma, programasList.value)
+  }
+}
+
+function abrirGestionProgramas() {
+  busquedaPrograma.value = ''
+  showModalProgramas.value = true
+}
+
+function abrirCrearPrograma() {
+  vieneDeFichaForm.value = false
+  Object.assign(programaForm, {
+    id: null,
+    nombre: '',
+    sigla: '',
+    codigo: '',
+    nivel: 'Tecnólogo',
+    aliasStr: '',
+    descripcion: '',
+    estado: 'Activo'
+  })
+  showModalEditarPrograma.value = true
+}
+
+function abrirCrearProgramaRapido() {
+  vieneDeFichaForm.value = true
+  Object.assign(programaForm, {
+    id: null,
+    nombre: fichaForm.nombrePrograma ? normalizarNombrePrograma(fichaForm.nombrePrograma, programasList.value) : '',
+    sigla: '',
+    codigo: '',
+    nivel: 'Tecnólogo',
+    aliasStr: '',
+    descripcion: '',
+    estado: 'Activo'
+  })
+  showModalEditarPrograma.value = true
+}
+
+function abrirEditarPrograma(prog) {
+  vieneDeFichaForm.value = false
+  Object.assign(programaForm, {
+    id: prog._id,
+    nombre: prog.nombre,
+    sigla: prog.sigla || '',
+    codigo: prog.codigo || '',
+    nivel: prog.nivel || 'Tecnólogo',
+    aliasStr: Array.isArray(prog.alias) ? prog.alias.join(', ') : '',
+    descripcion: prog.descripcion || '',
+    estado: prog.estado || 'Activo'
+  })
+  showModalEditarPrograma.value = true
+}
+
+async function guardarPrograma() {
+  if (!programaForm.nombre || !programaForm.nombre.trim()) {
+    showToastFn('El nombre del programa es obligatorio', 'error')
+    return
+  }
+
+  loadingPrograma.value = true
+  try {
+    const aliasArr = programaForm.aliasStr
+      ? programaForm.aliasStr.split(',').map(a => a.trim()).filter(Boolean)
+      : []
+
+    const body = {
+      nombre: normalizarNombrePrograma(programaForm.nombre, programasList.value),
+      sigla: programaForm.sigla.trim().toUpperCase(),
+      codigo: programaForm.codigo.trim().toUpperCase(),
+      nivel: programaForm.nivel,
+      alias: aliasArr,
+      descripcion: programaForm.descripcion.trim(),
+      estado: programaForm.estado
+    }
+
+    let guardado
+    if (programaForm.id) {
+      guardado = await api.programas.update(programaForm.id, body)
+      showToastFn(`Programa "${guardado.nombre}" actualizado correctamente`)
+    } else {
+      guardado = await api.programas.create(body)
+      showToastFn(`Programa "${guardado.nombre}" creado exitosamente`)
+    }
+
+    await loadProgramas()
+    if (vieneDeFichaForm.value) {
+      fichaForm.nombrePrograma = guardado.nombre
+    }
+    if (programaForm.id) {
+      await loadFichas()
+    }
+
+    showModalEditarPrograma.value = false
+  } catch (err) {
+    showToastFn('Error: ' + err.message, 'error')
+  } finally {
+    loadingPrograma.value = false
+  }
+}
+
+async function cambiarEstadoPrograma(prog) {
+  try {
+    const nuevoEstado = prog.estado === 'Activo' ? 'Inactivo' : 'Activo'
+    await api.programas.update(prog._id, { estado: nuevoEstado })
+    showToastFn(`Programa "${prog.nombre}" marcado como ${nuevoEstado}`)
+    await loadProgramas()
+  } catch (err) {
+    showToastFn('Error al cambiar estado: ' + err.message, 'error')
+  }
+}
+
+async function eliminarPrograma(prog) {
+  if (!confirm(`¿Estás seguro de eliminar el programa "${prog.nombre}"?`)) return
+  try {
+    await api.programas.delete(prog._id)
+    showToastFn(`Programa "${prog.nombre}" eliminado correctamente`)
+    await loadProgramas()
+  } catch (err) {
+    showToastFn('Error al eliminar: ' + err.message, 'error')
   }
 }
 
@@ -241,7 +409,16 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
   <div class="fichas-card">
     <div class="fichas-card-header">
       <h3>Listado de Fichas</h3>
-      <button class="fichas-button fichas-button-primary" @click="openCreate" title="Nueva Ficha"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <div class="fichas-header-actions">
+        <button class="fichas-button fichas-button-secondary" @click="abrirGestionProgramas" title="Catálogo de Programas de Formación">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span>Gestionar Programas</span>
+        </button>
+        <button class="fichas-button fichas-button-primary" @click="openCreate" title="Nueva Ficha">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>Nueva Ficha</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="fichas.length === 0" class="fichas-empty-state">
@@ -315,8 +492,39 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
           <input v-model="fichaForm.codigoFicha" type="text" placeholder="Ej: 2670123" />
         </div>
         <div class="fichas-form-group">
-          <label>Nombre del Programa *</label>
-          <input v-model="fichaForm.nombrePrograma" type="text" placeholder="Ej: Análisis y Desarrollo de Software" />
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label style="margin: 0;">Nombre del Programa *</label>
+            <button
+              type="button"
+              class="btn-link-programas"
+              @click="abrirCrearProgramaRapido"
+              title="Registrar un nuevo programa en el catálogo"
+            >
+              + Nuevo Programa
+            </button>
+          </div>
+          <div style="position: relative;">
+            <input
+              v-model="fichaForm.nombrePrograma"
+              list="programas-datalist"
+              type="text"
+              placeholder="Ej: Análisis y Desarrollo de Software"
+              @blur="onProgramaBlur"
+              autocomplete="off"
+            />
+            <datalist id="programas-datalist">
+              <option
+                v-for="p in programasActivos"
+                :key="p._id"
+                :value="p.nombre"
+              >
+                {{ p.sigla ? `[${p.sigla}] ` : '' }}{{ p.nivel }}
+              </option>
+            </datalist>
+          </div>
+          <span class="fichas-programa-help">
+            Escribe o selecciona de la lista oficial (autocorrige tildes automáticamente).
+          </span>
         </div>
         <div class="fichas-form-group">
           <label>Jornada *</label>
@@ -420,6 +628,162 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
       <div class="fichas-modal-actions">
         <button class="fichas-button fichas-button-outline" @click="cerrarInhabilitar" title="Cancelar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         <button class="fichas-button fichas-button-danger" @click="confirmarInhabilitar" title="Confirmar Inhabilitación"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CATÁLOGO Y GESTIÓN DE PROGRAMAS DE FORMACIÓN -->
+  <div v-if="showModalProgramas" class="fichas-modal-overlay" @click.self="showModalProgramas = false">
+    <div class="fichas-modal fichas-modal-extra-large">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h2 style="margin: 0; font-size: 20px;">Catálogo de Programas de Formación</h2>
+          <p style="margin: 4px 0 0; color: #64748b; font-size: 13.5px;">
+            Estandariza los nombres oficiales. Al modificar un programa, todas las fichas vinculadas se sincronizan automáticamente.
+          </p>
+        </div>
+        <button class="fichas-button fichas-button-primary fichas-button-small" @click="abrirCrearPrograma">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>Nuevo Programa</span>
+        </button>
+      </div>
+
+      <div class="programas-toolbar">
+        <input
+          v-model="busquedaPrograma"
+          type="text"
+          class="programas-search-input"
+          placeholder="Buscar programa por nombre, sigla o código (ej. ADSO, Cocina, IITIC)..."
+        />
+      </div>
+
+      <div class="programas-table-wrap">
+        <table class="programas-table">
+          <thead>
+            <tr>
+              <th>Programa Oficial</th>
+              <th>Sigla / Código</th>
+              <th>Nivel</th>
+              <th style="text-align: center;">Fichas</th>
+              <th style="text-align: center;">Estado</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="prog in programasFiltrados" :key="prog._id">
+              <td>
+                <strong>{{ prog.nombre }}</strong>
+                <div v-if="prog.descripcion" style="font-size: 11.5px; color: #64748b; margin-top: 2px;">{{ prog.descripcion }}</div>
+              </td>
+              <td>
+                <span v-if="prog.sigla" class="fichas-badge fichas-badge-ficha">{{ prog.sigla }}</span>
+                <span v-if="prog.codigo" style="font-size: 11.5px; color: #64748b; margin-left: 6px;">{{ prog.codigo }}</span>
+              </td>
+              <td>
+                <span class="fichas-badge" :class="prog.nivel === 'Tecnólogo' ? 'badge-nivel-tecnologo' : prog.nivel === 'Técnico' ? 'badge-nivel-tecnico' : 'badge-nivel-otro'">
+                  {{ prog.nivel }}
+                </span>
+              </td>
+              <td style="text-align: center;">
+                <span style="font-weight: 700; color: #334155;">{{ prog.conteoFichas || 0 }}</span>
+              </td>
+              <td style="text-align: center;">
+                <button
+                  type="button"
+                  class="fichas-badge"
+                  :class="prog.estado === 'Activo' ? 'fichas-badge-success' : 'fichas-badge-inactive'"
+                  style="border: none; cursor: pointer;"
+                  @click="cambiarEstadoPrograma(prog)"
+                  :title="prog.estado === 'Activo' ? 'Clic para desactivar' : 'Clic para activar'"
+                >
+                  {{ prog.estado }}
+                </button>
+              </td>
+              <td style="text-align: right;">
+                <div class="fichas-button-group" style="justify-content: flex-end;">
+                  <button class="fichas-button fichas-button-outline fichas-button-small" @click="abrirEditarPrograma(prog)" title="Editar programa">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  </button>
+                  <button
+                    v-if="(prog.conteoFichas || 0) === 0"
+                    class="fichas-button fichas-button-danger fichas-button-small"
+                    @click="eliminarPrograma(prog)"
+                    title="Eliminar programa"
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="programasFiltrados.length === 0">
+              <td colspan="6" style="text-align: center; padding: 24px; color: #64748b;">
+                No se encontraron programas con el criterio de búsqueda.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="fichas-modal-actions" style="margin-top: 20px;">
+        <button class="fichas-button fichas-button-outline" @click="showModalProgramas = false">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUB-MODAL: CREAR / EDITAR PROGRAMA -->
+  <div v-if="showModalEditarPrograma" class="fichas-modal-overlay" style="z-index: 1010;" @click.self="showModalEditarPrograma = false">
+    <div class="fichas-modal fichas-modal-small">
+      <h2>{{ programaForm.id ? 'Editar Programa' : 'Nuevo Programa de Formación' }}</h2>
+      <div class="fichas-form-grid" style="grid-template-columns: 1fr;">
+        <div class="fichas-form-group">
+          <label>Nombre Oficial del Programa *</label>
+          <input
+            v-model="programaForm.nombre"
+            type="text"
+            placeholder="Ej: Análisis y Desarrollo de Software"
+            required
+          />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="fichas-form-group">
+            <label>Sigla (Acrónimo)</label>
+            <input
+              v-model="programaForm.sigla"
+              type="text"
+              placeholder="Ej: ADSO, IITIC, COC"
+            />
+          </div>
+          <div class="fichas-form-group">
+            <label>Nivel de Formación</label>
+            <select v-model="programaForm.nivel">
+              <option value="Tecnólogo">Tecnólogo</option>
+              <option value="Técnico">Técnico</option>
+              <option value="Especialización Tecnológica">Especialización Tecnológica</option>
+              <option value="Operario">Operario</option>
+              <option value="Auxiliar">Auxiliar</option>
+              <option value="Curso Especial">Curso Especial</option>
+            </select>
+          </div>
+        </div>
+        <div class="fichas-form-group">
+          <label>Variantes / Alias reconocidos (separados por coma)</label>
+          <input
+            v-model="programaForm.aliasStr"
+            type="text"
+            placeholder="Ej: analisis y desarrollo, adso, software"
+          />
+        </div>
+      </div>
+
+      <div class="fichas-modal-actions">
+        <button class="fichas-button fichas-button-outline" @click="showModalEditarPrograma = false" :disabled="loadingPrograma">
+          Cancelar
+        </button>
+        <button class="fichas-button fichas-button-primary" @click="guardarPrograma" :disabled="loadingPrograma">
+          {{ loadingPrograma ? 'Guardando...' : (programaForm.id ? 'Guardar Cambios' : 'Crear Programa') }}
+        </button>
       </div>
     </div>
   </div>

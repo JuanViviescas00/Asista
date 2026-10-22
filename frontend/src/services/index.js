@@ -119,6 +119,16 @@ const api = {
     importar(fichas) { return request('/fichas/importar', { method: 'POST', body: JSON.stringify({ fichas }) }) },
   },
 
+  programas: {
+    getAll(params = {}) {
+      const query = new URLSearchParams(params).toString()
+      return request(`/programas${query ? '?' + query : ''}`)
+    },
+    create(body) { return request('/programas', { method: 'POST', body: JSON.stringify(body) }) },
+    update(id, body) { return request(`/programas/${id}`, { method: 'PUT', body: JSON.stringify(body) }) },
+    delete(id) { return request(`/programas/${id}`, { method: 'DELETE' }) },
+  },
+
   estudiantes: {
     getAll(params = {}) {
       const query = new URLSearchParams(params).toString()
