@@ -73,7 +73,9 @@ function iniciarSocketDocente() {
     if (asistenciaDia.value[data.estudianteId]) {
       asistenciaDia.value[data.estudianteId].estado = data.estado
       asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
-      asistenciaDia.value[data.estudianteId].excusa = false
+      asistenciaDia.value[data.estudianteId].horasTardanza = data.horasTardanza || 0
+      asistenciaDia.value[data.estudianteId].tiempoTardanza = data.tiempoTardanza || '0 horas'
+      asistenciaDia.value[data.estudianteId].excusa = data.estado === 'Excusada'
       asistenciaDia.value[data.estudianteId].previo = null
       asistenciaDia.value[data.estudianteId].horasFallidas = horasAuto(asistenciaDia.value[data.estudianteId])
       autoGuardarBorrador()
@@ -480,26 +482,64 @@ function bloquearNoEnteros(ev) {
   if (['.', ',', 'e', 'E', '+', '-'].includes(ev.key)) ev.preventDefault()
 }
 
-// Mientras escribe: se limita al rango 0..máximo de la jornada
+function actualizarEstadoPorHoras(reg, n) {
+  if (!reg) return
+  const max = horasClaseFicha.value
+  const limitado = Math.min(Math.max(n, 0), max)
+  reg.horasFallidas = limitado
+
+  if (reg.excusa) {
+    reg.estado = 'Excusada'
+    if (limitado > 0 && limitado < max) {
+      reg.horasTardanza = limitado
+      reg.tiempoTardanza = `${limitado} ${limitado === 1 ? 'hora' : 'horas'}`
+    } else {
+      reg.horasTardanza = 0
+      reg.tiempoTardanza = '0 horas'
+    }
+    return
+  }
+
+  if (limitado === 0) {
+    reg.estado = 'Presente'
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+    if (!reg.horaMarcacion || reg.horaMarcacion === '—') {
+      reg.horaMarcacion = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    }
+  } else if (limitado < max) {
+    reg.estado = 'Tardanza'
+    reg.horasTardanza = limitado
+    reg.tiempoTardanza = `${limitado} ${limitado === 1 ? 'hora' : 'horas'}`
+    if (!reg.horaMarcacion || reg.horaMarcacion === '—') {
+      reg.horaMarcacion = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    }
+  } else {
+    reg.estado = 'Falta'
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+    reg.horaMarcacion = '—'
+  }
+}
+
+// Mientras escribe: se actualiza el estado (Tardanza/Falta/Presente) y los chips en vivo
 function onHorasInput(estId, ev) {
   const reg = asistenciaDia.value[estId]
   if (!reg || jornadaInhabilitada.value) return
   const n = parseInt(ev.target.value, 10)
   if (Number.isNaN(n)) return // campo vacío mientras escribe
-  const limitado = Math.min(Math.max(n, 0), horasClaseFicha.value)
-  reg.horasFallidas = limitado
-  if (limitado !== n) ev.target.value = limitado
+  actualizarEstadoPorHoras(reg, n)
   autoGuardarBorrador()
 }
 
-// Al salir del campo: si quedó vacío o inválido, se restaura el valor guardado
+// Al salir del campo: se asegura el rango válido y sincroniza en la nube
 async function onHorasChange(estId, ev) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
   const n = parseInt(ev.target.value, 10)
-  const limitado = Number.isNaN(n) ? (reg.horasFallidas || 0) : Math.min(Math.max(n, 0), horasClaseFicha.value)
-  reg.horasFallidas = limitado
-  ev.target.value = limitado
+  const valorFinal = Number.isNaN(n) ? (reg.horasFallidas || 0) : n
+  actualizarEstadoPorHoras(reg, valorFinal)
+  ev.target.value = reg.horasFallidas
   autoGuardarBorrador()
   await sincronizarCambioNube(estId)
 }
@@ -583,9 +623,8 @@ async function sincronizarCambioNube(estId) {
     hTardanza = 0
     tTardanza = '0 horas'
   } else if (estadoFinal === 'Tardanza') {
-    const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
-    hTardanza = reg.horasTardanza || calc.horas
-    tTardanza = reg.tiempoTardanza || calc.texto
+    hTardanza = reg.horasTardanza || reg.horasFallidas || 1
+    tTardanza = `${hTardanza} ${hTardanza === 1 ? 'hora' : 'horas'}`
   }
 
   const itemAsistencia = {
@@ -710,9 +749,8 @@ async function guardarAsistenciaDia() {
       } else if (reg.estado === 'Tardanza') {
         estadoFinal = 'Tardanza'
         horaMarcada = reg.horaMarcacion || horaActual
-        const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
-        hTardanza = reg.horasTardanza || calc.horas
-        tTardanza = reg.tiempoTardanza || calc.texto
+        hTardanza = reg.horasTardanza || reg.horasFallidas || 1
+        tTardanza = `${hTardanza} ${hTardanza === 1 ? 'hora' : 'horas'}`
       } else {
         estadoFinal = 'Presente'
         horaMarcada = reg.horaMarcacion || horaActual

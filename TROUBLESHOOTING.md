@@ -409,3 +409,28 @@
 - **Verificación:**
   - Compilación de producción con `npm run build:prod` completada en 548ms sin errores.
   - Artefactos estáticos desplegados y sincronizados en `backend/public/`.
+
+---
+
+## [2026-10-21 21:28] Corrección en Reactividad y Persistencia de Retardos (Tardanzas) en Panel Docente
+
+- **Fecha y Hora:** 2026-10-21 21:28:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  Al ingresar horas en el campo de retardos ("Horas Fallidas"), el estado en la interfaz no cambiaba visualmente (se quedaba en 'Presente (A tiempo)', los contadores de tardanza no subían) y al recargar o sincronizar no se persistía como Tardanza en la base de datos.
+- **Causa Raíz:**
+  1. `onHorasInput` y `onHorasChange` solo asignaban el valor numérico a `reg.horasFallidas`, pero nunca alteraban `reg.estado` hacia `'Tardanza'`, ni asignaban `reg.horasTardanza` ni `reg.tiempoTardanza`.
+  2. `sincronizarCambioNube` y `guardarAsistenciaDia` enviaban `estadoFinal = 'Presente'` al no detectar la mutación reactiva del estado, descartando las horas de retardo digitadas.
+  3. El listener de WebSocket en `iniciarSocketDocente` no asignaba `horasTardanza` ni `tiempoTardanza` recibidos del servidor.
+- **Solución Aplicada:**
+  1. **Actualización Reactiva Bidireccional (`actualizarEstadoPorHoras`):**
+     - Si `horas === 0`: pasa a `Presente` (badge verde), 0 horas tardanza.
+     - Si `0 < horas < max`: pasa a `Tardanza` (badge amarillo reactivo `Tardanza (X horas)`), actualiza `horasTardanza` y los chips contadores en tiempo real mientras escribe.
+     - Si `horas >= max`: pasa automáticamente a `Falta` (badge rojo y checkbox de falta marcado).
+  2. **Persistencia y Sincronización:**
+     - En `sincronizarCambioNube` y `guardarAsistenciaDia`, se asigna `hTardanza = reg.horasTardanza || reg.horasFallidas` y `tiempoTardanza = "${hTardanza} horas"`.
+     - El socket actualiza `horasTardanza` y `tiempoTardanza` en tiempo real para todos los clientes conectados.
+- **Archivos Modificados:**
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación de producción con `npm run build:prod` (Vite v8, 319 módulos) completada exitosamente en 599ms sin advertencias de resolución.
