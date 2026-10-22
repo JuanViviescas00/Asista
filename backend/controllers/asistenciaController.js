@@ -1,5 +1,6 @@
 import Asistencia from '../models/Asistencia.js'
 import Inasistencia from '../models/Inasistencia.js'
+import Jornada from '../models/Jornada.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import DiaFestivo from '../models/DiaFestivo.js'
@@ -56,25 +57,90 @@ export async function getAsistencias(req, res) {
   try {
     const { fichaId, estudianteId, fecha, fechaDesde, fechaHasta } = req.query
     const filter = {}
-    if (estudianteId) {
-      filter.estudianteId = estudianteId
-    }
+    const jornadaFilter = {}
+
     if (fichaId) {
       const idsBuscar = await getFichaIdList(fichaId)
       filter.fichaId = { $in: idsBuscar }
+      jornadaFilter.fichaId = { $in: idsBuscar }
     }
-    if (fecha) filter.fecha = fecha
+    if (estudianteId) {
+      filter.estudianteId = estudianteId
+      jornadaFilter['presentes.estudianteId'] = estudianteId
+    }
+    if (fecha) {
+      filter.fecha = fecha
+      jornadaFilter.fecha = fecha
+    }
     if (fechaDesde || fechaHasta) {
       filter.fecha = {}
-      if (fechaDesde) filter.fecha.$gte = fechaDesde
-      if (fechaHasta) filter.fecha.$lte = fechaHasta
+      jornadaFilter.fecha = {}
+      if (fechaDesde) {
+        filter.fecha.$gte = fechaDesde
+        jornadaFilter.fecha.$gte = fechaDesde
+      }
+      if (fechaHasta) {
+        filter.fecha.$lte = fechaHasta
+        jornadaFilter.fecha.$lte = fechaHasta
+      }
     }
+
     const inasistencias = await Inasistencia.find(filter)
       .populate('estudianteId')
       .populate('instructorId')
       .sort({ fecha: 1, createdAt: 1 })
 
-    res.json(inasistencias.map(toAsistenciaShape))
+    // Claves (ficha|fecha|estudiante) que ya tienen novedad registrada.
+    const conNovedad = new Set(
+      inasistencias.map((a) => `${String(a.fichaId)}|${a.fecha}|${String(a.estudianteId?._id || a.estudianteId)}`)
+    )
+
+    // Sintetizar registros 'Presente' desde Jornada.presentes (solo si ese aprendiz
+    // NO tiene Inasistencia ese día). Así el panel vuelve a mostrar la hora de marcación.
+    const jornadas = await Jornada.find(jornadaFilter)
+      .populate('instructorId')
+      .populate('presentes.estudianteId')
+      .populate('presentes.instructorId')
+
+    const sintetizados = []
+    for (const jornada of jornadas) {
+      const jFicha = String(jornada.fichaId)
+      for (const p of (jornada.presentes || [])) {
+        const estId = String(p.estudianteId?._id || p.estudianteId)
+        if (!estId) continue
+        if (estudianteId && estId !== String(estudianteId)) continue
+        if (conNovedad.has(`${jFicha}|${jornada.fecha}|${estId}`)) continue
+        sintetizados.push({
+          _id: `presente-${String(jornada._id)}-${estId}`,
+          estudianteId: p.estudianteId,
+          fichaId: jornada.fichaId,
+          fecha: jornada.fecha,
+          estado: 'Presente',
+          hora: p.hora || '',
+          horasTardanza: 0,
+          tiempoTardanza: '0 horas',
+          metodo: p.metodo || 'HUELLA',
+          origen: 'huellero',
+          instructorId: p.instructorId || jornada.instructorId || null,
+          subidoSofia: false,
+          estadoCarga: null,
+          motivoInhabilitacion: '',
+        })
+      }
+    }
+
+    const todos = [...inasistencias.map(toAsistenciaShape), ...sintetizados]
+    todos.sort((a, b) => {
+      if (a.fecha < b.fecha) return -1
+      if (a.fecha > b.fecha) return 1
+      const ha = a.hora || ''
+      const hb = b.hora || ''
+      if (ha < hb) return -1
+      if (ha > hb) return 1
+      return 0
+    })
+
+    res.json(todos)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -251,10 +317,10 @@ export async function createAsistencia(req, res) {
   }
 }
 
-// Procesa una única asistencia del batch de sincronización. Devuelve el resultado
+// Procesa una única asistencia del batch de sincronización del huellero. Devuelve
 // { uuid, estado: 'guardada'|'duplicada'|'error', error? } sin lanzar excepciones,
 // para que un fallo individual no tumbe el resto del batch.
-async function procesarAsistencia(item) {
+export async function procesarAsistencia(item) {
   const { uuid, estudianteId, fichaId, instructorId, timestamp, metodo } = item || {}
 
   if (!uuid) {
@@ -262,12 +328,6 @@ async function procesarAsistencia(item) {
   }
   if (!estudianteId || !fichaId) {
     return { uuid, estado: 'error', error: 'estudianteId y fichaId son requeridos' }
-  }
-
-  // Idempotencia a nivel de aplicación: si el uuid ya existe, es un reenvío.
-  const existente = await Asistencia.findOne({ uuid }).catch(() => null)
-  if (existente) {
-    return { uuid, estado: 'duplicada' }
   }
 
   if (!mongoose.Types.ObjectId.isValid(String(estudianteId)) || !mongoose.Types.ObjectId.isValid(String(fichaId))) {
@@ -296,8 +356,6 @@ async function procesarAsistencia(item) {
   const hora = formatearHoraColombia(dateObj)
 
   // Fuente PRIMARIA: la clase en curso al momento de la marcación (iniciadaAt).
-  // Se consulta el modelo Clase con el _id de ficha YA RESUELTO (no el fichaId
-  // crudo del payload), sin depender de que el huellero envíe horaInicioClase.
   let claseDoc = null
   try {
     const queryClase = { fichaId: ficha._id, iniciadaAt: { $lte: dateObj } }
@@ -310,7 +368,6 @@ async function procesarAsistencia(item) {
   let estado
   let horasTardanza
   let tiempoTardanza
-  let horaInicioClaseValida = null
   let claseIdObj = null
 
   if (claseDoc?.iniciadaAt) {
@@ -318,24 +375,116 @@ async function procesarAsistencia(item) {
     estado = resultado.estado
     horasTardanza = resultado.horasTardanza
     tiempoTardanza = resultado.tiempoTardanza
-    horaInicioClaseValida = claseDoc.iniciadaAt
     claseIdObj = claseDoc._id
   } else {
     // Fallback: horario fijo de jornada (ficha sin Clase nunca activada).
-    // Falta = día completo de falla: se guarda 0 en horasTardanza para que el
-    // banco de horas no cuente doble (ya cuenta como Falta).
     const resultado = calcularTardanzaEscalonada(ficha.jornada, dateObj)
     estado = resultado.estado
     horasTardanza = estado === 'Falta' ? 0 : resultado.horas
     tiempoTardanza = `${horasTardanza} ${horasTardanza === 1 ? 'hora' : 'horas'}`
   }
 
+  // Idempotencia por uuid (Jornada.presentes.uuid o Inasistencia.uuid).
+  const [enJornada, enInasistencia] = await Promise.all([
+    Jornada.findOne({ 'presentes.uuid': uuid }).catch(() => null),
+    Inasistencia.findOne({ uuid }).catch(() => null),
+  ])
+  if (enJornada || enInasistencia) {
+    return { uuid, estado: 'duplicada' }
+  }
+
   try {
-    // Un solo registro por estudiante/ficha/día (regla de negocio): upsert atómico
-    // con $setOnInsert. Si ya existía asistencia hoy, NO se modifica nada (primer
-    // registro manda) y se reporta 'duplicada'. Distinto de Asistencia.create + uuid
-    // fresco, que creaba un documento duplicado para el mismo estudiante/día.
-    const doc = await Asistencia.findOneAndUpdate(
+    // Asegurar la Jornada (origen huellero) para esta ficha y fecha.
+    await asegurarJornada({ fichaId: ficha._id, fecha, instructorId: instructorId || null, origen: 'huellero' })
+
+    if (estado === 'Presente') {
+      return procesarPresente({ uuid, estudianteId, fichaId: ficha._id, fecha, hora, claseIdObj, instructorId, metodo })
+    }
+
+    // Tardanza o Falta
+    const tipo = estado
+    const horas = estado === 'Tardanza' ? horasTardanza : topeHorasPorJornada(ficha.jornada)
+
+    const festivosDocs = await DiaFestivo.find().select('fecha').catch(() => [])
+    const festivosSet = new Set((festivosDocs || []).map((d) => d.fecha))
+    const estadoCarga = calcularEstadoCarga({ fecha, tipo, jornada: ficha.jornada || '', festivosSet, hoyStr: getHoyString() })
+
+    return procesarNovedad({ uuid, estudianteId, fichaId: ficha._id, fecha, tipo, horas, hora, tiempoTardanza, claseIdObj, instructorId, estadoCarga })
+  } catch (err) {
+    return { uuid, estado: 'error', error: err.message }
+  }
+}
+
+async function procesarPresente({ uuid, estudianteId, fichaId, fecha, hora, claseIdObj, instructorId, metodo }) {
+  try {
+    const res = await Jornada.updateOne(
+      { fichaId, fecha, 'presentes.estudianteId': { $ne: estudianteId } },
+      {
+        $push: {
+          presentes: {
+            estudianteId,
+            hora,
+            uuid,
+            claseId: claseIdObj || null,
+            instructorId: instructorId || null,
+            metodo: metodo === 'MANUAL' ? 'MANUAL' : 'HUELLA',
+          },
+        },
+      }
+    )
+    if (!res.modifiedCount) {
+      const yaPresente = await Jornada.exists({ fichaId, fecha, 'presentes.estudianteId': estudianteId })
+      if (yaPresente) {
+        return { uuid, estado: 'duplicada' }
+      }
+      return { uuid, estado: 'error', error: 'No se pudo registrar el presente' }
+    }
+
+    // Marcación tardía: si el cierre ya creó una Falta huellero no SUBIDA, se borra
+    // (el aprendiz sí asistió). No se toca una Falta manual, una Excusada ni una Tardanza.
+    await Inasistencia.deleteOne({
+      estudianteId,
+      fichaId,
+      fecha,
+      tipo: 'Falta',
+      origen: 'huellero',
+      estadoCarga: { $ne: 'SUBIDA' },
+    }).catch(() => null)
+
+    return { uuid, estado: 'guardada' }
+  } catch (err) {
+    if (err?.code === 11000) return { uuid, estado: 'duplicada' }
+    return { uuid, estado: 'error', error: err.message }
+  }
+}
+
+async function procesarNovedad({ uuid, estudianteId, fichaId, fecha, tipo, horas, hora, tiempoTardanza, claseIdObj, instructorId, estadoCarga }) {
+  const existente = await Inasistencia.findOne({ estudianteId, fichaId, fecha }).catch(() => null)
+
+  if (existente) {
+    // Reemplazo Falta-huellero -> Tardanza (marcación con retraso que corrige el cierre).
+    if (tipo === 'Tardanza' && existente.tipo === 'Falta' && existente.origen === 'huellero' && existente.estadoCarga !== 'SUBIDA') {
+      try {
+        existente.tipo = 'Tardanza'
+        existente.horas = horas
+        existente.hora = hora
+        existente.tiempoTardanza = tiempoTardanza
+        existente.uuid = uuid
+        existente.claseId = claseIdObj || null
+        existente.estadoCarga = estadoCarga
+        await existente.save()
+        return { uuid, estado: 'guardada' }
+      } catch (err) {
+        if (err?.code === 11000) return { uuid, estado: 'duplicada' }
+        return { uuid, estado: 'error', error: err.message }
+      }
+    }
+    // Cualquier otra novedad existente: no se modifica.
+    return { uuid, estado: 'duplicada' }
+  }
+
+  try {
+    const doc = await Inasistencia.findOneAndUpdate(
       { estudianteId, fichaId, fecha },
       {
         $setOnInsert: {
@@ -343,14 +492,14 @@ async function procesarAsistencia(item) {
           estudianteId,
           fichaId,
           fecha,
-          estado,
+          tipo,
+          horas,
           hora,
-          horasTardanza,
           tiempoTardanza,
-          horaInicioClase: horaInicioClaseValida,
-          claseId: claseIdObj,
           instructorId: instructorId || null,
-          metodo: metodo === 'MANUAL' ? 'MANUAL' : 'HUELLA',
+          claseId: claseIdObj || null,
+          origen: 'huellero',
+          estadoCarga,
         },
       },
       { upsert: true, new: true }
@@ -361,10 +510,7 @@ async function procesarAsistencia(item) {
     }
     return { uuid, estado: 'duplicada' }
   } catch (err) {
-    // Clave duplicada (condición de carrera): el índice único sparse de uuid lo detiene.
-    if (err?.code === 11000) {
-      return { uuid, estado: 'duplicada' }
-    }
+    if (err?.code === 11000) return { uuid, estado: 'duplicada' }
     return { uuid, estado: 'error', error: err.message }
   }
 }
