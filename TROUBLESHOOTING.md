@@ -351,3 +351,61 @@
   - `TROUBLESHOOTING.md`
 - **Verificación:**
   - Compilación de producción con `npm run build:frontend` (Vite v8, 139 módulos transformados) completada con éxito en 1.32s sin errores.
+
+---
+
+## [2026-10-21 19:44] Depuración Quirúrgica de MongoDB Atlas: Preservación Estricta de Fichas 3139319, 3598464 y Administrador
+
+- **Fecha y Hora:** 2026-10-21 19:44:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  Limpieza de datos residuales y de prueba en la base de datos en la nube (MongoDB Atlas) preservando estrictamente las dos fichas de producción: `3139319` y `3598464`, todos sus aprendices inscritos, sus docentes/instructores asignados, su historial operativo, y protegiendo las credenciales de administración y configuración del sistema (`admin`, `dispositivos`, `dias_festivos`).
+- **Causa Raíz:**
+  Existencia de 11 fichas de prueba/QA, 10 instructores no relacionados, 5 aprendices huérfanos y 64 clases de test acumuladas en el clúster.
+- **Solución Aplicada:**
+  1. **Generación de Backup Preventivo:** Se creó `backend/scripts/backup-colecciones.js` y se exportó un respaldo completo en JSON de todas las colecciones en `backend/data/backup_2026-10-22T00-43-13-350Z/`.
+  2. **Simulación de Solo Lectura:** Se ejecutó `backend/scripts/simular-depuracion.js` confirmando con exactitud los conteos antes de cualquier mutación destructiva.
+  3. **Depuración Quirúrgica Aprobada:** Se ejecutó `backend/scripts/ejecutar-depuracion.js` eliminando únicamente los registros ajenos:
+     - 11 fichas ajenas eliminadas.
+     - 10 instructores ajenos eliminados.
+     - 5 aprendices ajenos/huérfanos eliminados.
+     - 64 clases de prueba eliminadas.
+     - 2 excusas ajenas eliminadas.
+     - 13 permisos de datos huérfanos eliminados.
+  4. **Preservación Confirmada:**
+     - 2 Fichas: `3139319` (25 aprendices) y `3598464` (19 aprendices).
+     - 44 Aprendices intactos.
+     - 5 Instructores asignados intactos (Lia Saa, Ivan Figueroa, Silvia Alejandra Lopez, Alexander Guevara, Miguel Ángel Dulcey Díaz).
+     - Cuenta de Administrador (`senahuellero@gmail.com`) 100% protegida e intacta.
+     - Dispositivos biométricos (6) y días festivos (23) 100% protegidos e intactos.
+- **Archivos Modificados:**
+  - `backend/scripts/simular-depuracion.js`
+  - `backend/scripts/backup-colecciones.js`
+  - `backend/scripts/ejecutar-depuracion.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Conteo final de MongoDB Atlas tras ejecución verificado: 2 fichas, 44 aprendices, 5 instructores, 1 admin, 1 asistencia, 10 clases, 37 permisos, 6 dispositivos, 23 festivos. Cero pérdida de datos de las fichas objetivo.
+
+---
+
+## [2026-10-21 21:12] Sincronización Multi-Equipo: Difusión WebSockets en Guardado Manual y Corrección de Borradores/Populate
+
+- **Fecha y Hora:** 2026-10-21 21:12:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  Al ingresar con un perfil docente desde otro computador tras tomar o editar la lista, los cambios de asistencia no se visualizaban o parecían no haberse actualizado.
+- **Causa Raíz:**
+  1. **Falta de Evento WebSocket en `createAsistencia`:** El endpoint `POST /api/asistencias` (usado por la sincronización manual individual y por lotes) persistía en MongoDB pero no emitía el evento de socket `emitirAsistenciaRegistrada`, impidiendo que otros navegadores abiertos en la misma ficha recibieran las mutaciones en vivo sin recargar.
+  2. **Colisión de Borrador Local Obsoleto en `PanelInstructor`:** Si el segundo computador había abierto previamente la ficha, existía un borrador en `localStorage` con estados anteriores. Al recargar la página, `inicializarAsistenciaDia` restauraba ciegamente el borrador local sobreescribiendo los datos frescos descargados de MongoDB Atlas.
+  3. **Incompatibilidad de Comparación por Objeto Populado:** En `Dashboard.vue` y `Reportes.vue`, los registros de asistencia venían con `estudianteId` poblado como objeto (`{ _id, nombres... }`). Las consultas evaluaban `a.estudianteId === est._id`, lo cual fallaba estrictamente siempre por comparación de tipos (Object vs String), mostrando 0 asistencias o estado 'Sin registro'.
+- **Solución Aplicada:**
+  1. **Emisión de WebSockets en Tiempo Real:** En `backend/controllers/asistenciaController.js`, se incorporó la llamada a `emitirAsistenciaRegistrada` dentro de `createAsistencia` para notificar inmediatamente a todos los clientes conectados a la sala de la ficha vía Socket.io.
+  2. **Prioridad Autorizada de la Nube sobre Borradores Locales:** En `frontend/src/views/PanelInstructor.vue`, `inicializarAsistenciaDia` ahora compara la marca temporal `serverTime` vs `borradorTime`. Si la base de datos en la nube tiene datos más recientes o iguales, se descarta el borrador viejo y prevalecen los datos de MongoDB Atlas.
+  3. **Normalización de Identificadores:** Se corrigió en `Dashboard.vue` y `Reportes.vue` la comparación de IDs usando `String(a.estudianteId?._id || a.estudianteId) === String(est._id)`.
+- **Archivos Modificados:**
+  - `backend/controllers/asistenciaController.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Dashboard.vue`
+  - `frontend/src/views/Reportes.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación de producción con `npm run build:prod` completada en 548ms sin errores.
+  - Artefactos estáticos desplegados y sincronizados en `backend/public/`.

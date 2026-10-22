@@ -68,7 +68,7 @@ const resumenAsistencia = computed(() => {
   if (filtroFicha.value && fechaDesde.value && fechaHasta.value) {
     const estudiantes = estudiantesDeFicha.value
     estudiantes.forEach(est => {
-      const registros = asistenciasFiltradas.value.filter(a => a.estudianteId === est._id)
+      const registros = asistenciasFiltradas.value.filter(a => String(a.estudianteId?._id || a.estudianteId) === String(est._id))
       if (registros.length === 0) { sinRegistro++; return }
       const tieneFalta = registros.some(r => r.estado === 'Falta')
       const tieneTardanza = registros.some(r => r.estado === 'Tardanza')
@@ -91,7 +91,7 @@ const resumenAsistencia = computed(() => {
 const analisisEstudiantes = computed(() => {
   if (!filtroFicha.value || estudiantesDeFichaTodos.value.length === 0) return []
   return estudiantesDeFichaTodos.value.map(est => {
-    const registros = asistenciasFiltradas.value.filter(a => a.estudianteId === est._id)
+    const registros = asistenciasFiltradas.value.filter(a => String(a.estudianteId?._id || a.estudianteId) === String(est._id))
     const totalRegistros = registros.length
     const totalPresentes = registros.filter(r => r.estado === 'Presente').length
     const totalTardanzas = registros.filter(r => r.estado === 'Tardanza').length
@@ -129,7 +129,7 @@ const porcentajeGeneral = computed(() => {
 })
 
 function getEstadoEstudianteEnFecha(estudianteId, fecha) {
-  return asistenciasFiltradas.value.find(a => a.estudianteId === estudianteId && a.fecha === fecha) || null
+  return asistenciasFiltradas.value.find(a => (String(a.estudianteId?._id || a.estudianteId) === String(estudianteId)) && a.fecha === fecha) || null
 }
 
 const diasFestivosCache = ref([])

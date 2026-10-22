@@ -114,6 +114,25 @@ export async function createAsistencia(req, res) {
       console.warn('[SQLite] Error en sincronización individual:', sqliteErr.message)
     }
 
+    // 3. Emitir evento por Socket.io para actualización en tiempo real en otros computadores
+    try {
+      const estudianteData = await Estudiante.findById(estudianteId).select('nombres apellidos').lean()
+      emitirAsistenciaRegistrada(String(fichaId), {
+        asistenciaId: asistencia._id,
+        estudianteId,
+        nombres: estudianteData?.nombres || '',
+        apellidos: estudianteData?.apellidos || '',
+        estado,
+        hora: asistencia.hora,
+        tiempoTardanza: asistencia.tiempoTardanza,
+        horasTardanza: asistencia.horasTardanza,
+        metodo: asistencia.metodo || 'MANUAL',
+        fecha
+      })
+    } catch (wsErr) {
+      console.warn('[Socket] Error emitiendo asistencia registrada:', wsErr.message)
+    }
+
     res.status(201).json(asistencia)
   } catch (err) {
     res.status(500).json({ error: err.message })

@@ -119,7 +119,7 @@ const datosReporteAprendices = computed(() => {
     const detallesInasistencias = []
 
     fechasUnicas.value.forEach(fecha => {
-      const reg = asistenciasFichaFiltradas.value.find(a => a.estudianteId === est._id && a.fecha === fecha)
+      const reg = asistenciasFichaFiltradas.value.find(a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === fecha)
       if (reg) {
         const docenteNombre = getNombreInstructor(reg)
         if (reg.estado === 'Presente') {

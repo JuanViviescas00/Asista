@@ -533,10 +533,21 @@ function inicializarAsistenciaDia() {
   // Comprobar si existe un borrador no guardado en Pinia / LocalStorage
   const borrador = draftStore.obtenerBorrador(fichaSeleccionada.value?._id, hoy)
   if (borrador && borrador.registros) {
+    const borradorTime = borrador.updatedAt || 0
     let restaurados = 0
     for (const estId in borrador.registros) {
       if (registros[estId]) {
-        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios
+        const existente = asistenciasFicha.value.find(
+          a => (String(a.estudianteId?._id || a.estudianteId) === String(estId)) && a.fecha === hoy
+        )
+        const serverTime = existente?.updatedAt ? new Date(existente.updatedAt).getTime() : 0
+
+        // Si el servidor en la nube tiene datos más recientes o iguales, prevalece la nube
+        if (serverTime >= borradorTime) {
+          continue
+        }
+
+        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios no guardados
         if (!registros[estId].subidoSofia && (borrador.registros[estId].estado !== 'Ninguno' || borrador.registros[estId].excusa)) {
           registros[estId] = { ...registros[estId], ...borrador.registros[estId] }
           restaurados++
@@ -544,7 +555,10 @@ function inicializarAsistenciaDia() {
       }
     }
     if (restaurados > 0) {
-      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios no guardados.`, 'info')
+      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios locales.`, 'info')
+    } else if (asistenciasFicha.value.length > 0) {
+      // Limpiar borrador obsoleto si el servidor ya está al día
+      draftStore.limpiarBorrador(fichaSeleccionada.value?._id, hoy)
     }
   }
 
