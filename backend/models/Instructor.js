@@ -1,10 +1,14 @@
 import mongoose from 'mongoose'
-import { capitalizarTexto } from '../utils/textUtils.js'
+import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
 
 const instructorSchema = new mongoose.Schema({
   nombres: { type: String, required: true },
   apellidos: { type: String, required: true },
-  tipoDocumento: { type: String, enum: ['CC', 'CE', 'PEP'], default: 'CC' },
+  tipoDocumento: {
+    type: String,
+    enum: ['CC', 'TI', 'CE', 'PA', 'PEP', 'PPT', 'CD', 'RC', 'SC'],
+    default: 'CC'
+  },
   numeroDocumento: { type: String, required: true, unique: true },
   correo: { type: String, required: true, unique: true },
   telefono: { type: String, required: true },
@@ -19,26 +23,41 @@ const instructorSchema = new mongoose.Schema({
   expiraCodigoRecuperacion: { type: Date, default: null },
 }, { timestamps: true, collection: 'instructores' })
 
-// Estandarización automática a Capitalize / Title Case al crear o guardar
+// Normalización automática al crear o guardar
 instructorSchema.pre('validate', function(next) {
   if (this.nombres) this.nombres = capitalizarTexto(this.nombres)
   if (this.apellidos) this.apellidos = capitalizarTexto(this.apellidos)
+  if (this.tipoDocumento) this.tipoDocumento = normalizarTipoDocumento(this.tipoDocumento)
+  if (this.numeroDocumento) this.numeroDocumento = normalizarNumeroDocumento(this.numeroDocumento)
   if (this.correo) this.correo = String(this.correo).trim().toLowerCase()
+  if (this.telefono) this.telefono = String(this.telefono).trim()
+  if (this.especialidad) this.especialidad = capitalizarTexto(this.especialidad)
   next()
 })
 
-// Estandarización automática a Capitalize / Title Case al actualizar
+// Normalización automática al actualizar
 instructorSchema.pre('findOneAndUpdate', function(next) {
   const update = this.getUpdate()
   if (!update) return next()
-  if (update.nombres) update.nombres = capitalizarTexto(update.nombres)
-  if (update.apellidos) update.apellidos = capitalizarTexto(update.apellidos)
-  if (update.correo) update.correo = String(update.correo).trim().toLowerCase()
-  if (update.$set) {
-    if (update.$set.nombres) update.$set.nombres = capitalizarTexto(update.$set.nombres)
-    if (update.$set.apellidos) update.$set.apellidos = capitalizarTexto(update.$set.apellidos)
-    if (update.$set.correo) update.$set.correo = String(update.$set.correo).trim().toLowerCase()
+
+  const camposTexto = ['nombres', 'apellidos', 'especialidad']
+  for (const c of camposTexto) {
+    if (update[c]) update[c] = capitalizarTexto(update[c])
+    if (update.$set && update.$set[c]) update.$set[c] = capitalizarTexto(update.$set[c])
   }
+
+  if (update.tipoDocumento) update.tipoDocumento = normalizarTipoDocumento(update.tipoDocumento)
+  if (update.$set?.tipoDocumento) update.$set.tipoDocumento = normalizarTipoDocumento(update.$set.tipoDocumento)
+
+  if (update.numeroDocumento) update.numeroDocumento = normalizarNumeroDocumento(update.numeroDocumento)
+  if (update.$set?.numeroDocumento) update.$set.numeroDocumento = normalizarNumeroDocumento(update.$set.numeroDocumento)
+
+  if (update.correo) update.correo = String(update.correo).trim().toLowerCase()
+  if (update.$set?.correo) update.$set.correo = String(update.$set.correo).trim().toLowerCase()
+
+  if (update.telefono) update.telefono = String(update.telefono).trim()
+  if (update.$set?.telefono) update.$set.telefono = String(update.$set.telefono).trim()
+
   next()
 })
 

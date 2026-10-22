@@ -2,7 +2,7 @@ import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import mongoose from 'mongoose'
 import { calcularResumenAsistencia } from '../services/asistenciaService.js'
-import { capitalizarTexto } from '../utils/textUtils.js'
+import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
 
 // Resuelve un fichaId (campo Mixed: ObjectId o codigoFicha) a su documento Ficha.
 // Reutiliza el mismo patrón de resolución ya presente en getEstudiantes y getPlantillasFicha.
@@ -141,6 +141,9 @@ export async function createEstudiante(req, res) {
     req.body.fichaId = fichaExiste._id
     if (req.body.nombres) req.body.nombres = capitalizarTexto(req.body.nombres)
     if (req.body.apellidos) req.body.apellidos = capitalizarTexto(req.body.apellidos)
+    if (req.body.tipoDocumento) req.body.tipoDocumento = normalizarTipoDocumento(req.body.tipoDocumento)
+    if (req.body.numeroDocumento) req.body.numeroDocumento = normalizarNumeroDocumento(req.body.numeroDocumento)
+    if (req.body.correo) req.body.correo = String(req.body.correo).trim().toLowerCase()
     const estudiante = new Estudiante(req.body)
     await estudiante.save()
     res.status(201).json(estudiante)
@@ -183,6 +186,9 @@ export async function updateEstudiante(req, res) {
 
     if (updateData.nombres) updateData.nombres = capitalizarTexto(updateData.nombres)
     if (updateData.apellidos) updateData.apellidos = capitalizarTexto(updateData.apellidos)
+    if (updateData.tipoDocumento) updateData.tipoDocumento = normalizarTipoDocumento(updateData.tipoDocumento)
+    if (updateData.numeroDocumento) updateData.numeroDocumento = normalizarNumeroDocumento(updateData.numeroDocumento)
+    if (updateData.correo) updateData.correo = String(updateData.correo).trim().toLowerCase()
     const estudiante = await Estudiante.findByIdAndUpdate(req.params.id, updateData, { new: true })
     if (!estudiante) return res.status(404).json({ error: 'Estudiante no encontrado' })
     res.json(estudiante)
@@ -230,10 +236,14 @@ export async function importarEstudiantes(req, res) {
       }
     }
 
-    // Capitalizar nombres y validar fichas existentes
+    // Normalizar datos de aprendices y validar fichas existentes
     for (const e of estudiantes) {
       if (e.nombres) e.nombres = capitalizarTexto(e.nombres)
       if (e.apellidos) e.apellidos = capitalizarTexto(e.apellidos)
+      if (e.tipoDocumento) e.tipoDocumento = normalizarTipoDocumento(e.tipoDocumento)
+      if (e.numeroDocumento) e.numeroDocumento = normalizarNumeroDocumento(e.numeroDocumento)
+      if (e.correo) e.correo = String(e.correo).trim().toLowerCase()
+      if (e.genero) e.genero = capitalizarTexto(e.genero)
     }
 
     // Validar que cada estudiante tenga una ficha existente y resolver su _id

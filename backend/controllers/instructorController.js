@@ -6,6 +6,7 @@ import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
+import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -51,6 +52,12 @@ export async function getInstructores(req, res) {
 export async function createInstructor(req, res) {
   try {
     const data = { ...req.body }
+    if (data.nombres) data.nombres = capitalizarTexto(data.nombres)
+    if (data.apellidos) data.apellidos = capitalizarTexto(data.apellidos)
+    if (data.tipoDocumento) data.tipoDocumento = normalizarTipoDocumento(data.tipoDocumento)
+    if (data.numeroDocumento) data.numeroDocumento = normalizarNumeroDocumento(data.numeroDocumento)
+    if (data.correo) data.correo = String(data.correo).trim().toLowerCase()
+    if (data.especialidad) data.especialidad = capitalizarTexto(data.especialidad)
     const clavePlana = data.password || claveInicialInstructor(data.numeroDocumento)
     if (String(clavePlana).length < 6) {
       return res.status(400).json({ error: 'La contraseña inicial no es válida: el número de documento normalizado debe tener al menos 6 caracteres. Asigna una contraseña manual.' })
@@ -93,6 +100,13 @@ export async function updateInstructor(req, res) {
     }
 
     const data = { ...req.body }
+    if (data.nombres) data.nombres = capitalizarTexto(data.nombres)
+    if (data.apellidos) data.apellidos = capitalizarTexto(data.apellidos)
+    if (data.tipoDocumento) data.tipoDocumento = normalizarTipoDocumento(data.tipoDocumento)
+    if (data.numeroDocumento) data.numeroDocumento = normalizarNumeroDocumento(data.numeroDocumento)
+    if (data.correo) data.correo = String(data.correo).trim().toLowerCase()
+    if (data.especialidad) data.especialidad = capitalizarTexto(data.especialidad)
+
     if (data.password) {
       data.password = await hashPassword(data.password)
     } else {
@@ -182,6 +196,12 @@ export async function importarInstructores(req, res) {
     for (const inst of instructores) {
       try {
         const { fichaId, fichas, esLider, password, ...rest } = inst
+        if (rest.nombres) rest.nombres = capitalizarTexto(rest.nombres)
+        if (rest.apellidos) rest.apellidos = capitalizarTexto(rest.apellidos)
+        if (rest.tipoDocumento) rest.tipoDocumento = normalizarTipoDocumento(rest.tipoDocumento)
+        if (rest.numeroDocumento) rest.numeroDocumento = normalizarNumeroDocumento(rest.numeroDocumento)
+        if (rest.correo) rest.correo = String(rest.correo).trim().toLowerCase()
+        if (rest.especialidad) rest.especialidad = capitalizarTexto(rest.especialidad)
         if (!rest.rol) rest.rol = 'Instructor'
 
         const existe = await Instructor.findOne({

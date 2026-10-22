@@ -2,7 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
-import { nombreProgramaLimpio } from '../utils/textos.js'
+import { nombreProgramaLimpio, capitalizarTexto, normalizarJornada, normalizarNumeroDocumento } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -19,7 +19,7 @@ const inhabilitarMotivo = ref('')
 const fichaForm = reactive({
   codigoFicha: '',
   nombrePrograma: '',
-  jornada: 'Diurna',
+  jornada: 'Mañana',
   aulaAsignada: '',
   instructorLiderId: null,
   instructores: [], // Instructores Comunes
@@ -121,10 +121,10 @@ async function guardarFicha() {
   try {
     const comunesFiltrados = instructores.filter(id => id !== instructorLiderId)
     const body = {
-      codigoFicha,
-      nombrePrograma,
-      jornada,
-      aulaAsignada,
+      codigoFicha: normalizarNumeroDocumento(codigoFicha),
+      nombrePrograma: capitalizarTexto(nombrePrograma),
+      jornada: normalizarJornada(jornada),
+      aulaAsignada: capitalizarTexto(aulaAsignada),
       instructorLiderId,
       instructores: comunesFiltrados,
       fechaInicio,
@@ -321,9 +321,10 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         <div class="fichas-form-group">
           <label>Jornada *</label>
           <select v-model="fichaForm.jornada">
-            <option value="Mañana"> Mañana</option>
-            <option value="Tarde"> Tarde</option>
-            <option value="Noche"> Noche</option>
+            <option value="Mañana">Mañana</option>
+            <option value="Tarde">Tarde</option>
+            <option value="Noche">Noche</option>
+            <option value="Mixta">Mixta</option>
           </select>
         </div>
         <div class="fichas-form-group">

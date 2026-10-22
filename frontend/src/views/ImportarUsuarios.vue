@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/importarUsuarios.css'
 import * as XLSX from 'xlsx'
-import { capitalizarTexto } from '../utils/textos.js'
+import { capitalizarTexto, normalizarTipoDocumento, normalizarJornada, normalizarNumeroDocumento, TIPOS_DOCUMENTO_CODIGOS } from '../utils/textos.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const tipoImportacion = ref('estudiantes') // 'estudiantes', 'instructores', 'fichas'
@@ -97,21 +97,48 @@ function validarFila(row) {
   const requeridos = headersEsperados.value
 
   for (const h of requeridos) {
-    if (row[h] === undefined || row[h] === null || row[h] === '') {
+    if (row[h] === undefined || row[h] === null || String(row[h]).trim() === '') {
       errs.push(`Falta el campo obligatorio: ${h}`)
     }
   }
 
   if (tipoImportacion.value === 'fichas') {
-    if (row.Jornada && !['Mañana', 'Tarde', 'Noche', 'Diurna', 'Nocturna', 'Mixta'].includes(row.Jornada)) {
-      errs.push(`Jornada inválida: "${row.Jornada}". Debe ser Mañana, Tarde o Noche`)
+    if (row.Codigo_Ficha) row.Codigo_Ficha = normalizarNumeroDocumento(row.Codigo_Ficha)
+    if (row.Nombre_Programa) row.Nombre_Programa = capitalizarTexto(row.Nombre_Programa)
+    if (row.Aula_Asignada) row.Aula_Asignada = capitalizarTexto(row.Aula_Asignada)
+    if (row.Jornada) {
+      row.Jornada = normalizarJornada(row.Jornada)
+      if (!['Mañana', 'Tarde', 'Noche', 'Mixta'].includes(row.Jornada)) {
+        errs.push(`Jornada inválida: "${row.Jornada}". Debe ser Mañana, Tarde, Noche o Mixta`)
+      }
     }
   } else {
-    if (row.Tipo_Doc && !['CC', 'TI', 'PPT'].includes(row.Tipo_Doc.toUpperCase())) {
-      errs.push(`Tipo_Doc inválido: "${row.Tipo_Doc}". Debe ser CC, TI o PPT`)
+    if (row.Tipo_Doc) {
+      row.Tipo_Doc = normalizarTipoDocumento(row.Tipo_Doc)
+      if (!TIPOS_DOCUMENTO_CODIGOS.includes(row.Tipo_Doc)) {
+        errs.push(`Tipo_Doc inválido: "${row.Tipo_Doc}". Tipos permitidos: ${TIPOS_DOCUMENTO_CODIGOS.join(', ')}`)
+      }
     }
-    if (row.Correo && !row.Correo.includes('@')) {
-      errs.push(`Correo inválido: "${row.Correo}"`)
+    if (row.Num_Doc) {
+      row.Num_Doc = normalizarNumeroDocumento(row.Num_Doc)
+    }
+    if (row.Nombres) {
+      row.Nombres = capitalizarTexto(row.Nombres)
+    }
+    if (row.Apellidos) {
+      row.Apellidos = capitalizarTexto(row.Apellidos)
+    }
+    if (row.Correo) {
+      row.Correo = String(row.Correo).trim().toLowerCase()
+      if (!row.Correo.includes('@')) {
+        errs.push(`Correo inválido: "${row.Correo}"`)
+      }
+    }
+    if (row.Telefono) {
+      row.Telefono = String(row.Telefono).trim()
+    }
+    if (row.Genero) {
+      row.Genero = capitalizarTexto(row.Genero)
     }
     if (row.Ficha) {
       if (tipoImportacion.value === 'instructores') {
@@ -125,8 +152,11 @@ function validarFila(row) {
         const ficha = getFichaPorCodigo(row.Ficha)
         if (!ficha) {
           errs.push(`Ficha no encontrada: "${row.Ficha}". Debes crear la ficha previamente o cargar el archivo de fichas`)
-        } else if (row.Jornada && ficha.jornada !== row.Jornada) {
-          errs.push(`Jornada "${row.Jornada}" no coincide con la ficha "${row.Ficha}" (${ficha.jornada})`)
+        } else if (row.Jornada) {
+          const jNorm = normalizarJornada(row.Jornada)
+          if (ficha.jornada !== jNorm) {
+            errs.push(`Jornada "${row.Jornada}" no coincide con la ficha "${row.Ficha}" (${ficha.jornada})`)
+          }
         }
       }
     }
@@ -288,10 +318,10 @@ async function ejecutarImportacion() {
   try {
     if (tipoImportacion.value === 'fichas') {
       const items = registros.value.map(r => ({
-        codigoFicha: r.Codigo_Ficha,
-        nombrePrograma: r.Nombre_Programa,
-        jornada: r.Jornada || 'Diurna',
-        aulaAsignada: r.Aula_Asignada || 'Aula General',
+        codigoFicha: normalizarNumeroDocumento(r.Codigo_Ficha),
+        nombrePrograma: capitalizarTexto(r.Nombre_Programa),
+        jornada: normalizarJornada(r.Jornada),
+        aulaAsignada: capitalizarTexto(r.Aula_Asignada || 'Aula General'),
         fechaInicio: r.Fecha_Inicio || '2026-02-01',
         fechaFin: r.Fecha_Fin || '2026-11-30',
       }))
@@ -313,11 +343,11 @@ async function ejecutarImportacion() {
         return {
           nombres: capitalizarTexto(r.Nombres),
           apellidos: capitalizarTexto(r.Apellidos),
-          tipoDocumento: r.Tipo_Doc.toUpperCase(),
-          numeroDocumento: String(r.Num_Doc).trim(),
+          tipoDocumento: normalizarTipoDocumento(r.Tipo_Doc),
+          numeroDocumento: normalizarNumeroDocumento(r.Num_Doc),
           correo: String(r.Correo).trim().toLowerCase(),
           telefono: String(r.Telefono).trim(),
-          especialidad: primeraFicha ? primeraFicha.nombrePrograma : 'Docente SENA',
+          especialidad: primeraFicha ? capitalizarTexto(primeraFicha.nombrePrograma) : 'Docente SENA',
           fichas: listaFichas,
           esLider: esLiderVal,
           rol: 'Instructor',
@@ -332,12 +362,12 @@ async function ejecutarImportacion() {
         return {
           nombres: capitalizarTexto(r.Nombres),
           apellidos: capitalizarTexto(r.Apellidos),
-          tipoDocumento: r.Tipo_Doc.toUpperCase(),
-          numeroDocumento: String(r.Num_Doc).trim(),
+          tipoDocumento: normalizarTipoDocumento(r.Tipo_Doc),
+          numeroDocumento: normalizarNumeroDocumento(r.Num_Doc),
           correo: String(r.Correo).trim().toLowerCase(),
           telefono: String(r.Telefono).trim(),
           fichaId: ficha ? ficha._id : null,
-          genero: r.Genero,
+          genero: capitalizarTexto(r.Genero || ''),
           estado: 'Activo',
           motivo: '',
           estadoAsistencia: 'Sin registro',
@@ -444,7 +474,7 @@ function limpiarTodo() {
         <code>{{ headersEsperados.join(',') }}</code>
         
         <ul v-if="tipoImportacion === 'instructores'" class="import-users-info-list">
-          <li><strong>Tipo_Doc:</strong> CC, CE o PEP</li>
+          <li><strong>Tipo_Doc:</strong> CC, TI, CE, PA, PEP, PPT, CD, RC o SC</li>
           <li><strong>Ficha:</strong> Código(s) de la ficha asignada. Para que un docente dicte <strong>más de una clase / ficha</strong>, puedes separar los códigos con comas o barras (ej: <code>"2670123, 2891234"</code>) o registrar al docente en filas separadas.</li>
           <li><strong>Es_Lider:</strong> Pon <code>SI</code> si el docente es el Líder de la ficha, o <code>NO</code> si es Docente Común</li>
           <li><strong>Jornada:</strong> Los instructores imparten en cualquier jornada (no se restringe por jornada).</li>
@@ -456,7 +486,7 @@ function limpiarTodo() {
           <li><strong>Fecha_Inicio / Fecha_Fin:</strong> Formato YYYY-MM-DD (ej. 2026-02-01)</li>
         </ul>
         <ul v-else class="import-users-info-list">
-          <li><strong>Tipo_Doc:</strong> CC, CE o PEP</li>
+          <li><strong>Tipo_Doc:</strong> CC, TI, CE, PA, PEP, PPT, CD, RC o SC</li>
           <li><strong>Ficha:</strong> Código de ficha existente en el sistema</li>
           <li><strong>Jornada:</strong> Debe coincidir con la jornada de la ficha</li>
         </ul>

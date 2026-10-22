@@ -1,5 +1,47 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 09:08] Normalización Integral de Datos (Jornada, Documentos, Textos) y Expansión de Tipos de Documento (TI, PA, CD, etc.)
+
+- **Fecha y Hora:** 2026-10-22 09:08:00 -05:00
+- **Descripción del Problema / Bug:**
+  1. *Tipos de Documento Limitados:* El sistema únicamente admitía `CC`, `CE` y `PEP` en los esquemas Mongoose y selectores de formularios, rechazando tarjetas de identidad (`TI`), pasaportes (`PA`), carnés diplomáticos (`CD`), permisos de protección temporal (`PPT`), registros civiles (`RC`) y salvoconductos (`SC`), los cuales son esenciales para aprendices menores de edad y extranjeros en el SENA.
+  2. *Inconsistencias en Jornadas:* El ingreso manual o por Excel de valores como `diurna`, `nocturna`, `vespertina`, `mañana` (en minúsculas) generaba fallas de validación (`Jornada inválida`) o desajustes entre la jornada de la ficha y la del aprendiz.
+  3. *Datos Sin Limpiar:* Números de documento con puntos (`1.023.456.789`) o espacios causaban fallos en búsquedas y duplicados aparentes; correos electrónicos ingresados con mayúsculas generaban rechazos en login.
+- **Causa Raíz:**
+  1. Enums rígidos en `Estudiante.js` e `Instructor.js` restringidos a `['CC', 'CE', 'PEP']`, y filtros de validación en `ImportarUsuarios.vue` y `Estudiantes.vue` sin soporte para `TI`, `PA`, `CD`, `PPT`, `RC`, `SC`.
+  2. Ausencia de funciones de normalización de jornadas (`normalizarJornada`) que convirtieran sinónimos y variaciones al estándar institucional (`Mañana`, `Tarde`, `Noche`, `Mixta`).
+  3. Falta de sanitización automática de números de documento (`normalizarNumeroDocumento`), títulos de programa, aulas y especialidades.
+- **Solución Aplicada:**
+  1. *Expansión y Normalización de Tipos de Documento:*
+     - Definición de catálogo oficial `TIPOS_DOCUMENTO_CODIGOS` (`CC`, `TI`, `CE`, `PA`, `PEP`, `PPT`, `CD`, `RC`, `SC`) y función `normalizarTipoDocumento` con resolución de alias comunes (ej. `PASAPORTE` -> `PA`, `TARJETA DE IDENTIDAD` -> `TI`, `DIPLOMATICO` -> `CD`).
+     - Actualización de los esquemas Mongoose en `Estudiante.js` e `Instructor.js` para admitir todos los tipos de documento.
+     - Actualización de los desplegables de selección manual en `Estudiantes.vue` e `Instructores.vue` con nombres legibles y códigos oficiales.
+     - Habilitación de todos los tipos de documento en la validación y mapeo de `ImportarUsuarios.vue`.
+  2. *Normalización Universal de Jornadas y Variables:*
+     - Función `normalizarJornada` que mapea variantes (`diurna`, `matutina`, `mañana`, `vespertina`, `tarde`, `nocturna`, `noche`, `mixta`) a los valores estándar de ficha.
+     - Función `normalizarNumeroDocumento` que remueve puntos, guiones y espacios en blanco.
+     - Hooks automáticos en Mongoose (`pre('validate')` y `pre('findOneAndUpdate')`) en `Estudiante.js`, `Instructor.js` y `Ficha.js` para limpiar y formatear `nombres`, `apellidos`, `tipoDocumento`, `numeroDocumento`, `correo`, `telefono`, `genero`, `especialidad`, `nombrePrograma`, `jornada` y `aulaAsignada`.
+     - Ejecución de script de base de datos (`normalizar-nombres.js`) actualizando aprendices, docentes y fichas existentes en MongoDB Atlas.
+- **Archivos Modificados:**
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/fichaController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/models/Estudiante.js`
+  - `backend/models/Ficha.js`
+  - `backend/models/Instructor.js`
+  - `backend/scripts/normalizar-nombres.js`
+  - `backend/utils/textUtils.js`
+  - `frontend/src/utils/textos.js`
+  - `frontend/src/views/Estudiantes.vue`
+  - `frontend/src/views/Fichas.vue`
+  - `frontend/src/views/ImportarUsuarios.vue`
+  - `frontend/src/views/Instructores.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución de `normalizar-nombres.js` contra MongoDB Atlas normalizando las colecciones con éxito (0 fallos).
+  - Compilación de producción con `npm run build:prod` completada en 800 ms sin errores y sincronizada a `backend/public/`.
+
+---
 ## [2026-10-22 08:55] Estandarización Capitalize, Excel Multijornada, Solo Lectura entre Docentes y Reportes Críticos Multi-Docente
 
 - **Fecha y Hora:** 2026-10-22 08:55:00 -05:00

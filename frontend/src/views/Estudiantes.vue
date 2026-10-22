@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { nombreProgramaLimpio, truncar, formatearNumeroDocumento, capitalizarTexto } from '../utils/textos.js'
+import { nombreProgramaLimpio, truncar, formatearNumeroDocumento, capitalizarTexto, TIPOS_DOCUMENTO, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
@@ -156,8 +156,8 @@ async function guardarEstudiante() {
     const body = {
       nombres: capitalizarTexto(nombres),
       apellidos: capitalizarTexto(apellidos),
-      tipoDocumento,
-      numeroDocumento: String(numeroDocumento).trim(),
+      tipoDocumento: normalizarTipoDocumento(tipoDocumento),
+      numeroDocumento: normalizarNumeroDocumento(numeroDocumento),
       correo: String(correo).trim().toLowerCase(),
       telefono: String(telefono).trim(),
       fichaId
@@ -425,7 +425,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div class="form-grid">
         <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del estudiante" /></div>
         <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del estudiante" /></div>
-        <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option value="CC">CC</option><option value="CE">CE</option><option value="TI">TI</option><option value="PEP">PEP</option></select></div>
+        <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option v-for="t in TIPOS_DOCUMENTO" :key="t.codigo" :value="t.codigo">{{ t.descripcion }}</option></select></div>
         <div class="form-group"><label>Numero de Documento</label><input v-model="estudianteForm.numeroDocumento" type="text" placeholder="Numero de documento" /></div>
         <div class="form-group"><label>Correo Electronico</label><input v-model="estudianteForm.correo" type="email" placeholder="correo@ejemplo.com" /></div>
         <div class="form-group"><label>Telefono</label><input v-model="estudianteForm.telefono" type="tel" placeholder="+57 300 000 0000" /></div>

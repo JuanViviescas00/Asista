@@ -5,6 +5,7 @@ import Asistencia from '../models/Asistencia.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
 import { calcularResumenDesdeAsistencias } from '../services/asistenciaService.js'
+import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento } from '../utils/textUtils.js'
 
 export async function getFichas(req, res) {
   try {
@@ -171,7 +172,12 @@ export async function getTardanzasResumen(req, res) {
 
 export async function createFicha(req, res) {
   try {
-    const ficha = new Ficha(req.body)
+    const data = { ...req.body }
+    if (data.codigoFicha) data.codigoFicha = normalizarNumeroDocumento(data.codigoFicha)
+    if (data.nombrePrograma) data.nombrePrograma = capitalizarTexto(data.nombrePrograma)
+    if (data.jornada) data.jornada = normalizarJornada(data.jornada)
+    if (data.aulaAsignada) data.aulaAsignada = capitalizarTexto(data.aulaAsignada)
+    const ficha = new Ficha(data)
     await ficha.save()
     const populated = await ficha
       .populate('instructorLiderId', 'nombres apellidos correo')
@@ -187,7 +193,12 @@ export async function createFicha(req, res) {
 
 export async function updateFicha(req, res) {
   try {
-    const ficha = await Ficha.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const data = { ...req.body }
+    if (data.codigoFicha) data.codigoFicha = normalizarNumeroDocumento(data.codigoFicha)
+    if (data.nombrePrograma) data.nombrePrograma = capitalizarTexto(data.nombrePrograma)
+    if (data.jornada) data.jornada = normalizarJornada(data.jornada)
+    if (data.aulaAsignada) data.aulaAsignada = capitalizarTexto(data.aulaAsignada)
+    const ficha = await Ficha.findByIdAndUpdate(req.params.id, data, { new: true })
       .populate('instructorLiderId', 'nombres apellidos correo')
       .populate('instructores', 'nombres apellidos correo')
     if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
@@ -215,6 +226,12 @@ export async function importarFichas(req, res) {
     const { fichas } = req.body
     if (!fichas || !Array.isArray(fichas)) {
       return res.status(400).json({ error: 'Se requiere un array de fichas' })
+    }
+    for (const f of fichas) {
+      if (f.codigoFicha) f.codigoFicha = normalizarNumeroDocumento(f.codigoFicha)
+      if (f.nombrePrograma) f.nombrePrograma = capitalizarTexto(f.nombrePrograma)
+      if (f.jornada) f.jornada = normalizarJornada(f.jornada)
+      if (f.aulaAsignada) f.aulaAsignada = capitalizarTexto(f.aulaAsignada)
     }
     const result = await Ficha.insertMany(fichas)
     res.status(201).json({ ok: true, count: result.length })
