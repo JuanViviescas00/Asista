@@ -209,19 +209,24 @@ test('el Presente sintetizado usa el instructor de la marcación', async () => {
       }),
     }),
   })
-  Jornada.find = () => ({
-    populate: () => ({
+  Jornada.find = (filter) => {
+    if (filter && filter.inhabilitada) {
+      return { populate: () => Promise.resolve([]) }
+    }
+    return {
       populate: () => ({
-        populate: () => Promise.resolve([{
-          _id: jornadaId,
-          fichaId,
-          fecha: '2026-01-05',
-          instructorId: instructorJornada,
-          presentes: [{ estudianteId: estudiantePopulado, hora: '08:05:00', uuid: 'u-sint', metodo: 'HUELLA', instructorId: instructorMarcacion }],
-        }]),
+        populate: () => ({
+          populate: () => Promise.resolve([{
+            _id: jornadaId,
+            fichaId,
+            fecha: '2026-01-05',
+            instructorId: instructorJornada,
+            presentes: [{ estudianteId: estudiantePopulado, hora: '08:05:00', uuid: 'u-sint', metodo: 'HUELLA', instructorId: instructorMarcacion }],
+          }]),
+        }),
       }),
-    }),
-  })
+    }
+  }
 
   const req = { query: { fichaId } }
   const res = mockRes()

@@ -58,11 +58,13 @@ export async function getAsistencias(req, res) {
     const { fichaId, estudianteId, fecha, fechaDesde, fechaHasta } = req.query
     const filter = {}
     const jornadaFilter = {}
+    const jornadaInhabFilter = { inhabilitada: true }
 
     if (fichaId) {
       const idsBuscar = await getFichaIdList(fichaId)
       filter.fichaId = { $in: idsBuscar }
       jornadaFilter.fichaId = { $in: idsBuscar }
+      jornadaInhabFilter.fichaId = { $in: idsBuscar }
     }
     if (estudianteId) {
       filter.estudianteId = estudianteId
@@ -71,17 +73,21 @@ export async function getAsistencias(req, res) {
     if (fecha) {
       filter.fecha = fecha
       jornadaFilter.fecha = fecha
+      jornadaInhabFilter.fecha = fecha
     }
     if (fechaDesde || fechaHasta) {
       filter.fecha = {}
       jornadaFilter.fecha = {}
+      jornadaInhabFilter.fecha = {}
       if (fechaDesde) {
         filter.fecha.$gte = fechaDesde
         jornadaFilter.fecha.$gte = fechaDesde
+        jornadaInhabFilter.fecha.$gte = fechaDesde
       }
       if (fechaHasta) {
         filter.fecha.$lte = fechaHasta
         jornadaFilter.fecha.$lte = fechaHasta
+        jornadaInhabFilter.fecha.$lte = fechaHasta
       }
     }
 
@@ -104,6 +110,7 @@ export async function getAsistencias(req, res) {
 
     const sintetizados = []
     for (const jornada of jornadas) {
+      if (jornada.inhabilitada) continue
       const jFicha = String(jornada.fichaId)
       for (const p of (jornada.presentes || [])) {
         const estId = String(p.estudianteId?._id || p.estudianteId)
@@ -129,7 +136,53 @@ export async function getAsistencias(req, res) {
       }
     }
 
-    const todos = [...inasistencias.map(toAsistenciaShape), ...sintetizados]
+    // Sintetizar 'Inhabilitada' para cada aprendiz activo de una jornada inhabilitada.
+    // No se persisten filas por aprendiz: se derivan de Jornada.inhabilitada.
+    const jornadasInhabilitadas = await Jornada.find(jornadaInhabFilter)
+      .populate('instructorId')
+
+    const inhabilitados = []
+    if (jornadasInhabilitadas.length > 0) {
+      const fichaIdsInhab = [...new Set(jornadasInhabilitadas.map((j) => String(j.fichaId)))]
+      const aprendices = await Estudiante.find({
+        fichaId: { $in: fichaIdsInhab },
+        estado: { $ne: 'Retirado' },
+      }).select('_id fichaId')
+
+      const aprendicesPorFicha = new Map()
+      for (const a of aprendices) {
+        const fk = String(a.fichaId)
+        if (!aprendicesPorFicha.has(fk)) aprendicesPorFicha.set(fk, [])
+        aprendicesPorFicha.get(fk).push(a)
+      }
+
+      for (const j of jornadasInhabilitadas) {
+        const jFicha = String(j.fichaId)
+        for (const a of (aprendicesPorFicha.get(jFicha) || [])) {
+          const estId = String(a._id)
+          if (estudianteId && estId !== String(estudianteId)) continue
+          if (conNovedad.has(`${jFicha}|${j.fecha}|${estId}`)) continue
+          inhabilitados.push({
+            _id: `inhabilitada-${String(j._id)}-${estId}`,
+            estudianteId: a._id,
+            fichaId: j.fichaId,
+            fecha: j.fecha,
+            estado: 'Inhabilitada',
+            hora: '—',
+            horasTardanza: 0,
+            tiempoTardanza: '0 horas',
+            metodo: null,
+            origen: null,
+            instructorId: j.instructorId || null,
+            subidoSofia: false,
+            estadoCarga: null,
+            motivoInhabilitacion: j.motivoInhabilitacion || 'Jornada no impartida',
+          })
+        }
+      }
+    }
+
+    const todos = [...inasistencias.map(toAsistenciaShape), ...sintetizados, ...inhabilitados]
     todos.sort((a, b) => {
       if (a.fecha < b.fecha) return -1
       if (a.fecha > b.fecha) return 1
@@ -567,64 +620,34 @@ export async function inhabilitarJornada(req, res) {
     }
 
     const idsBuscar = await getFichaIdList(fichaId)
-    const [estudiantes, fichaDoc] = await Promise.all([
-      Estudiante.find({ fichaId: { $in: idsBuscar }, estado: { $ne: 'Retirado' } }),
-      Ficha.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(fichaId) ? fichaId : null }, { codigoFicha: String(fichaId).trim() }] })
-    ])
+    const fichaDoc = await Ficha.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(fichaId) ? fichaId : null }, { codigoFicha: String(fichaId).trim() }] })
     const motivoFinal = motivo || 'Jornada no impartida / Actividad institucional'
 
-    // Aprendices con novedades ya reportadas a Sofía Plus: no se sobrescriben.
-    const bloqueados = await Asistencia.find({
+    // Novedades ya reportadas a Sofía Plus: se conservan (no se borran ni sobrescriben).
+    const subidas = await Inasistencia.find({
       fichaId: { $in: idsBuscar },
       fecha,
-      subidoSofia: true
+      estadoCarga: 'SUBIDA'
     }).select('estudianteId')
-    const bloqueadosSet = new Set(bloqueados.map(b => String(b.estudianteId)))
-    const editables = estudiantes.filter(est => !bloqueadosSet.has(String(est._id)))
 
-    const operaciones = editables.map(est => ({
-      updateOne: {
-        filter: { estudianteId: est._id, fecha },
-        update: {
-          $set: {
-            estudianteId: est._id,
-            fichaId: fichaDoc?._id || fichaId,
-            fecha,
-            estado: 'Inhabilitada',
-            hora: '—',
-            horasTardanza: 0,
-            tiempoTardanza: '0 horas',
-            motivoInhabilitacion: motivoFinal,
-            instructorId: instructorId || null
-          }
-        },
-        upsert: true
-      }
-    }))
+    // 1. Marcar la jornada como inhabilitada (un solo documento por ficha + fecha).
+    await Jornada.findOneAndUpdate(
+      { fichaId: fichaDoc?._id || fichaId, fecha },
+      {
+        $set: { inhabilitada: true, motivoInhabilitacion: motivoFinal, instructorId: instructorId || null },
+        $setOnInsert: { fichaId: fichaDoc?._id || fichaId, fecha, origen: 'manual' }
+      },
+      { upsert: true, new: true }
+    )
 
-    if (operaciones.length > 0) {
-      await Asistencia.bulkWrite(operaciones)
+    // 2. Borrar las novedades NO 'SUBIDA' de esa ficha + fecha (antes se sobrescribían con 'Inhabilitada').
+    const borradas = await Inasistencia.deleteMany({
+      fichaId: { $in: idsBuscar },
+      fecha,
+      estadoCarga: { $ne: 'SUBIDA' }
+    })
 
-      // Sincronizar en lote a SQLite
-      if (fichaDoc) {
-        const sqliteRows = editables.map(est => ({
-          fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
-          nombrePrograma: fichaDoc.nombrePrograma || '',
-          jornada: fichaDoc.jornada || '',
-          documentoAprendiz: est.numeroDocumento || '',
-          nombreAprendiz: `${est.nombres || ''} ${est.apellidos || ''}`.trim(),
-          correoAprendiz: est.correo || '',
-          fecha: fecha,
-          estado: 'Inhabilitada',
-          hora: '—',
-          horasTardanza: 0,
-          tiempoTardanza: '0 horas'
-        }))
-        upsertAsistenciasBatchSQLite(sqliteRows)
-      }
-    }
-
-    res.json({ ok: true, count: operaciones.length, bloqueadas: bloqueados.length, motivo: motivoFinal })
+    res.json({ ok: true, count: borradas.deletedCount || 0, bloqueadas: subidas.length, motivo: motivoFinal })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -638,20 +661,19 @@ export async function reactivarJornada(req, res) {
     }
 
     const idsBuscar = await getFichaIdList(fichaId)
+    const fichaDoc = await Ficha.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(fichaId) ? fichaId : null }, { codigoFicha: String(fichaId).trim() }] })
 
-    const bloqueadas = await Asistencia.countDocuments({
+    const bloqueadas = await Inasistencia.countDocuments({
       fichaId: { $in: idsBuscar },
       fecha,
-      estado: 'Inhabilitada',
-      subidoSofia: true
+      estadoCarga: 'SUBIDA'
     })
 
-    await Asistencia.deleteMany({
-      fichaId: { $in: idsBuscar },
-      fecha,
-      estado: 'Inhabilitada',
-      subidoSofia: { $ne: true }
-    })
+    await Jornada.findOneAndUpdate(
+      { fichaId: fichaDoc?._id || fichaId, fecha },
+      { $set: { inhabilitada: false, motivoInhabilitacion: '' } },
+      { new: true }
+    )
 
     res.json({ ok: true, message: 'Jornada reactivada exitosamente', bloqueadas })
   } catch (err) {
