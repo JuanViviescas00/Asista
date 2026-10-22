@@ -442,14 +442,18 @@ async function procesarPresente({ uuid, estudianteId, fichaId, fecha, hora, clas
 
     // Marcación tardía: si el cierre ya creó una Falta huellero no SUBIDA, se borra
     // (el aprendiz sí asistió). No se toca una Falta manual, una Excusada ni una Tardanza.
-    await Inasistencia.deleteOne({
-      estudianteId,
-      fichaId,
-      fecha,
-      tipo: 'Falta',
-      origen: 'huellero',
-      estadoCarga: { $ne: 'SUBIDA' },
-    }).catch(() => null)
+    try {
+      await Inasistencia.deleteOne({
+        estudianteId,
+        fichaId,
+        fecha,
+        tipo: 'Falta',
+        origen: 'huellero',
+        estadoCarga: { $ne: 'SUBIDA' },
+      })
+    } catch (err) {
+      console.error(`[procesarPresente] Error al borrar la Falta tardía (uuid ${uuid}, estudiante ${estudianteId}, ficha ${fichaId}, fecha ${fecha}):`, err.message)
+    }
 
     return { uuid, estado: 'guardada' }
   } catch (err) {

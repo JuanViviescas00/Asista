@@ -4,7 +4,7 @@
 //
 // Uso:
 //   node scripts/simular-huellero.js --setup
-//   node scripts/simular-huellero.js --sync --estudiante <id> --ficha <id> [--timestamp ISO]
+//   node scripts/simular-huellero.js --sync --estudiante <id> --ficha <id> [--timestamp ISO] [--uuid <uuid>]
 //   node scripts/simular-huellero.js --setup --sync --estudiante <id> --ficha <id> [--url http://localhost:3000]
 import 'dotenv/config'
 import mongoose from 'mongoose'
@@ -22,6 +22,7 @@ const args = parseArgs({
     estudiante: { type: 'string', default: '' },
     ficha: { type: 'string', default: '' },
     timestamp: { type: 'string', default: '' },
+    uuid: { type: 'string', default: '' },
     url: { type: 'string', default: 'http://localhost:3000' },
   },
 })
@@ -53,7 +54,7 @@ async function main() {
       process.exit(1)
     }
     const items = [{
-      uuid: randomUUID(),
+      uuid: o.uuid || randomUUID(),
       estudianteId: o.estudiante,
       fichaId: o.ficha,
       timestamp: o.timestamp || new Date().toISOString(),

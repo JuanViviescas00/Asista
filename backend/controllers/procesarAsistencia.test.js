@@ -232,3 +232,18 @@ test('el Presente sintetizado usa el instructor de la marcación', async () => {
   assert.equal(presente.instructorId, instructorMarcacion)
   assert.equal(String(presente.estudianteId._id), estudianteId)
 })
+
+test('deleteOne lanza error: la marcación sigue siendo guardada y se registra', async () => {
+  base()
+  Inasistencia.deleteOne = async () => { throw new Error('delete boom') }
+  const logs = []
+  const origError = console.error
+  console.error = (...args) => { logs.push(args.join(' ')) }
+  try {
+    const r = await procesarAsistencia(item('u-presente-delete-fail', 5))
+    assert.equal(r.estado, 'guardada')
+  } finally {
+    console.error = origError
+  }
+  assert.ok(logs.some((l) => l.includes('Error al borrar la Falta tardía')))
+})
