@@ -1,5 +1,40 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 09:42] Despliegue de Programas Mediante Select y Restricción Estricta de Gestión de Catálogo al Administrador
+
+- **Fecha y Hora:** 2026-10-22 09:42:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Despliegue Controlado con `<select>`:* El usuario requirió que la selección del programa en las fichas no fuera un campo de texto libre ni un datalist permisivo, sino un selector desplegable (`<select>`) cerrado que despliegue la lista de programas oficiales activos.
+  2. *Control de Acceso Basado en Roles (RBAC):* Restringir de forma exclusiva al Administrador la capacidad de adjuntar nuevos programas o modificarlos a futuro. Los demás usuarios (como instructores) solo pueden elegir de la lista desplegada y no pueden alterar el catálogo.
+- **Causa Raíz:**
+  - El formulario de fichas contaba con un `<input type="text" list="programas-datalist">` que aún permitía al usuario escribir nombres arbitrarios fuera de la lista.
+  - Las rutas `POST`, `PUT` y `DELETE` de `/api/programas` carecían del middleware de autorización `verificarRol(['Administrador'])`, y la interfaz no ocultaba las acciones de gestión a usuarios sin privilegios administrativos.
+- **Solución Aplicada:**
+  1. *Protección en Backend (`backend/routes/programas.js`):*
+     - `GET /api/programas` mantiene acceso de lectura (`autenticarOpcional`) para poblar el `<select>` en cualquier contexto autenticado o de quiosco.
+     - `POST /api/programas`, `PUT /api/programas/:id` y `DELETE /api/programas/:id` fueron blindados con `autenticarJWT` y `verificarRol(['Administrador'])`.
+  2. *Desplegable `<select>` en Fichas (`frontend/src/views/Fichas.vue` y `fichas.css`):*
+     - Reemplazo completo del input/datalist por `<select v-model="fichaForm.nombrePrograma" class="fichas-select-programa" required>`.
+     - Despliega todos los programas activos (`programasActivos`) formateados como: `[Nombre] ([Sigla]) — [Nivel]` (ej. *Análisis y Desarrollo de Software (ADSO) — Tecnólogo*).
+     - Incorpora automáticamente una opción de fallback para nombres históricos en caso de editar fichas antiguas asociadas a programas inactivos.
+     - Estilos CSS dedicados en `.fichas-select-programa` con bordes suaves, accesibilidad y foco en verde SENA (#39a900).
+  3. *Restricción de Interfaz y Guardas de Seguridad:*
+     - Cálculo reactivo `esAdmin` vinculado a `useAuth` y almacenamiento de sesión/local.
+     - Botón "Gestionar Programas" de la cabecera protegido con `v-if="esAdmin"`.
+     - Botón "+ Adjuntar Programa" dentro del formulario protegido con `v-if="esAdmin"`.
+     - Guardas lógicas en todas las funciones del catálogo (`abrirGestionProgramas`, `abrirCrearPrograma`, `abrirCrearProgramaRapido`, `abrirEditarPrograma`, `guardarPrograma`, `cambiarEstadoPrograma`, `eliminarPrograma`) para rechazar llamadas si el usuario no tiene rol Administrador.
+     - Textos de ayuda contextuales que informan al usuario no administrador que solo el Administrador puede adjuntar o editar programas.
+- **Archivos Modificados:**
+  - `backend/routes/programas.js`
+  - `frontend/src/views/Fichas.vue`
+  - `frontend/src/styles/fichas.css`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Verificación de tipos y lógica de autorización de roles.
+  - Compilación de producción con `npm run build:prod` completada sin errores y sincronizada a `backend/public/`.
+
+---
+
 ## [2026-10-22 09:35] Estandarización y Catálogo Dinámico de Programas de Formación (Eliminación de Disparidades en Fichas)
 
 - **Fecha y Hora:** 2026-10-22 09:35:00 -05:00

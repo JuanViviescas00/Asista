@@ -2,7 +2,14 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
+import { useAuth } from '../composables/useAuth.js'
 import { nombreProgramaLimpio, capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textos.js'
+
+const { usuario } = useAuth()
+const esAdmin = computed(() => {
+  const rol = usuario.value?.rol || (JSON.parse(sessionStorage.getItem('user_data') || localStorage.getItem('usuario') || '{}')).rol || 'Administrador'
+  return rol === 'Administrador'
+})
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -196,11 +203,19 @@ function onProgramaBlur() {
 }
 
 function abrirGestionProgramas() {
+  if (!esAdmin.value) {
+    showToastFn('Solo el Administrador puede gestionar o adjuntar programas', 'warning')
+    return
+  }
   busquedaPrograma.value = ''
   showModalProgramas.value = true
 }
 
 function abrirCrearPrograma() {
+  if (!esAdmin.value) {
+    showToastFn('Solo el Administrador puede crear programas', 'warning')
+    return
+  }
   vieneDeFichaForm.value = false
   Object.assign(programaForm, {
     id: null,
@@ -216,6 +231,10 @@ function abrirCrearPrograma() {
 }
 
 function abrirCrearProgramaRapido() {
+  if (!esAdmin.value) {
+    showToastFn('Solo el Administrador puede adjuntar programas', 'warning')
+    return
+  }
   vieneDeFichaForm.value = true
   Object.assign(programaForm, {
     id: null,
@@ -231,6 +250,10 @@ function abrirCrearProgramaRapido() {
 }
 
 function abrirEditarPrograma(prog) {
+  if (!esAdmin.value) {
+    showToastFn('Solo el Administrador puede modificar programas', 'warning')
+    return
+  }
   vieneDeFichaForm.value = false
   Object.assign(programaForm, {
     id: prog._id,
@@ -246,6 +269,10 @@ function abrirEditarPrograma(prog) {
 }
 
 async function guardarPrograma() {
+  if (!esAdmin.value) {
+    showToastFn('Acción restringida: solo el Administrador puede guardar programas', 'error')
+    return
+  }
   if (!programaForm.nombre || !programaForm.nombre.trim()) {
     showToastFn('El nombre del programa es obligatorio', 'error')
     return
@@ -293,6 +320,10 @@ async function guardarPrograma() {
 }
 
 async function cambiarEstadoPrograma(prog) {
+  if (!esAdmin.value) {
+    showToastFn('Acción restringida: solo el Administrador puede cambiar el estado de programas', 'error')
+    return
+  }
   try {
     const nuevoEstado = prog.estado === 'Activo' ? 'Inactivo' : 'Activo'
     await api.programas.update(prog._id, { estado: nuevoEstado })
@@ -304,6 +335,10 @@ async function cambiarEstadoPrograma(prog) {
 }
 
 async function eliminarPrograma(prog) {
+  if (!esAdmin.value) {
+    showToastFn('Acción restringida: solo el Administrador puede eliminar programas', 'error')
+    return
+  }
   if (!confirm(`¿Estás seguro de eliminar el programa "${prog.nombre}"?`)) return
   try {
     await api.programas.delete(prog._id)
@@ -410,7 +445,12 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
     <div class="fichas-card-header">
       <h3>Listado de Fichas</h3>
       <div class="fichas-header-actions">
-        <button class="fichas-button fichas-button-secondary" @click="abrirGestionProgramas" title="Catálogo de Programas de Formación">
+        <button
+          v-if="esAdmin"
+          class="fichas-button fichas-button-secondary"
+          @click="abrirGestionProgramas"
+          title="Catálogo de Programas de Formación (Solo Administrador)"
+        >
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           <span>Gestionar Programas</span>
         </button>
@@ -492,38 +532,43 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
           <input v-model="fichaForm.codigoFicha" type="text" placeholder="Ej: 2670123" />
         </div>
         <div class="fichas-form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
             <label style="margin: 0;">Nombre del Programa *</label>
             <button
+              v-if="esAdmin"
               type="button"
               class="btn-link-programas"
               @click="abrirCrearProgramaRapido"
-              title="Registrar un nuevo programa en el catálogo"
+              title="Adjuntar un nuevo programa oficial al catálogo"
             >
-              + Nuevo Programa
+              + Adjuntar Programa
             </button>
           </div>
-          <div style="position: relative;">
-            <input
-              v-model="fichaForm.nombrePrograma"
-              list="programas-datalist"
-              type="text"
-              placeholder="Ej: Análisis y Desarrollo de Software"
-              @blur="onProgramaBlur"
-              autocomplete="off"
-            />
-            <datalist id="programas-datalist">
-              <option
-                v-for="p in programasActivos"
-                :key="p._id"
-                :value="p.nombre"
-              >
-                {{ p.sigla ? `[${p.sigla}] ` : '' }}{{ p.nivel }}
-              </option>
-            </datalist>
-          </div>
-          <span class="fichas-programa-help">
-            Escribe o selecciona de la lista oficial (autocorrige tildes automáticamente).
+          <select
+            v-model="fichaForm.nombrePrograma"
+            class="fichas-select-programa"
+            required
+          >
+            <option value="" disabled>Selecciona un programa de formación...</option>
+            <option
+              v-for="p in programasActivos"
+              :key="p._id"
+              :value="p.nombre"
+            >
+              {{ p.nombre }} {{ p.sigla ? `(${p.sigla})` : '' }} — {{ p.nivel }}
+            </option>
+            <option
+              v-if="fichaForm.nombrePrograma && !programasActivos.some(p => p.nombre === fichaForm.nombrePrograma)"
+              :value="fichaForm.nombrePrograma"
+            >
+              {{ fichaForm.nombrePrograma }} (Histórico)
+            </option>
+          </select>
+          <span class="fichas-programa-help" v-if="esAdmin">
+            Programas estandarizados del centro. Como Administrador, puedes usar "Gestionar Programas" para adjuntar o modificar carreras.
+          </span>
+          <span class="fichas-programa-help" v-else>
+            Selecciona un programa estandarizado de la lista. Solo el Administrador puede adjuntar o modificar programas.
           </span>
         </div>
         <div class="fichas-form-group">
