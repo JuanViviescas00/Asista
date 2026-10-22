@@ -2,6 +2,13 @@ import mongoose from 'mongoose'
 import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
 import Estudiante from '../models/Estudiante.js'
+import Clase from '../models/Clase.js'
+import Inasistencia from '../models/Inasistencia.js'
+import Jornada from '../models/Jornada.js'
+import DiaFestivo from '../models/DiaFestivo.js'
+import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
+import { asegurarJornada } from './jornadaService.js'
 
 /**
  * Retorna la fecha actual en zona horaria de Colombia (America/Bogota) en formato YYYY-MM-DD
@@ -216,12 +223,12 @@ export async function calcularResumenAsistencia(estudianteId) {
 }
 
 /**
- * Auto-cierre de inasistencias:
- * Para una ficha y una fecha dada, identifica a todos los aprendices activos que
- * no registraron marcación de asistencia (huella ni manual) y les crea automáticamente
- * un registro con estado 'Falta'.
+ * Auto-cierre de inasistencias sobre los modelos NUEVOS (Inasistencia + Jornada):
+ * para una ficha y fecha dada, identifica a los aprendices activos que no están en
+ * Jornada.presentes ni tienen ninguna Inasistencia (Falta/Tardanza/Excusada) ese día,
+ * y les crea una Falta (origen 'huellero'). Idempotente.
  */
-export async function cerrarInasistenciasFicha(fichaId, fecha = getHoyString(), instructorId = null) {
+export async function cerrarInasistenciasFicha(fichaId, fecha = getHoyString(), instructorId = null, claseId = null) {
   try {
     if (!fichaId || !fecha) return { creados: 0 }
 
@@ -230,6 +237,13 @@ export async function cerrarInasistenciasFicha(fichaId, fecha = getHoyString(), 
 
     const fichaDoc = await Ficha.findOne({ _id: { $in: fichaIds } })
     const instId = instructorId || fichaDoc?.instructorLiderId || null
+    const fichaTarget = fichaDoc?._id || fichaIds[0]
+
+    // Jornada inhabilitada: no se crea ninguna falta.
+    const jornada = await Jornada.findOne({ fichaId: { $in: fichaIds }, fecha })
+    if (jornada?.inhabilitada) {
+      return { creados: 0, omitida: 'inhabilitada' }
+    }
 
     const estudiantes = await Estudiante.find({
       fichaId: { $in: fichaIds },
@@ -238,42 +252,122 @@ export async function cerrarInasistenciasFicha(fichaId, fecha = getHoyString(), 
 
     if (!estudiantes.length) return { creados: 0 }
 
-    const existentes = await Asistencia.find({
-      fichaId: { $in: fichaIds },
-      fecha
-    }).select('estudianteId')
+    // Excluir a quienes ya están en presentes o tienen cualquier Inasistencia ese día.
+    const inasistencias = await Inasistencia.find({ fichaId: { $in: fichaIds }, fecha }).select('estudianteId')
 
-    const presentesSet = new Set(existentes.map(a => String(a.estudianteId)))
+    const excluidos = new Set((jornada?.presentes || []).map((p) => String(p.estudianteId)))
+    for (const ina of inasistencias) excluidos.add(String(ina.estudianteId))
 
-    const aCrear = []
+    const tope = topeHorasPorJornada(fichaDoc?.jornada || '')
+    const festivosDocs = await DiaFestivo.find().select('fecha').catch(() => [])
+    const festivosSet = new Set((festivosDocs || []).map((d) => d.fecha))
+    const estadoCarga = calcularEstadoCarga({ fecha, tipo: 'Falta', jornada: fichaDoc?.jornada || '', festivosSet, hoyStr: getHoyString() })
+
+    const operaciones = []
     for (const est of estudiantes) {
-      if (!presentesSet.has(String(est._id))) {
-        aCrear.push({
-          estudianteId: est._id,
-          fichaId: fichaDoc?._id || fichaIds[0],
-          fecha,
-          estado: 'Falta',
-          hora: '—',
-          horasTardanza: 0,
-          tiempoTardanza: '0 horas',
-          instructorId: instId,
-          metodo: 'MANUAL',
-          subidoSofia: false
-        })
+      if (excluidos.has(String(est._id))) continue
+      operaciones.push({
+        updateOne: {
+          filter: { estudianteId: est._id, fichaId: fichaTarget, fecha },
+          update: {
+            $setOnInsert: {
+              estudianteId: est._id,
+              fichaId: fichaTarget,
+              fecha,
+              tipo: 'Falta',
+              horas: tope,
+              hora: '—',
+              tiempoTardanza: '0 horas',
+              instructorId: instId,
+              claseId: claseId || null,
+              origen: 'huellero',
+              estadoCarga,
+            },
+          },
+          upsert: true,
+        },
+      })
+    }
+
+    let creados = 0
+    if (operaciones.length > 0) {
+      try {
+        const res = await Inasistencia.bulkWrite(operaciones, { ordered: false })
+        creados = res.upsertedCount || 0
+      } catch (err) {
+        const soloDuplicados =
+          err?.code === 11000 ||
+          (Array.isArray(err?.writeErrors) && err.writeErrors.length > 0 && err.writeErrors.every((w) => w?.code === 11000))
+        if (soloDuplicados) {
+          creados = err.result?.upsertedCount ?? err.result?.nUpserted ?? 0
+        } else {
+          throw err
+        }
       }
     }
 
-    if (aCrear.length > 0) {
-      const res = await Asistencia.insertMany(aCrear, { ordered: false })
-      return { creados: res.length }
+    try {
+      await asegurarJornada({ fichaId: fichaTarget, fecha, instructorId: instId, origen: 'huellero', claseId: claseId || null })
+    } catch (jornadaErr) {
+      console.error('[cerrarInasistenciasFicha] Error asegurando jornada:', jornadaErr.message)
     }
-    return { creados: 0 }
+
+    // Carrera: si un aprendiz que recibió Falta por ESTE cierre ya está en presentes,
+    // se borra esa Falta (marcación que llegó durante el cierre).
+    try {
+      const jornadaAfter = await Jornada.findOne({ fichaId: { $in: fichaIds }, fecha })
+      const presentesIds = [...new Set((jornadaAfter?.presentes || []).map((p) => String(p.estudianteId)))]
+      if (presentesIds.length > 0) {
+        await Inasistencia.deleteMany({
+          fichaId: { $in: fichaIds },
+          fecha,
+          tipo: 'Falta',
+          origen: 'huellero',
+          claseId: claseId || null,
+          estadoCarga: { $ne: 'SUBIDA' },
+          estudianteId: { $in: presentesIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        })
+      }
+    } catch (raceErr) {
+      console.error('[cerrarInasistenciasFicha] Error en la reconciliación de carrera:', raceErr.message)
+    }
+
+    return { creados }
   } catch (err) {
-    if (err.code === 11000) {
-      return { creados: err.result?.nInserted || 0 }
-    }
     console.error('[cerrarInasistenciasFicha] Error:', err.message)
     return { creados: 0, error: err.message }
   }
+}
+
+/**
+ * Finaliza atómicamente una clase Activa y completa las inasistencias de los
+ * ausentes. Los emits quedan en quien llama. Si la clase ya no estaba Activa,
+ * devuelve { yaFinalizada: true } y no hace nada más.
+ */
+export async function finalizarClase(claseId, { motivo } = {}) {
+  const clase = await Clase.findOneAndUpdate(
+    { _id: claseId, estado: 'Activa' },
+    { $set: { estado: 'Finalizada', finalizadaAt: new Date() } },
+    { new: true }
+  )
+
+  if (!clase) {
+    return { yaFinalizada: true }
+  }
+
+  let creados = 0
+  try {
+    const res = await cerrarInasistenciasFicha(
+      clase.fichaId,
+      formatearFechaColombia(clase.iniciadaAt),
+      clase.instructorId,
+      clase._id
+    )
+    creados = res?.creados || 0
+  } catch (err) {
+    console.error('[finalizarClase] Error en auto-cierre de inasistencias:', err.message)
+  }
+
+  return { clase, creados, yaFinalizada: false }
 }
 

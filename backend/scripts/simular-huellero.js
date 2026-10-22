@@ -5,6 +5,8 @@
 // Uso:
 //   node scripts/simular-huellero.js --setup
 //   node scripts/simular-huellero.js --sync --estudiante <id> --ficha <id> [--timestamp ISO] [--uuid <uuid>]
+//   node scripts/simular-huellero.js --crear-clase --ficha <id> --instructor <id>
+//   node scripts/simular-huellero.js --cerrar-clase <claseId>
 //   node scripts/simular-huellero.js --setup --sync --estudiante <id> --ficha <id> [--url http://localhost:3000]
 import 'dotenv/config'
 import mongoose from 'mongoose'
@@ -12,15 +14,20 @@ import bcryptjs from 'bcryptjs'
 import { randomUUID } from 'crypto'
 import { parseArgs } from 'node:util'
 import Dispositivo from '../models/Dispositivo.js'
+import Clase from '../models/Clase.js'
+import { finalizarClase } from '../services/asistenciaService.js'
 
 const args = parseArgs({
   options: {
     setup: { type: 'boolean', default: false },
     sync: { type: 'boolean', default: false },
+    'crear-clase': { type: 'boolean', default: false },
+    'cerrar-clase': { type: 'string', default: '' },
     'device-id': { type: 'string', default: 'sim-huellero-local' },
     token: { type: 'string', default: 'sim-token-local' },
     estudiante: { type: 'string', default: '' },
     ficha: { type: 'string', default: '' },
+    instructor: { type: 'string', default: '' },
     timestamp: { type: 'string', default: '' },
     uuid: { type: 'string', default: '' },
     url: { type: 'string', default: 'http://localhost:3000' },
@@ -67,6 +74,27 @@ async function main() {
     })
     const data = await res.json().catch(() => ({}))
     console.log(`[simular-huellero] HTTP ${res.status}`, JSON.stringify(data))
+  }
+
+  if (o['crear-clase']) {
+    if (!o.ficha || !o.instructor) {
+      console.error('[simular-huellero] Para --crear-clase se requieren --ficha y --instructor.')
+      process.exit(1)
+    }
+    const clase = await Clase.findOneAndUpdate(
+      { deviceId: o['device-id'], estado: 'Activa' },
+      {
+        $set: { fichaId: o.ficha, instructorId: o.instructor, iniciadaAt: new Date() },
+        $setOnInsert: { deviceId: o['device-id'], estado: 'Activa' },
+      },
+      { upsert: true, new: true }
+    )
+    console.log(`[simular-huellero] Clase Activa: ${clase._id} (device ${o['device-id']}, ficha ${o.ficha}, instructor ${o.instructor})`)
+  }
+
+  if (o['cerrar-clase']) {
+    const resultado = await finalizarClase(o['cerrar-clase'])
+    console.log('[simular-huellero] finalizarClase:', JSON.stringify(resultado))
   }
 
   await mongoose.disconnect()

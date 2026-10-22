@@ -6,7 +6,7 @@ import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import Inasistencia from '../models/Inasistencia.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
-import { getHoyString, formatearFechaColombia, cerrarInasistenciasFicha } from './asistenciaService.js'
+import { getHoyString, finalizarClase } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 import { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA } from '../utils/diasHabiles.js'
 import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
@@ -37,22 +37,18 @@ export async function cerrarClasesExpiradas() {
 
     let cerradas = 0
     for (const clase of clasesExpiradas) {
-      clase.estado = 'Finalizada'
-      clase.finalizadaAt = ahora
-      await clase.save()
-
       const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
       const instructorIdStr = String(clase.instructorId)
 
-      // 1. Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella.
-      // Se espera a que termine antes de emitir, para que el frontend ya vea las fallas al recargar.
-      try {
-        await cerrarInasistenciasFicha(clase.fichaId?._id || clase.fichaId, formatearFechaColombia(clase.iniciadaAt), clase.instructorId)
-      } catch (err) {
-        console.error('[AutoCierre] Error al completar inasistencias de la clase expirada:', err.message)
+      // Cierre atómico + auto-cierre de inasistencias (antes de emitir).
+      const resultado = await finalizarClase(clase._id, { motivo: 'AUTO_CIERRE_3_HORAS' })
+
+      if (resultado.yaFinalizada) {
+        // Ya se cerró en otro camino: no se vuelve a emitir.
+        continue
       }
 
-      // 2. Notificar al lector físico para que apague la captura de huellas
+      // 1. Notificar al lector físico para que apague la captura de huellas
       if (clase.deviceId) {
         emitirDesactivacion(clase.deviceId, {
           type: 'DEACTIVATE',
@@ -62,7 +58,7 @@ export async function cerrarClasesExpiradas() {
         })
       }
 
-      // 3. Notificar a las salas del frontend/dashboard
+      // 2. Notificar a las salas del frontend/dashboard
       emitirClaseDesactivada(fichaIdStr, {
         fichaId: fichaIdStr,
         motivo: 'AUTO_CIERRE_3_HORAS'
