@@ -3,7 +3,7 @@ import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
 import Dispositivo from '../models/Dispositivo.js'
 import { emitirActivacion, emitirDesactivacion, emitirClaseActivada, emitirClaseDesactivada } from '../services/socketService.js'
-import { cerrarInasistenciasFicha, getHoyString } from '../services/asistenciaService.js'
+import { cerrarInasistenciasFicha, formatearFechaColombia } from '../services/asistenciaService.js'
 
 export async function activar(req, res) {
   const { fichaId, instructorId } = req.body
@@ -114,7 +114,7 @@ export async function finalizar(req, res) {
     // Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella.
     // Se espera a que termine antes de responder y emitir, para que el frontend ya vea las fallas.
     try {
-      await cerrarInasistenciasFicha(clase.fichaId, getHoyString(), clase.instructorId)
+      await cerrarInasistenciasFicha(clase.fichaId, formatearFechaColombia(clase.iniciadaAt), clase.instructorId)
     } catch (err) {
       console.error('[claseController] Error en auto-cierre de inasistencias:', err.message)
     }

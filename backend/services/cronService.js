@@ -5,8 +5,12 @@ import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
-import { getHoyString, cerrarInasistenciasFicha } from './asistenciaService.js'
+import { getHoyString, formatearFechaColombia, cerrarInasistenciasFicha } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
+import { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA } from '../utils/diasHabiles.js'
+
+// Reexportados para no romper a quienes ya importaban estas utilidades desde cronService.
+export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA }
 
 /**
  * Cierra automáticamente las clases que lleven más de 3 horas activas.
@@ -41,7 +45,7 @@ export async function cerrarClasesExpiradas() {
       // 1. Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella.
       // Se espera a que termine antes de emitir, para que el frontend ya vea las fallas al recargar.
       try {
-        await cerrarInasistenciasFicha(clase.fichaId?._id || clase.fichaId, getHoyString(), clase.instructorId)
+        await cerrarInasistenciasFicha(clase.fichaId?._id || clase.fichaId, formatearFechaColombia(clase.iniciadaAt), clase.instructorId)
       } catch (err) {
         console.error('[AutoCierre] Error al completar inasistencias de la clase expirada:', err.message)
       }
@@ -75,58 +79,6 @@ export async function cerrarClasesExpiradas() {
 }
 
 /**
- * Calcula la cantidad de días hábiles transcurridos entre una fecha y la fecha actual (hoy).
- * - Para jornadas Diurnas (Mañana / Tarde): los días hábiles son Lunes a Viernes (omite Sábados y Domingos).
- * - Para jornadas Nocturnas (Noche / Nocturna): los SÁBADOS SÍ son días hábiles con clases (solo omite Domingos).
- * - En ambas jornadas se omiten los Días Festivos institucionales.
- * 
- * @param {string} fechaStr - 'YYYY-MM-DD'
- * @param {Set<string>} festivosSet - Set de strings 'YYYY-MM-DD'
- * @param {string} hoyStr - 'YYYY-MM-DD'
- * @param {string} jornada - 'Mañana' | 'Tarde' | 'Noche' | 'Nocturna'
- * @returns {number} Número de días hábiles transcurridos
- */
-export function calcularDiasHabilesTranscurridos(fechaStr, festivosSet = new Set(), hoyStr = getHoyString(), jornada = '') {
-  if (!fechaStr || fechaStr >= hoyStr) return 0
-
-  const [y1, m1, d1] = fechaStr.split('-').map(Number)
-  const [y2, m2, d2] = hoyStr.split('-').map(Number)
-
-  let cursor = new Date(y1, m1 - 1, d1, 12, 0, 0)
-  const fechaFin = new Date(y2, m2 - 1, d2, 12, 0, 0)
-
-  // Determinar si la jornada incluye sábados lectivos
-  const jNorm = String(jornada || '').toLowerCase()
-  const esJornadaNocturna = jNorm.includes('noche') || jNorm.includes('nocturn')
-
-  // Avanzar un día para no contar el día de la propia clase
-  cursor.setDate(cursor.getDate() + 1)
-
-  let diasHabiles = 0
-  while (cursor <= fechaFin) {
-    const diaSemana = cursor.getDay() // 0 = Domingo, 6 = Sábado
-    const mes = String(cursor.getMonth() + 1).padStart(2, '0')
-    const dia = String(cursor.getDate()).padStart(2, '0')
-    const fechaISO = `${cursor.getFullYear()}-${mes}-${dia}`
-
-    // Si es festivo institucional, no cuenta como día hábil
-    if (!festivosSet.has(fechaISO)) {
-      if (diaSemana !== 0) { // No es domingo
-        if (diaSemana !== 6 || esJornadaNocturna) {
-          // Es Lunes a Viernes, O es Sábado en jornada nocturna
-          diasHabiles++
-        }
-      }
-    }
-
-    cursor.setDate(cursor.getDate() + 1)
-  }
-
-  return diasHabiles
-}
-
-
-/**
  * Servicio Cron Job para:
  * 1. Auto-cierre de clases que superen las 3 horas (cada minuto).
  * 2. Exportación y sincronización nocturna de asistencias agrupadas por Docente (medianoche).
@@ -146,7 +98,7 @@ export function iniciarCronJobs() {
 
   // 2. Cron nocturno de sincronización SQLite por Docente
   cron.schedule(schedule, async () => {
-    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando procesamiento nocturno de SQLite por DOCENTE (filtro 3 días hábiles)...`)
+    console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando procesamiento nocturno de SQLite por DOCENTE (filtro ${DIAS_HABILES_VENTANA_EXCUSA} días hábiles)...`)
     try {
       const resultado = await sincronizarSqlitePorDocente()
       console.log(`[CRON] ✅ Proceso finalizado. Docentes: ${resultado.totalDocentes}, Clases/Registros: ${resultado.totalRegistros}, Elegibles subida: ${resultado.totalElegiblesSubida}`)
@@ -182,9 +134,9 @@ export function iniciarCronJobs() {
 /**
  * Genera y actualiza un archivo SQLite independiente para cada Docente que haya impartido clases.
  * - Incluye todas las clases dictadas diariamente por el profesor (sin importar si es líder o apoyo).
- * - Evalúa los 5 días hábiles posteriores a la clase (Acuerdo 0009 de 2024, Art. 28 Parágrafo 3):
- *   - Si días hábiles < 5: Estado de carga 'EN_ESPERA' (ventana reglamentaria para radicar excusas).
- *   - Si días hábiles >= 5: Estado de carga 'LISTO_PARA_SUBIR' (plazo vencido, elegible para consolidación).
+ * - Evalúa la ventana de excusa (DIAS_HABILES_VENTANA_EXCUSA, Acuerdo 0009 de 2024, Art. 28 Parágrafo 3):
+ *   - Si la ventana no venció: Estado de carga 'EN_ESPERA' (ventana reglamentaria para radicar excusas).
+ *   - Si la ventana venció (diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1): 'LISTO_PARA_SUBIR'.
  */
 export async function sincronizarSqlitePorDocente() {
   const hoyStr = getHoyString()
@@ -226,7 +178,8 @@ export async function sincronizarSqlitePorDocente() {
     }
 
     const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId?.jornada || '')
-    const esElegible = diasHabiles >= 5
+    // Vencida (injustificada) solo si el 5.º día hábil ya terminó (ver constante).
+    const esElegible = diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1
     const estadoCarga = esElegible ? 'LISTO_PARA_SUBIR' : 'EN_ESPERA'
 
     asistenciasPorDocente.get(docenteKey).rows.push({
@@ -275,7 +228,7 @@ export async function sincronizarSqlitePorDocente() {
         archivo: filePath
       })
 
-      console.log(`[CRON] Docente ${docenteKey}: ${rows.length} registros guardados (${elegiblesDocente} listos tras 3 días hábiles) en ${filePath}`)
+      console.log(`[CRON] Docente ${docenteKey}: ${rows.length} registros guardados (${elegiblesDocente} listos tras ${DIAS_HABILES_VENTANA_EXCUSA} días hábiles) en ${filePath}`)
     } finally {
       try { db.close() } catch (e) {}
     }
@@ -351,7 +304,8 @@ export async function revisarYEncolarSofiaPlus() {
 
     // estado === 'Falta'
     const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId.jornada || '')
-    if (diasHabiles >= 6) {
+    // Vencida (injustificada) solo si el 5.º día hábil ya terminó (ver constante).
+    if (diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1) {
       aEncolar.push({
         asistenciaId: a._id,
         estudianteId: a.estudianteId,
