@@ -312,6 +312,70 @@ const motivoInhabilitacionDia = computed(() => {
   return reg?.motivoInhabilitacion || 'Jornada no impartida'
 })
 
+const docenteResponsableDia = computed(() => {
+  const hoy = fechaAsistencia.value
+  const currentFichaId = fichaSeleccionada.value ? String(fichaSeleccionada.value._id) : null
+  const reg = asistenciasFicha.value.find(
+    a => a.fecha === hoy &&
+         (!currentFichaId || String(a.fichaId?._id || a.fichaId) === currentFichaId) &&
+         a.instructorId
+  )
+  if (!reg || !reg.instructorId) return null
+
+  if (typeof reg.instructorId === 'object' && reg.instructorId.nombres) {
+    return {
+      id: String(reg.instructorId._id || reg.instructorId),
+      nombreCompleto: `${reg.instructorId.nombres} ${reg.instructorId.apellidos || ''}`.trim(),
+      correo: reg.instructorId.correo || '',
+      especialidad: reg.instructorId.especialidad || ''
+    }
+  }
+
+  const instIdStr = String(reg.instructorId._id || reg.instructorId)
+  if (usuario.value && String(usuario.value.id) === instIdStr) {
+    return {
+      id: instIdStr,
+      nombreCompleto: `${usuario.value.nombres} ${usuario.value.apellidos || ''}`.trim(),
+      correo: usuario.value.correo || '',
+      especialidad: usuario.value.especialidad || ''
+    }
+  }
+
+  const lider = fichaSeleccionada.value?.instructorLiderId
+  if (lider && String(lider._id || lider) === instIdStr) {
+    return {
+      id: instIdStr,
+      nombreCompleto: `${lider.nombres || ''} ${lider.apellidos || ''}`.trim() || 'Docente Líder',
+      correo: lider.correo || '',
+      especialidad: lider.especialidad || ''
+    }
+  }
+
+  const deFicha = (fichaSeleccionada.value?.instructores || []).find(i => String(i._id || i) === instIdStr)
+  if (deFicha && typeof deFicha === 'object' && deFicha.nombres) {
+    return {
+      id: instIdStr,
+      nombreCompleto: `${deFicha.nombres} ${deFicha.apellidos || ''}`.trim(),
+      correo: deFicha.correo || '',
+      especialidad: deFicha.especialidad || ''
+    }
+  }
+
+  return {
+    id: instIdStr,
+    nombreCompleto: 'Docente a cargo',
+    correo: '',
+    especialidad: ''
+  }
+})
+
+const jornadaEsDeOtroDocente = computed(() => {
+  if (usuario.value?.rol === 'Administrador') return false
+  if (!docenteResponsableDia.value) return false
+  const currentUserId = usuario.value?.id ? String(usuario.value.id) : null
+  return currentUserId ? String(docenteResponsableDia.value.id) !== currentUserId : false
+})
+
 function cambiarFechaDia(delta) {
   const [y, m, d] = fechaAsistencia.value.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
@@ -1286,6 +1350,57 @@ function descargarExcel(data, nombreArchivo) {
             </button>
           </div>
 
+          <!-- BANNER SUPERIOR: DOCENTE RESPONSABLE DE LA JORNADA -->
+          <div
+            v-if="!jornadaInhabilitada"
+            class="docente-jornada-banner"
+            :class="{
+              'banner-docente-ajeno': jornadaEsDeOtroDocente,
+              'banner-docente-propio': !jornadaEsDeOtroDocente && docenteResponsableDia,
+              'banner-docente-nuevo': !docenteResponsableDia
+            }"
+          >
+            <div class="docente-jornada-icon-wrap">
+              <svg v-if="jornadaEsDeOtroDocente" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <div class="docente-jornada-body">
+              <div class="docente-jornada-header-line">
+                <span class="docente-jornada-pre">Docente a cargo de la jornada:</span>
+                <strong class="docente-jornada-nombre">
+                  Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : `${usuario?.nombres} ${usuario?.apellidos || ''}` }}
+                </strong>
+                <span v-if="jornadaEsDeOtroDocente" class="badge-solo-lectura-tag">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Modo solo lectura (No modificable)
+                </span>
+                <span v-else-if="docenteResponsableDia" class="badge-tu-jornada-tag">
+                  (Tú registraste esta jornada)
+                </span>
+                <span v-else class="badge-pendiente-tag">
+                  (Pendiente por registrar)
+                </span>
+              </div>
+              <p class="docente-jornada-desc">
+                <template v-if="jornadaEsDeOtroDocente">
+                  Esta sesión fue registrada por otro docente. Puedes visualizarla pero los controles están bloqueados para proteger el registro del instructor titular.
+                </template>
+                <template v-else-if="docenteResponsableDia">
+                  Tienes permisos de edición completos sobre esta jornada registrada.
+                </template>
+                <template v-else>
+                  Jornada sin registro previo. Los cambios que efectúes quedarán vinculados a tu usuario como docente a cargo del día.
+                </template>
+              </p>
+            </div>
+          </div>
+
           <!-- Contadores rápidos -->
           <div class="conteo-row">
             <div v-if="jornadaInhabilitada" class="conteo-chip" style="background: #ffedd5; color: #9a3412; border: 1.5px solid #fdba74; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
@@ -1330,7 +1445,7 @@ function descargarExcel(data, nombreArchivo) {
                   <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente') + ')') : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.estado === 'Falta'"
@@ -1341,7 +1456,7 @@ function descargarExcel(data, nombreArchivo) {
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente') + ')') : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
@@ -1379,10 +1494,6 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
                       Presente (A tiempo)
                     </span>
-                    <span v-if="!asistenciaDia[est._id]?.esMio" class="badge" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; font-size: 11px; margin-left: 6px; display: inline-flex; align-items: center; gap: 3px;" :title="'Registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente')">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                      {{ asistenciaDia[est._id]?.nombreDocenteCreador || 'Solo lectura' }}
-                    </span>
                   </td>
                   <td class="td-horas">
                     <div class="horas-wrap">
@@ -1396,7 +1507,7 @@ function descargarExcel(data, nombreArchivo) {
                         inputmode="numeric"
                         :value="asistenciaDia[est._id]?.horasFallidas || 0"
                         :disabled="jornadaInhabilitada || !asistenciaDia[est._id]?.esMio"
-                        :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura: registrado por Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || 'otro docente')) : (`Horas fallidas (máximo ${horasClaseFicha})`)"
+                        :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: registrada por otro docente' : (`Horas fallidas (máximo ${horasClaseFicha})`)"
                         @keydown="bloquearNoEnteros"
                         @input="onHorasInput(est._id, $event)"
                         @change="onHorasChange(est._id, $event)"
@@ -1471,7 +1582,7 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="marcarFalta(est._id)"
-                      :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || '') + ')') : 'Marcar falla'"
+                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Marcar falla'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -1483,7 +1594,7 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="toggleExcusa(est._id)"
-                      :title="!asistenciaDia[est._id]?.esMio ? ('Solo lectura (Prof. ' + (asistenciaDia[est._id]?.nombreDocenteCreador || '') + ')') : 'Registrar excusa'"
+                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Registrar excusa'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </button>

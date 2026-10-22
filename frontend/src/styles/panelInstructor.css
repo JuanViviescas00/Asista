@@ -854,6 +854,137 @@
   transform: translateY(-1px);
 }
 
+/* ===== BANNER DOCENTE RESPONSABLE DE LA JORNADA ===== */
+.docente-jornada-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.docente-jornada-banner.banner-docente-ajeno {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  color: #334155;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.docente-jornada-banner.banner-docente-propio {
+  background: #f0fdf4;
+  border: 1.5px solid #bbf7d0;
+  color: #166534;
+  box-shadow: 0 1px 3px rgba(22, 101, 52, 0.05);
+}
+
+.docente-jornada-banner.banner-docente-nuevo {
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  color: #475569;
+}
+
+.docente-jornada-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.banner-docente-ajeno .docente-jornada-icon-wrap {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.banner-docente-propio .docente-jornada-icon-wrap {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.banner-docente-nuevo .docente-jornada-icon-wrap {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.docente-jornada-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.docente-jornada-header-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.docente-jornada-pre {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.docente-jornada-nombre {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.banner-docente-propio .docente-jornada-nombre {
+  color: #15803d;
+}
+
+.badge-solo-lectura-tag {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge-tu-jornada-tag {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.badge-pendiente-tag {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.docente-jornada-desc {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.banner-docente-propio .docente-jornada-desc {
+  color: #166534;
+  opacity: 0.9;
+}
+
 .table-inhabilitada-overlay {
   position: relative;
   opacity: 0.75;

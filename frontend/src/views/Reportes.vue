@@ -758,6 +758,7 @@ function limpiar() {
         <div class="reporte-info-item"><strong>Ficha:</strong> {{ fichaSeleccionada.codigoFicha }} - {{ fichaSeleccionada.nombrePrograma }}</div>
         <div class="reporte-info-item"><strong>Jornada:</strong> {{ fichaSeleccionada.jornada }} ({{ horasPorJornada }} horas/sesión)</div>
         <div class="reporte-info-item"><strong>Aula:</strong> {{ fichaSeleccionada.aulaAsignada }}</div>
+        <div class="reporte-info-item"><strong>Docentes en Ficha:</strong> {{ datosReporteDocentes.map(d => d.nombre).join(', ') || 'No asignados' }}</div>
         <div class="reporte-info-item"><strong>Filtro Docente:</strong> {{ filtroInstructor === 'todos' ? 'Todos los Profesores' : (todosInstructores.find(i => String(i._id) === String(filtroInstructor))?.nombres || 'Docente') }}</div>
         <div class="reporte-info-item"><strong>Filtro Aprendiz:</strong> {{ filtroEstudiante === 'todos' ? 'Todos los Aprendices' : (todosEstudiantes.find(e => String(e._id) === String(filtroEstudiante))?.nombres || 'Aprendiz') }}</div>
         <div class="reporte-info-item"><strong>Periodo Consultado:</strong> {{ fechaDesde || 'Inicio' }} al {{ fechaHasta || 'Fin' }}</div>
@@ -773,6 +774,25 @@ function limpiar() {
         <StatCard icon="file-text" label="Con Excusa" :value="`${resumenReporte.totalHorasConExcusa}h`" variant="azul" />
         <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenReporte.totalDocentesActivos" variant="morado" />
         <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenReporte.totalSesionesDictadas" variant="indigo" />
+      </div>
+
+      <!-- RESUMEN SUPERIOR: DOCENTES A CARGO DE LAS JORNADAS (UN DOCENTE POR DÍA) -->
+      <div v-if="datosReporteDocentes.length > 0" class="reporte-docentes-superior">
+        <div class="reporte-docentes-titulo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>Docentes responsables de las jornadas registradas en este periodo:</span>
+        </div>
+        <div class="reporte-docentes-chips">
+          <div v-for="d in datosReporteDocentes" :key="d.id" class="docente-chip-superior">
+            <strong class="docente-chip-nombre">Prof. {{ d.nombre }}</strong>
+            <span class="docente-chip-meta">{{ d.clasesDictadas }} {{ d.clasesDictadas === 1 ? 'jornada' : 'jornadas' }} ({{ d.horasDictadas }}h) • {{ d.especialidad }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- ============================================= -->
@@ -796,7 +816,7 @@ function limpiar() {
                 <th>Horas Ausente</th>
                 <th>Sin Excusa</th>
                 <th>Con Excusa</th>
-                <th>Inasistencias por Fecha y Docente</th>
+                <th>Inasistencias por Fecha</th>
                 <th>% Asistencia</th>
               </tr>
             </thead>
@@ -835,20 +855,22 @@ function limpiar() {
                   <span v-else style="color: #94a3b8; font-size: 12px;">—</span>
                 </td>
                 <td>
-                  <div v-if="r.detallesInasistencias.length > 0" style="font-size: 11px; max-width: 340px;">
+                  <div v-if="r.detallesInasistencias.length > 0" class="inasistencias-cell-lista">
                     <div
                       v-for="(det, detIdx) in r.detallesInasistencias"
                       :key="detIdx"
-                      style="margin-bottom: 4px; padding: 4px 6px; border-radius: 4px; background: #f8fafc; border-left: 3px solid;"
-                      :style="{ borderColor: det.tipo === 'Excusada' ? '#0284c7' : '#ef4444' }"
+                      class="inasistencia-chip-item"
+                      :class="{ 'chip-excusada': det.tipo === 'Excusada', 'chip-injustificada': det.tipo !== 'Excusada' }"
+                      :title="`Sesión a cargo de: Prof. ${det.docente}`"
                     >
-                      <strong>{{ det.fecha }} ({{ det.horas }}h)</strong> - ‍ {{ det.docente }}:
-                      <span :style="{ color: det.tipo === 'Excusada' ? '#0369a1' : '#dc2626' }">
-                        {{ det.tipo === 'Excusada' ? ` ${det.motivo}` : ' Injustificada' }}
+                      <span class="inasistencia-chip-fecha">{{ det.fecha }} ({{ det.horas }}h)</span>
+                      <span class="inasistencia-chip-sep">—</span>
+                      <span class="inasistencia-chip-tipo">
+                        {{ det.tipo === 'Excusada' ? `Excusada (${det.motivo})` : 'Injustificada' }}
                       </span>
                     </div>
                   </div>
-                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;"> Sin inasistencias</span>
+                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;">Sin inasistencias</span>
                 </td>
                 <td>
                   <strong :style="{ color: r.porcentaje >= 80 ? '#22c55e' : r.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
@@ -1180,5 +1202,109 @@ function limpiar() {
 @media (prefers-reduced-motion: reduce) {
   .rf-panel * { transition: none !important; }
   .rf-entra-enter-active { animation: none; }
+}
+
+/* ====== Resumen Superior de Docentes (Un docente por jornada) ====== */
+.reporte-docentes-superior {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.reporte-docentes-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 10px;
+}
+
+.reporte-docentes-titulo svg {
+  color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.reporte-docentes-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.docente-chip-superior {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.docente-chip-nombre {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.docente-chip-meta {
+  font-size: 12px;
+  color: #64748b;
+  border-left: 1px solid #e2e8f0;
+  padding-left: 8px;
+}
+
+/* ====== Lista de Inasistencias en Celdas ====== */
+.inasistencias-cell-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 340px;
+}
+
+.inasistencia-chip-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border-left: 3px solid;
+  line-height: 1.3;
+}
+
+.inasistencia-chip-item.chip-injustificada {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.inasistencia-chip-item.chip-excusada {
+  border-left-color: #0284c7;
+  background: #f0f9ff;
+}
+
+.inasistencia-chip-fecha {
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.inasistencia-chip-sep {
+  color: #94a3b8;
+}
+
+.chip-injustificada .inasistencia-chip-tipo {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.chip-excusada .inasistencia-chip-tipo {
+  color: #0369a1;
+  font-weight: 600;
 }
 </style>

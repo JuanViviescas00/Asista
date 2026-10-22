@@ -1,5 +1,38 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 09:20] Reubicación Superior de Docente Responsable en Toma de Asistencia y Reportes (Eliminación de Redundancia por Jornada)
+
+- **Fecha y Hora:** 2026-10-22 09:20:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Repetición Redundante de Docente en Filas:* En la toma de lista diaria de `PanelInstructor.vue`, cada aprendiz renderizaba un badge individual con el nombre del docente que creó la lista cuando estaba en modo solo lectura, repitiendo el mismo nombre entre 30 y 40 veces en pantalla.
+  2. *Saturación de Celdas en Reportes:* En `Reportes.vue`, la columna "Inasistencias por Fecha y Docente" imprimía `👨‍🏫 Prof. [Nombre]:` en cada fecha de inasistencia de cada aprendiz, sobrecargando la tabla con información redundante cuando en el SENA habitualmente un solo docente lidera toda la jornada formativa de un día.
+  3. *Requerimiento del Usuario:* Concentrar la lectura del docente responsable en la parte superior (banner / cabecera) para informar de manera clara quién dictó la jornada y si está en solo lectura, dejando las tablas y celdas limpias y legibles.
+- **Causa Raíz:**
+  - Falta de un banner resumen a nivel de sesión/jornada en la cabecera de la tabla de toma de lista.
+  - Sobrecarga de texto en las celdas de inasistencias de reportes al no separar el contexto global del docente del detalle puntual de fechas y horas de cada aprendiz.
+- **Solución Aplicada:**
+  1. *Panel del Instructor (`PanelInstructor.vue` y `panelInstructor.css`):*
+     - Se crearon las propiedades computadas `docenteResponsableDia` y `jornadaEsDeOtroDocente` para determinar con precisión qué instructor dictó la clase de la fecha seleccionada.
+     - Se diseñó el componente superior `.docente-jornada-banner` que informa con jerarquía visual:
+       - Si es de otro docente: `Docente a cargo de la jornada: Prof. [Nombre] — 🔒 Modo solo lectura (No modificable)`.
+       - Si es del docente actual: `Docente a cargo de la jornada: Prof. [Nombre] — (Tú registraste esta jornada)`.
+       - Si es nueva: `Docente en turno para registrar: Prof. [Nombre] — (Pendiente por registrar)`.
+     - Se eliminó el badge repetitivo de cada fila `<tr>` y de las tarjetas móviles, manteniendo el bloqueo seguro de checkboxes y campos numéricos con cursor disabled.
+  2. *Módulo de Reportes (`Reportes.vue`):*
+     - Se agregó el bloque `.reporte-docentes-superior` antes de la tabla de aprendices, listando los instructores que tuvieron a cargo sesiones durante el periodo y la cantidad de jornadas dictadas.
+     - Se actualizó el encabezado de la tabla a `Inasistencias por Fecha` y se optimizaron los chips a `Fecha (Horas) — Tipo / Motivo` con tooltip explicativo `:title="Sesión a cargo de: Prof. [Nombre]"`.
+- **Archivos Modificados:**
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Reportes.vue`
+  - `frontend/src/styles/panelInstructor.css`
+  - `backend/public/` (Sincronizado vía `npm run build:prod`)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación exitosa en Vite (`npm run build:prod`, 0 errores).
+  - Trazabilidad y validación visual de no regresión en exportaciones CSV y PDF.
+
+---
+
 ## [2026-10-22 09:08] Normalización Integral de Datos (Jornada, Documentos, Textos) y Expansión de Tipos de Documento (TI, PA, CD, etc.)
 
 - **Fecha y Hora:** 2026-10-22 09:08:00 -05:00
