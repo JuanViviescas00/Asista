@@ -73,6 +73,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('online', onConexionRecuperada)
+  cancelarTodosDebounceHoras()
   if (timerColaOffline) {
     clearInterval(timerColaOffline)
     timerColaOffline = null
@@ -586,6 +587,32 @@ function actualizarEstadoPorHoras(reg, n) {
   }
 }
 
+// Debounce de envío por aprendiz (~800 ms tras la última tecla).
+const debounceHoras = new Map()
+
+function programarDebounceHoras(estId) {
+  const prev = debounceHoras.get(estId)
+  if (prev) clearTimeout(prev)
+  const t = setTimeout(() => {
+    debounceHoras.delete(estId)
+    sincronizarCambioNube(estId)
+  }, 800)
+  debounceHoras.set(estId, t)
+}
+
+function cancelarDebounceHoras(estId) {
+  const t = debounceHoras.get(estId)
+  if (t) {
+    clearTimeout(t)
+    debounceHoras.delete(estId)
+  }
+}
+
+function cancelarTodosDebounceHoras() {
+  for (const t of debounceHoras.values()) clearTimeout(t)
+  debounceHoras.clear()
+}
+
 // Mientras escribe: se actualiza el estado (Tardanza/Falta/Presente) y los chips en vivo
 function onHorasInput(estId, ev) {
   const reg = asistenciaDia.value[estId]
@@ -594,10 +621,12 @@ function onHorasInput(estId, ev) {
   if (Number.isNaN(n)) return // campo vacío mientras escribe
   actualizarEstadoPorHoras(reg, n)
   autoGuardarBorrador()
+  programarDebounceHoras(estId)
 }
 
 // Al salir del campo: se asegura el rango válido y sincroniza en la nube
 async function onHorasChange(estId, ev) {
+  cancelarDebounceHoras(estId)
   const reg = asistenciaDia.value[estId]
   if (!reg) return
   if (!reg.esMio) {
@@ -615,6 +644,7 @@ async function onHorasChange(estId, ev) {
 
 function inicializarAsistenciaDia() {
   limpiarEstadosFila()
+  cancelarTodosDebounceHoras()
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
   const currentFichaId = fichaSeleccionada.value ? String(fichaSeleccionada.value._id) : null
