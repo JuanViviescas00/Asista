@@ -328,3 +328,26 @@
 
 
 
+
+
+---
+
+## [2026-10-21 19:24] Asistencia Manual: Aprendices no marcados en Presente y Sincronización Inmediata a la Nube
+
+- **Fecha y Hora:** 2026-10-21 19:24:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. En el modo manual del panel docente, todos los aprendices arrancaban visualmente con el badge rojo de "Falta (Automática)", forzando al docente a marcar uno a uno a los presentes en lugar de marcar únicamente a los ausentes.
+  2. Los aprendices que no tenían falta debían figurar como "Presentes", y al realizar cualquier acción de marcación o al guardar la jornada, los cambios debían sincronizarse y persistir inmediatamente en la base de datos en la nube (MongoDB Atlas).
+- **Causa Raíz:**
+  1. La refactorización previa había inicializado el estado diario de asistencia en `'Ninguno'` asignándole badge de Falta por omisión.
+  2. La función de marcación solo guardaba localmente en el almacén reactivo Pinia/localStorage (`draftStore`) y no despachaba peticiones de mutación a la API de MongoDB Atlas hasta presionar "Finalizar Jornada".
+- **Solución Aplicada:**
+  1. **Estado Inicial en Presente:** En `inicializarAsistenciaDia`, los aprendices sin registro previo ahora arrancan en estado `'Presente'`, con hora actual y 0 horas fallidas.
+  2. **Columna "Marcar Falla":** Se restauró el checkbox de falta (`checkbox-falta`) y la función `marcarFalta(estId)`. Si la casilla está sin marcar, el aprendiz permanece como `Presente (A tiempo)`. Si se marca la casilla, pasa a `Falta` (con las horas de la jornada como horas fallidas).
+  3. **Sincronización Inmediata en la Nube:** Se creó la función `sincronizarCambioNube(estId)` que despacha de inmediato un `POST /api/asistencias` a MongoDB Atlas cada vez que el docente marca/desmarca una falla, asigna una excusa o edita las horas fallidas.
+  4. **Persistencia Garantizada en Guardado Masivo:** En `guardarAsistenciaDia`, todo aprendiz sin marcar en faltas queda confirmado y almacenado en la nube con estado `Presente`.
+- **Archivos Modificados:**
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación de producción con `npm run build:frontend` (Vite v8, 139 módulos transformados) completada con éxito en 1.32s sin errores.

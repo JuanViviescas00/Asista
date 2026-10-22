@@ -493,7 +493,7 @@ function onHorasInput(estId, ev) {
 }
 
 // Al salir del campo: si quedó vacío o inválido, se restaura el valor guardado
-function onHorasChange(estId, ev) {
+async function onHorasChange(estId, ev) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
   const n = parseInt(ev.target.value, 10)
@@ -501,6 +501,7 @@ function onHorasChange(estId, ev) {
   reg.horasFallidas = limitado
   ev.target.value = limitado
   autoGuardarBorrador()
+  await sincronizarCambioNube(estId)
 }
 
 function inicializarAsistenciaDia() {
@@ -511,8 +512,8 @@ function inicializarAsistenciaDia() {
     const existente = asistenciasFicha.value.find(
       a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === hoy
     )
-    const estado = existente ? existente.estado : 'Ninguno'
-    const hora = existente ? (existente.hora || '') : ''
+    const estado = existente ? existente.estado : 'Presente'
+    const hora = existente ? (existente.hora || '') : (new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
       : { horas: 0, texto: '0 horas' }
@@ -524,6 +525,7 @@ function inicializarAsistenciaDia() {
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
       subidoSofia: existente ? !!existente.subidoSofia : false,
+      previo: null,
     }
     registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
@@ -549,7 +551,50 @@ function inicializarAsistenciaDia() {
   asistenciaDia.value = registros
 }
 
-function marcarPresente(estId) {
+async function sincronizarCambioNube(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return
+  if (fechaAsistencia.value > fechaHoyMax.value) return
+
+  const horaActual = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
+
+  let estadoFinal = reg.excusa ? 'Excusada' : reg.estado
+  let horaMarcada = reg.horaMarcacion || horaActual
+  let hTardanza = reg.horasTardanza || 0
+  let tTardanza = reg.tiempoTardanza || '0 horas'
+
+  if (estadoFinal === 'Falta') {
+    horaMarcada = '—'
+    hTardanza = 0
+    tTardanza = '0 horas'
+  } else if (estadoFinal === 'Tardanza') {
+    const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
+    hTardanza = reg.horasTardanza || calc.horas
+    tTardanza = reg.tiempoTardanza || calc.texto
+  }
+
+  const itemAsistencia = {
+    estudianteId: estId,
+    fichaId: fichaSeleccionada.value._id,
+    estado: estadoFinal,
+    fecha: fechaAsistencia.value,
+    hora: horaMarcada,
+    horasTardanza: hTardanza,
+    tiempoTardanza: tTardanza,
+    instructorId: usuario.value.id || null,
+    metodo: 'MANUAL',
+  }
+
+  try {
+    await api.asistencias.create(itemAsistencia)
+  } catch (err) {
+    console.warn(`[Sync Nube] Error sincronizando estudiante ${estId}:`, err.message)
+    draftStore.encolarOffline([itemAsistencia])
+  }
+}
+
+async function marcarFalta(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para tomar asistencia.', 'warning')
     return
@@ -562,30 +607,36 @@ function marcarPresente(estId) {
     return
   }
 
-  if (reg.estado === 'Presente' || reg.estado === 'Tardanza') {
-    // Desmarcar al hacer clic de nuevo
-    reg.estado = 'Ninguno'
-    reg.horaMarcacion = ''
+  if (reg.estado === 'Falta') {
+    // Desmarcar la falla: vuelve a estar Presente
+    const previo = reg.previo
+    reg.estado = previo?.estado || 'Presente'
+    reg.horaMarcacion = previo?.horaMarcacion || new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    reg.horasTardanza = previo?.horasTardanza || 0
+    reg.tiempoTardanza = previo?.tiempoTardanza || '0 horas'
+    reg.excusa = false
+    reg.previo = null
+  } else {
+    // Marcar falla
+    reg.previo = {
+      estado: reg.estado,
+      horaMarcacion: reg.horaMarcacion,
+      horasTardanza: reg.horasTardanza,
+      tiempoTardanza: reg.tiempoTardanza,
+    }
+    reg.estado = 'Falta'
+    reg.horaMarcacion = '—'
     reg.horasTardanza = 0
     reg.tiempoTardanza = '0 horas'
-  } else {
-    const ahora = new Date()
-    const horaFormateada = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    const ahoraMs = ahora.getTime()
-    const minutos = calcularMinutosTranscurridos(claseIniciadaAt.value || ahoraMs, ahoraMs)
-    const tardanzaInfo = calcularEstadoPorTiempo(minutos)
-
-    reg.estado = tardanzaInfo.estado
-    reg.horaMarcacion = horaFormateada
-    reg.horasTardanza = tardanzaInfo.horasTardanza
-    reg.tiempoTardanza = tardanzaInfo.tiempoTardanza
     reg.excusa = false
   }
   reg.horasFallidas = horasAuto(reg)
   autoGuardarBorrador()
+
+  await sincronizarCambioNube(estId)
 }
 
-function toggleExcusa(estId) {
+async function toggleExcusa(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para registrar excusas.', 'warning')
     return
@@ -602,13 +653,12 @@ function toggleExcusa(estId) {
   if (reg.excusa) {
     reg.estado = 'Excusada'
   } else {
-    reg.estado = 'Ninguno'
-    reg.horaMarcacion = ''
-    reg.horasTardanza = 0
-    reg.tiempoTardanza = '0 horas'
+    reg.estado = reg.previo ? 'Falta' : 'Presente'
   }
-
+  reg.horasFallidas = horasAuto(reg)
   autoGuardarBorrador()
+
+  await sincronizarCambioNube(estId)
 }
 
 
@@ -631,7 +681,7 @@ async function guardarAsistenciaDia() {
 
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
-    let estadoFinal = 'Falta'
+    let estadoFinal = 'Presente'
     let horaMarcada = horaActual
     let hTardanza = 0
     let tTardanza = '0 horas'
@@ -640,14 +690,18 @@ async function guardarAsistenciaDia() {
       if (reg.excusa) {
         estadoFinal = 'Excusada'
         horaMarcada = reg.horaMarcacion || horaActual
-      } else if (['Presente', 'Tardanza', 'Excusada'].includes(reg.estado)) {
-        estadoFinal = reg.estado
+      } else if (reg.estado === 'Falta') {
+        estadoFinal = 'Falta'
+        horaMarcada = '—'
+      } else if (reg.estado === 'Tardanza') {
+        estadoFinal = 'Tardanza'
         horaMarcada = reg.horaMarcacion || horaActual
-        if (estadoFinal === 'Tardanza') {
-          const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
-          hTardanza = reg.horasTardanza || calc.horas
-          tTardanza = reg.tiempoTardanza || calc.texto
-        }
+        const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
+        hTardanza = reg.horasTardanza || calc.horas
+        tTardanza = reg.tiempoTardanza || calc.texto
+      } else {
+        estadoFinal = 'Presente'
+        horaMarcada = reg.horaMarcacion || horaActual
       }
     }
 
@@ -675,7 +729,7 @@ async function guardarAsistenciaDia() {
   if (errores === 0) {
     draftStore.limpiarBorrador(fichaSeleccionada.value._id, hoy)
     await cargarDatosFicha(fichaSeleccionada.value._id)
-    showToast(`Jornada finalizada. Asistencias guardadas exitosamente.`)
+    showToast(`Jornada finalizada. Asistencias guardadas exitosamente y sincronizadas en la nube.`)
   } else {
     // Si hubo errores (ej: fallo de conexión/internet), encolar en Pinia offline
     draftStore.encolarOffline(fallidosParaOffline)
@@ -697,14 +751,17 @@ const conteoAsistencia = computed(() => {
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
     if (reg) {
-      const estado = reg.excusa ? 'Excusada' : reg.estado
-      if (['Presente', 'Tardanza', 'Excusada'].includes(estado)) {
-        conteo[estado]++
+      if (reg.excusa || reg.estado === 'Excusada') {
+        conteo.Excusada++
+      } else if (reg.estado === 'Falta') {
+        conteo.Falta++
+      } else if (reg.estado === 'Tardanza') {
+        conteo.Tardanza++
       } else {
-        conteo.Falta++ // Los no marcados cuentan como Falta automática
+        conteo.Presente++
       }
     } else {
-      conteo.Falta++
+      conteo.Presente++
     }
   }
   return conteo
@@ -1202,7 +1259,7 @@ function descargarExcel(data, nombreArchivo) {
                 <tr>
                   <th>Aprendiz</th>
                   <th>Documento</th>
-                  <th>Marcar Presente</th>
+                  <th>Marcar Falla</th>
                   <th>Excusa (F2F)</th>
                   <th>Hora Marcación</th>
                   <th>Estado Asignado</th>
@@ -1218,11 +1275,11 @@ function descargarExcel(data, nombreArchivo) {
                     <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
                       <input
                         type="checkbox"
-                        :checked="asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza'"
-                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
-                        @change="marcarPresente(est._id)"
+                        :checked="asistenciaDia[est._id]?.estado === 'Falta'"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                        @change="marcarFalta(est._id)"
                       />
-                      <span class="checkbox-custom radio-presente"></span>
+                      <span class="checkbox-custom checkbox-falta"></span>
                     </label>
                   </td>
                   <td class="td-radio">
@@ -1252,17 +1309,17 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                       Excusada
                     </span>
-                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge badge-success">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
-                      Presente (A tiempo)
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge badge-danger">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                      Falta
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge badge-warning">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
                       Tardanza ({{ asistenciaDia[est._id]?.tiempoTardanza || '1 hora' }})
                     </span>
-                    <span v-else class="badge badge-danger">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
-                      Falta (Automática)
+                    <span v-else class="badge badge-success">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
+                      Presente (A tiempo)
                     </span>
                   </td>
                   <td class="td-horas">
@@ -1317,9 +1374,9 @@ function descargarExcel(data, nombreArchivo) {
                     <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
                     <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
                     <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge-mob-pres">Presente</span>
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
-                    <span v-else class="badge-mob-falta">Falta</span>
+                    <span v-else class="badge-mob-pres">Presente</span>
                   </div>
                 </div>
                 <div class="mob-card-footer">
@@ -1345,16 +1402,16 @@ function descargarExcel(data, nombreArchivo) {
                   </div>
 
                   <div class="mob-actions-row">
-                    <!-- Botón Marcar Asistencia Táctil -->
+                    <!-- Botón Marcar Falla Táctil -->
                     <button
                       type="button"
-                      class="btn-mob-presente"
-                      :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
-                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
-                      @click="marcarPresente(est._id)"
-                      title="Marcar presente"
+                      class="btn-mob-falta"
+                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                      @click="marcarFalta(est._id)"
+                      title="Marcar falla"
                     >
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
 
                     <!-- Botón Excusa Táctil -->
