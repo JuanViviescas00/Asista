@@ -28,7 +28,7 @@ const vistaFicha = ref('asistencia')
 // Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
-const feedEnVivoDocente = ref([])
+const finalizando = ref(false)
 const claseIniciadaAt = ref(null)
 
 // Toast notifications
@@ -50,11 +50,22 @@ async function onConexionRecuperada() {
   }
 }
 
+let timerColaOffline = null
+function iniciarTimerColaOffline() {
+  if (timerColaOffline) return
+  timerColaOffline = setInterval(() => {
+    if (draftStore.pendientesOfflineCount > 0) {
+      draftStore.sincronizarColaOffline(api)
+    }
+  }, 30000)
+}
+
 onMounted(async () => {
   window.addEventListener('online', onConexionRecuperada)
   await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
+  iniciarTimerColaOffline()
   if (draftStore.pendientesOfflineCount > 0) {
     onConexionRecuperada()
   }
@@ -62,39 +73,16 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('online', onConexionRecuperada)
+  if (timerColaOffline) {
+    clearInterval(timerColaOffline)
+    timerColaOffline = null
+  }
   if (fichaSeleccionada.value?._id) {
     salirDeSalaFicha(fichaSeleccionada.value._id)
   }
 })
 
 function iniciarSocketDocente() {
-  socket.on('ATTENDANCE_REGISTERED', (data) => {
-    if (!data || !data.estudianteId) return
-    if (data.fichaId && fichaSeleccionada.value?._id && String(data.fichaId) !== String(fichaSeleccionada.value._id)) {
-      return
-    }
-    if (asistenciaDia.value[data.estudianteId]) {
-      asistenciaDia.value[data.estudianteId].estado = data.estado
-      asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
-      asistenciaDia.value[data.estudianteId].horasTardanza = data.horasTardanza || 0
-      asistenciaDia.value[data.estudianteId].tiempoTardanza = data.tiempoTardanza || '0 horas'
-      asistenciaDia.value[data.estudianteId].excusa = data.estado === 'Excusada'
-      asistenciaDia.value[data.estudianteId].previo = null
-      asistenciaDia.value[data.estudianteId].horasFallidas = horasAuto(asistenciaDia.value[data.estudianteId])
-      autoGuardarBorrador()
-    }
-    feedEnVivoDocente.value.unshift({
-      id: data.estudianteId,
-      nombre: `${data.nombres} ${data.apellidos}`,
-      hora: data.hora,
-      estado: data.estado,
-    })
-    if (feedEnVivoDocente.value.length > 8) {
-      feedEnVivoDocente.value.pop()
-    }
-    showToast(`${data.nombres} ${data.apellidos} marcó ${data.estado} (${data.hora})`, data.estado === 'Tardanza' ? 'warning' : 'success')
-  })
-
   socket.on('CLASS_ACTIVATED', (data) => {
     if (!data || !data.fichaId) return
     if (fichaSeleccionada.value && String(fichaSeleccionada.value._id) === String(data.fichaId)) {
@@ -106,6 +94,9 @@ function iniciarSocketDocente() {
     if (!data || !data.fichaId) return
     if (fichaSeleccionada.value && String(fichaSeleccionada.value._id) === String(data.fichaId)) {
       sesionRemotaActiva.value = false
+      if (!finalizando.value) {
+        cargarDatosFicha(fichaSeleccionada.value._id)
+      }
     }
   })
 
@@ -162,7 +153,8 @@ async function iniciarSesionRemotaDocente() {
 }
 
 async function detenerSesionRemotaDocente() {
-  if (!fichaSeleccionada.value) return
+  if (!fichaSeleccionada.value || finalizando.value) return
+  finalizando.value = true
   try {
     await api.clases.finalizar({
       fichaId: fichaSeleccionada.value._id,
@@ -171,8 +163,11 @@ async function detenerSesionRemotaDocente() {
     sesionRemotaActiva.value = false
     claseIniciadaAt.value = null
     showToast('Clase finalizada.', 'info')
+    await cargarDatosFicha(fichaSeleccionada.value._id)
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
+  } finally {
+    finalizando.value = false
   }
 }
 
@@ -211,7 +206,6 @@ async function seleccionarFicha(ficha) {
   }
   fichaSeleccionada.value = ficha
   vistaFicha.value = 'asistencia'
-  feedEnVivoDocente.value = []
   if (ficha?._id) {
     unirseASalaFicha(ficha._id, 'docente')
   }
@@ -620,6 +614,7 @@ async function onHorasChange(estId, ev) {
 }
 
 function inicializarAsistenciaDia() {
+  limpiarEstadosFila()
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
   const currentFichaId = fichaSeleccionada.value ? String(fichaSeleccionada.value._id) : null
@@ -702,13 +697,45 @@ function inicializarAsistenciaDia() {
   asistenciaDia.value = registros
 }
 
-async function sincronizarCambioNube(estId) {
+// Estado visual por fila: 'guardando' | 'guardado' | 'error'
+const estadoFilaSync = ref({})
+const timersGuardado = new Map()
+// Serialización por aprendiz: a lo sumo una petición en vuelo + un estado pendiente.
+const syncEnVuelo = new Map()
+
+function dormir(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function setEstadoFila(estId, estado, detalle = '') {
+  const prev = timersGuardado.get(estId)
+  if (prev) {
+    clearTimeout(prev)
+    timersGuardado.delete(estId)
+  }
+  estadoFilaSync.value[estId] = { estado, detalle }
+  if (estado === 'guardado') {
+    timersGuardado.set(estId, setTimeout(() => {
+      if (estadoFilaSync.value[estId]?.estado === 'guardado') {
+        delete estadoFilaSync.value[estId]
+      }
+      timersGuardado.delete(estId)
+    }, 2000))
+  }
+}
+
+function limpiarEstadosFila() {
+  for (const t of timersGuardado.values()) clearTimeout(t)
+  timersGuardado.clear()
+  estadoFilaSync.value = {}
+}
+
+// Construye el payload a partir del estado ACTUAL del aprendiz (en el momento del envío).
+function construirItem(estId) {
   const reg = asistenciaDia.value[estId]
-  if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return
-  if (fechaAsistencia.value > fechaHoyMax.value) return
+  if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return null
 
   const horaActual = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
 
   let estadoFinal = reg.excusa ? 'Excusada' : reg.estado
   let horaMarcada = reg.horaMarcacion || horaActual
@@ -724,7 +751,7 @@ async function sincronizarCambioNube(estId) {
     tTardanza = `${hTardanza} ${hTardanza === 1 ? 'hora' : 'horas'}`
   }
 
-  const itemAsistencia = {
+  return {
     estudianteId: estId,
     fichaId: fichaSeleccionada.value._id,
     estado: estadoFinal,
@@ -735,39 +762,96 @@ async function sincronizarCambioNube(estId) {
     instructorId: usuario.value.id || null,
     metodo: 'MANUAL',
   }
+}
 
-  try {
-    const res = await api.asistencias.create(itemAsistencia)
-    const sFichaId = String(fichaSeleccionada.value._id)
-    if (res?.eliminado) {
-      asistenciasFicha.value = asistenciasFicha.value.filter(a =>
-        !(String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
-          a.fecha === fechaAsistencia.value &&
-          String(a.fichaId?._id || a.fichaId) === sFichaId)
-      )
-    } else if (res?._id) {
-      const idx = asistenciasFicha.value.findIndex(a =>
-        String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
-        a.fecha === fechaAsistencia.value &&
-        String(a.fichaId?._id || a.fichaId) === sFichaId
-      )
-      if (idx >= 0) {
-        asistenciasFicha.value[idx] = res
-      } else {
-        asistenciasFicha.value.push(res)
+async function enviarEstado(estId) {
+  const esperas = [1000, 3000, 8000]
+  for (let intento = 0; ; intento++) {
+    const item = construirItem(estId)
+    if (!item) return
+    const fecha = item.fecha
+    const sFichaId = String(item.fichaId)
+
+    setEstadoFila(estId, 'guardando')
+    try {
+      const res = await api.asistencias.create(item)
+      if (res?.eliminado) {
+        asistenciasFicha.value = asistenciasFicha.value.filter(a =>
+          !(String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
+            a.fecha === fecha &&
+            String(a.fichaId?._id || a.fichaId) === sFichaId)
+        )
+      } else if (res?._id) {
+        const idx = asistenciasFicha.value.findIndex(a =>
+          String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
+          a.fecha === fecha &&
+          String(a.fichaId?._id || a.fichaId) === sFichaId
+        )
+        if (idx >= 0) {
+          asistenciasFicha.value[idx] = res
+        } else {
+          asistenciasFicha.value.push(res)
+        }
       }
-    }
-    draftStore.quitarRegistroBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, estId)
-  } catch (err) {
-    if (err.status === 409) {
-      draftStore.quitarRegistroBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, estId)
-      showToast(err.message, 'error')
-      await cargarDatosFicha(fichaSeleccionada.value._id)
+      draftStore.quitarRegistroBorrador(item.fichaId, fecha, estId)
+      draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, fecha)
+      setEstadoFila(estId, 'guardado')
       return
+    } catch (err) {
+      if (err.status === 409) {
+        draftStore.quitarRegistroBorrador(item.fichaId, fecha, estId)
+        showToast(err.message, 'error')
+        await cargarDatosFicha(item.fichaId)
+        delete estadoFilaSync.value[estId]
+        return
+      }
+      if (err.status && err.status >= 400 && err.status < 500) {
+        setEstadoFila(estId, 'error', err.message)
+        return
+      }
+      console.warn(`[Sync Nube] Reintento ${intento + 1} para ${estId}:`, err.message)
+      if (intento >= esperas.length) {
+        draftStore.encolarOffline([item])
+        setEstadoFila(estId, 'error', `${err.message} — se guardó localmente y se reintentará`)
+        return
+      }
+      await dormir(esperas[intento])
     }
-    console.warn(`[Sync Nube] Error sincronizando estudiante ${estId}:`, err.message)
-    draftStore.encolarOffline([itemAsistencia])
   }
+}
+
+async function procesarColaSync(estId, entrada, fichaId, fecha) {
+  try {
+    do {
+      entrada.pendiente = false
+      if (String(fichaSeleccionada.value?._id) !== String(fichaId) || fechaAsistencia.value !== fecha) {
+        console.warn(`[Sync Nube] Se cambió de fecha/ficha durante la sincronización de ${estId}; se omite el estado pendiente.`)
+        break
+      }
+      await enviarEstado(estId)
+    } while (entrada.pendiente && asistenciaDia.value[estId])
+  } finally {
+    syncEnVuelo.delete(estId)
+  }
+}
+
+function sincronizarCambioNube(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return
+  if (fechaAsistencia.value > fechaHoyMax.value) return
+
+  const fichaId = fichaSeleccionada.value._id
+  const fecha = fechaAsistencia.value
+
+  const entrada = syncEnVuelo.get(estId)
+  if (entrada?.enVuelo) {
+    entrada.pendiente = true
+    return
+  }
+
+  const nueva = { enVuelo: true, pendiente: false }
+  syncEnVuelo.set(estId, nueva)
+  void procesarColaSync(estId, nueva, fichaId, fecha)
 }
 
 async function marcarFalta(estId) {
@@ -1137,31 +1221,12 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-remote-stop"
                   @click="detenerSesionRemotaDocente"
+                  :disabled="finalizando"
                   title="Finalizar pase de lista"
                 >
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                 </button>
 
-              </div>
-            </div>
-
-            <!-- Feed en Vivo si la sesión remota está activa o hay marcaciones recientes -->
-            <div v-if="feedEnVivoDocente.length > 0" class="remote-live-feed">
-              <div class="live-feed-title">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M8 9a6 6 0 0 1 8 0"/><path d="M5 6a10.5 10.5 0 0 1 14 0"/></svg>
-                <span>Marcaciones Recientes en Tiempo Real</span>
-              </div>
-              <div class="live-feed-chips">
-                <div
-                  v-for="item in feedEnVivoDocente"
-                  :key="item.id + item.hora"
-                  class="live-feed-chip"
-                  :class="item.estado === 'Tardanza' ? 'feed-tardanza' : 'feed-presente'"
-                >
-                  <span class="feed-dot"></span>
-                  <strong>{{ item.nombre }}</strong>
-                  <span class="feed-time">{{ item.hora }} ({{ item.estado }})</span>
-                </div>
               </div>
             </div>
           </div>
@@ -1384,7 +1449,14 @@ function descargarExcel(data, nombreArchivo) {
               <tbody>
                 <tr v-for="est in estudiantesFicha" :key="est._id"
                     :class="{ 'row-excusada': asistenciaDia[est._id]?.excusa, 'row-disabled': jornadaInhabilitada }">
-                  <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
+                  <td>
+                    <strong>{{ est.nombres }} {{ est.apellidos }}</strong>
+                    <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
+                      <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
+                      <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
+                      <template v-else>error</template>
+                    </span>
+                  </td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
                     <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
@@ -1482,7 +1554,14 @@ function descargarExcel(data, nombreArchivo) {
                     {{ (est.nombres?.[0] || 'A') + (est.apellidos?.[0] || '') }}
                   </div>
                   <div class="mob-info">
-                    <strong class="mob-name">{{ est.nombres }} {{ est.apellidos }}</strong>
+                    <strong class="mob-name">
+                      {{ est.nombres }} {{ est.apellidos }}
+                      <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
+                        <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
+                        <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
+                        <template v-else>error</template>
+                      </span>
+                    </strong>
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
                   </div>
                   <div class="mob-status-badge">

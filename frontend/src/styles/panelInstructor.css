@@ -1554,3 +1554,15 @@
     justify-content: space-between;
   }
 }
+
+/* Indicador de guardado por fila (mínimo y discreto) */
+.sync-indicador {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.sync-indicador.sync-guardando { color: #b45309; }
+.sync-indicador.sync-guardado { color: #16a34a; }
+.sync-indicador.sync-error { color: #dc2626; cursor: help; }

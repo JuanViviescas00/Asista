@@ -114,11 +114,37 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     }
   }
 
+  function claveItem(item) {
+    return `${String(item.estudianteId)}|${String(item.fichaId)}|${item.fecha}`
+  }
+
+  /**
+   * Elimina de la cola offline cualquier item con la misma clave (aprendiz + ficha + fecha).
+   */
+  function quitarDeColaOffline(estudianteId, fichaId, fecha) {
+    if (!estudianteId || !fichaId || !fecha) return
+    const clave = `${String(estudianteId)}|${String(fichaId)}|${fecha}`
+    let cambiado = false
+    for (const lote of colaOffline.value) {
+      const antes = lote.items.length
+      lote.items = lote.items.filter(it => claveItem(it) !== clave)
+      if (lote.items.length !== antes) cambiado = true
+    }
+    colaOffline.value = colaOffline.value.filter(lote => lote.items.length > 0)
+    if (cambiado) persistirColaOffline()
+  }
+
   /**
    * Encola un lote de asistencias que no pudieron enviarse por caída de internet.
+   * Reemplaza cualquier item previo con la misma clave (aprendiz + ficha + fecha).
    */
   function encolarOffline(loteAsistencias) {
     if (!Array.isArray(loteAsistencias) || loteAsistencias.length === 0) return
+    const claves = new Set(loteAsistencias.map(claveItem))
+    for (const lote of colaOffline.value) {
+      lote.items = lote.items.filter(it => !claves.has(claveItem(it)))
+    }
+    colaOffline.value = colaOffline.value.filter(lote => lote.items.length > 0)
     colaOffline.value.push({
       id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       timestamp: Date.now(),
@@ -184,6 +210,7 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     obtenerBorrador,
     limpiarBorrador,
     quitarRegistroBorrador,
+    quitarDeColaOffline,
     encolarOffline,
     sincronizarColaOffline
   }
