@@ -153,7 +153,14 @@
 
 .login-carnet-label {
   width: 100%;
-  padding: 12px 10px 10px;
+  /* Misma altura en ambas tarjetas y texto centrado verticalmente,
+     para que un título de una línea quede alineado con uno de dos. */
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 10px;
   background: var(--hueso);
   color: var(--texto-suave);
   font-size: 11px;
@@ -196,6 +203,7 @@
 
 .login-carnet-footer {
   width: 100%;
+  margin-top: auto;
   padding: 10px 8px;
   text-align: center;
   font-size: 12px;
@@ -467,7 +475,8 @@
 
   .login-carnet-label {
     font-size: 10px;
-    padding: 10px 6px 8px;
+    min-height: 48px;
+    padding: 8px 6px;
   }
 
   .login-carnet-avatar {
