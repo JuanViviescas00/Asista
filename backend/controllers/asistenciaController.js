@@ -10,6 +10,7 @@ import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 import {
   upsertAsistenciaSQLite,
   upsertAsistenciasBatchSQLite,
+  deleteAsistenciaSQLite,
   getSqliteFilePath,
   checkpointSQLite
 } from '../services/sqliteExport.js'
@@ -83,7 +84,40 @@ export async function createAsistencia(req, res) {
 
     const instructorFinal = usuarioId || existente?.instructorId || null
 
-    // 1. Guardar en MongoDB Atlas
+    // Bloqueo por subida a Sofía Plus: una novedad ya reportada no puede editarse
+    // ni quitarse, sin importar su origen (manual o huellero).
+    if (existente?.subidoSofia) {
+      return res.status(409).json({
+        error: 'Esta inasistencia ya fue reportada a Sofía Plus y no se puede modificar.'
+      })
+    }
+
+    // Solo se persisten novedades (Falta, Tardanza, Excusada, Inhabilitada). "Presente"
+    // no se guarda: si el docente desmarca una novedad previa, se elimina el registro.
+    // Las filas "Presente" (aún creadas por el huellero vía procesarAsistencia) no se borran.
+    if (estado === 'Presente') {
+      const debeBorrar = existente && existente.estado !== 'Presente'
+      if (debeBorrar) {
+        const [estudianteDoc, fichaDoc] = await Promise.all([
+          Estudiante.findById(estudianteId),
+          Ficha.findById(fichaId)
+        ])
+        await Asistencia.deleteOne({ estudianteId, fichaId, fecha })
+        await Estudiante.findByIdAndUpdate(estudianteId, { estadoAsistencia: 'Presente' })
+
+        // Eliminar también la fila en SQLite para que el RPA/Sofía Plus nunca la suba.
+        if (estudianteDoc && fichaDoc) {
+          deleteAsistenciaSQLite({
+            fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
+            documentoAprendiz: estudianteDoc.numeroDocumento || '',
+            fecha
+          })
+        }
+      }
+      return res.json({ ok: true, estado: 'Presente', eliminado: !!debeBorrar })
+    }
+
+    // 1. Guardar en MongoDB Atlas (upsert de la novedad)
     const asistencia = await Asistencia.findOneAndUpdate(
       { estudianteId, fichaId, fecha },
       {
@@ -335,7 +369,16 @@ export async function inhabilitarJornada(req, res) {
     ])
     const motivoFinal = motivo || 'Jornada no impartida / Actividad institucional'
 
-    const operaciones = estudiantes.map(est => ({
+    // Aprendices con novedades ya reportadas a Sofía Plus: no se sobrescriben.
+    const bloqueados = await Asistencia.find({
+      fichaId: { $in: idsBuscar },
+      fecha,
+      subidoSofia: true
+    }).select('estudianteId')
+    const bloqueadosSet = new Set(bloqueados.map(b => String(b.estudianteId)))
+    const editables = estudiantes.filter(est => !bloqueadosSet.has(String(est._id)))
+
+    const operaciones = editables.map(est => ({
       updateOne: {
         filter: { estudianteId: est._id, fecha },
         update: {
@@ -360,7 +403,7 @@ export async function inhabilitarJornada(req, res) {
 
       // Sincronizar en lote a SQLite
       if (fichaDoc) {
-        const sqliteRows = estudiantes.map(est => ({
+        const sqliteRows = editables.map(est => ({
           fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
           nombrePrograma: fichaDoc.nombrePrograma || '',
           jornada: fichaDoc.jornada || '',
@@ -377,7 +420,7 @@ export async function inhabilitarJornada(req, res) {
       }
     }
 
-    res.json({ ok: true, count: operaciones.length, motivo: motivoFinal })
+    res.json({ ok: true, count: operaciones.length, bloqueadas: bloqueados.length, motivo: motivoFinal })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -391,8 +434,22 @@ export async function reactivarJornada(req, res) {
     }
 
     const idsBuscar = await getFichaIdList(fichaId)
-    await Asistencia.deleteMany({ fichaId: { $in: idsBuscar }, fecha, estado: 'Inhabilitada' })
-    res.json({ ok: true, message: 'Jornada reactivada exitosamente' })
+
+    const bloqueadas = await Asistencia.countDocuments({
+      fichaId: { $in: idsBuscar },
+      fecha,
+      estado: 'Inhabilitada',
+      subidoSofia: true
+    })
+
+    await Asistencia.deleteMany({
+      fichaId: { $in: idsBuscar },
+      fecha,
+      estado: 'Inhabilitada',
+      subidoSofia: { $ne: true }
+    })
+
+    res.json({ ok: true, message: 'Jornada reactivada exitosamente', bloqueadas })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

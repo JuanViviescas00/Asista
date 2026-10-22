@@ -67,7 +67,9 @@ async function request(url, options = {}) {
         window.dispatchEvent(new CustomEvent('auth-expired', { detail: data.error }))
       }
     }
-    throw new Error(data.error || 'Error del servidor')
+    const err = new Error(data.error || 'Error del servidor')
+    err.status = res.status
+    throw err
   }
 
   return data

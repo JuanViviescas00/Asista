@@ -299,6 +299,31 @@ export function upsertAsistenciasBatchSQLite(items, targetDb = null) {
 }
 
 /**
+ * Elimina un registro individual de asistencia del archivo SQLite (por clave única).
+ * Se usa al desmarcar una falla en Mongo, para que el RPA/Sofía Plus nunca la suba.
+ */
+export function deleteAsistenciaSQLite({ fichaCodigo, documentoAprendiz, fecha }, targetDb = null) {
+  try {
+    const sqlite = targetDb || getDB()
+    const stmt = sqlite.prepare(`
+      DELETE FROM asistencias
+      WHERE ficha_codigo = @fichaCodigo
+        AND documento_aprendiz = @documentoAprendiz
+        AND fecha = @fecha
+    `)
+    const info = stmt.run({
+      fichaCodigo: String(fichaCodigo || '').trim(),
+      documentoAprendiz: String(documentoAprendiz || '').trim(),
+      fecha: fecha,
+    })
+    return { ok: true, eliminadas: info.changes }
+  } catch (err) {
+    console.error('[SQLite] Error al eliminar asistencia:', err.message)
+    return { ok: false, error: err.message }
+  }
+}
+
+/**
  * Retorna la ruta física del archivo global .sqlite
  */
 export function getSqliteFilePath() {

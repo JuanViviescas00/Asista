@@ -90,6 +90,31 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
   }
 
   /**
+   * Elimina solo el registro de un aprendiz del borrador (ficha + fecha).
+   * Se usa tras sincronizar con éxito o tras un 409, para que un borrador
+   * viejo no se reaplique encima del estado del servidor.
+   */
+  function quitarRegistroBorrador(fichaId, fecha, estId) {
+    if (!fichaId || !fecha || !estId) return
+    const key = generarClave(fichaId, fecha)
+    try {
+      const data = localStorage.getItem(key)
+      if (!data) return
+      const borrador = JSON.parse(data)
+      if (borrador && borrador.registros && borrador.registros[estId]) {
+        delete borrador.registros[estId]
+        if (Object.keys(borrador.registros).length === 0) {
+          localStorage.removeItem(key)
+        } else {
+          localStorage.setItem(key, JSON.stringify(borrador))
+        }
+      }
+    } catch (e) {
+      console.warn('[DraftStore] Error al quitar registro del borrador:', e)
+    }
+  }
+
+  /**
    * Encola un lote de asistencias que no pudieron enviarse por caída de internet.
    */
   function encolarOffline(loteAsistencias) {
@@ -116,13 +141,18 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
 
     for (const lote of colaOffline.value) {
       let loteCompletado = true
-      for (const item of lote.items) {
+      for (let i = 0; i < lote.items.length; i++) {
+        const item = lote.items[i]
         try {
           await apiService.asistencias.create(item)
           procesadosExitosos++
         } catch (err) {
+          if (err.status === 409) {
+            continue
+          }
           console.error('[DraftStore] Error al sincronizar asistencia offline:', err)
           loteCompletado = false
+          lote.items = lote.items.slice(i)
           break
         }
       }
@@ -153,6 +183,7 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     guardarBorrador,
     obtenerBorrador,
     limpiarBorrador,
+    quitarRegistroBorrador,
     encolarOffline,
     sincronizarColaOffline
   }

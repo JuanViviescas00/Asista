@@ -253,7 +253,6 @@ function getHoyLocalISO() {
 const fechaHoyMax = computed(() => getHoyLocalISO())
 const fechaAsistencia = ref(getHoyLocalISO())
 const asistenciaDia = ref({})
-const guardandoAsistencia = ref(false)
 
 const esFechaActualOHoy = computed(() => {
   return fechaAsistencia.value >= fechaHoyMax.value
@@ -335,7 +334,7 @@ const docenteResponsableDia = computed(() => {
   if (usuario.value && String(usuario.value.id) === instIdStr) {
     return {
       id: instIdStr,
-      nombreCompleto: `${usuario.value.nombres} ${usuario.value.apellidos || ''}`.trim(),
+      nombreCompleto: (usuario.value.nombre || 'Instructor'),
       correo: usuario.value.correo || '',
       especialidad: usuario.value.especialidad || ''
     }
@@ -738,8 +737,34 @@ async function sincronizarCambioNube(estId) {
   }
 
   try {
-    await api.asistencias.create(itemAsistencia)
+    const res = await api.asistencias.create(itemAsistencia)
+    const sFichaId = String(fichaSeleccionada.value._id)
+    if (res?.eliminado) {
+      asistenciasFicha.value = asistenciasFicha.value.filter(a =>
+        !(String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
+          a.fecha === fechaAsistencia.value &&
+          String(a.fichaId?._id || a.fichaId) === sFichaId)
+      )
+    } else if (res?._id) {
+      const idx = asistenciasFicha.value.findIndex(a =>
+        String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
+        a.fecha === fechaAsistencia.value &&
+        String(a.fichaId?._id || a.fichaId) === sFichaId
+      )
+      if (idx >= 0) {
+        asistenciasFicha.value[idx] = res
+      } else {
+        asistenciasFicha.value.push(res)
+      }
+    }
+    draftStore.quitarRegistroBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, estId)
   } catch (err) {
+    if (err.status === 409) {
+      draftStore.quitarRegistroBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, estId)
+      showToast(err.message, 'error')
+      await cargarDatosFicha(fichaSeleccionada.value._id)
+      return
+    }
     console.warn(`[Sync Nube] Error sincronizando estudiante ${estId}:`, err.message)
     draftStore.encolarOffline([itemAsistencia])
   }
@@ -820,89 +845,6 @@ async function toggleExcusa(estId) {
   autoGuardarBorrador()
 
   await sincronizarCambioNube(estId)
-}
-
-
-async function guardarAsistenciaDia() {
-  if (jornadaInhabilitada.value) {
-    showToast('Esta sesión ya se encuentra guardada como inhabilitada.', 'info')
-    return
-  }
-  if (fechaAsistencia.value > fechaHoyMax.value) {
-    showToast('No es posible registrar ni finalizar asistencias en fechas futuras.', 'warning')
-    return
-  }
-  guardandoAsistencia.value = true
-  const hoy = fechaAsistencia.value
-  const horaActual = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
-  let exitosos = 0
-  let errores = 0
-  const fallidosParaOffline = []
-
-  for (const est of estudiantesFicha.value) {
-    const reg = asistenciaDia.value[est._id]
-    if (reg && !reg.esMio) {
-      continue
-    }
-    let estadoFinal = 'Presente'
-    let horaMarcada = horaActual
-    let hTardanza = 0
-    let tTardanza = '0 horas'
-
-    if (reg) {
-      if (reg.excusa) {
-        estadoFinal = 'Excusada'
-        horaMarcada = reg.horaMarcacion || horaActual
-      } else if (reg.estado === 'Falta') {
-        estadoFinal = 'Falta'
-        horaMarcada = '—'
-      } else if (reg.estado === 'Tardanza') {
-        estadoFinal = 'Tardanza'
-        horaMarcada = reg.horaMarcacion || horaActual
-        hTardanza = reg.horasTardanza || reg.horasFallidas || 1
-        tTardanza = `${hTardanza} ${hTardanza === 1 ? 'hora' : 'horas'}`
-      } else {
-        estadoFinal = 'Presente'
-        horaMarcada = reg.horaMarcacion || horaActual
-      }
-    }
-
-    const itemAsistencia = {
-      estudianteId: est._id,
-      fichaId: fichaSeleccionada.value._id,
-      estado: estadoFinal,
-      fecha: hoy,
-      hora: horaMarcada,
-      horasTardanza: hTardanza,
-      tiempoTardanza: tTardanza,
-      instructorId: usuario.value.id || null,
-    }
-
-    try {
-      await api.asistencias.create(itemAsistencia)
-      exitosos++
-    } catch (err) {
-      errores++
-      fallidosParaOffline.push(itemAsistencia)
-      console.error(`Error asistencia ${est.nombres}:`, err.message)
-    }
-  }
-
-  if (errores === 0) {
-    draftStore.limpiarBorrador(fichaSeleccionada.value._id, hoy)
-    await cargarDatosFicha(fichaSeleccionada.value._id)
-    showToast(`Jornada finalizada. Asistencias guardadas exitosamente y sincronizadas en la nube.`)
-  } else {
-    // Si hubo errores (ej: fallo de conexión/internet), encolar en Pinia offline
-    draftStore.encolarOffline(fallidosParaOffline)
-    showToast(
-      `${exitosos} guardados. ${errores} guardados localmente por corte de conexión (se enviarán automáticamente al reconectar).`,
-      'warning'
-    )
-  }
-
-  guardandoAsistencia.value = false
 }
 
 // Contadores de asistencia del día
@@ -1374,7 +1316,7 @@ function descargarExcel(data, nombreArchivo) {
               <div class="docente-jornada-header-line">
                 <span class="docente-jornada-pre">Docente a cargo de la jornada:</span>
                 <strong class="docente-jornada-nombre">
-                  Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : `${usuario?.nombres} ${usuario?.apellidos || ''}` }}
+                  Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : (usuario?.nombre || 'Instructor') }}
                 </strong>
                 <span v-if="jornadaEsDeOtroDocente" class="badge-solo-lectura-tag">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -1628,15 +1570,6 @@ function descargarExcel(data, nombreArchivo) {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
               Sesión Inhabilitada — Guardada en MongoDB y SQLite
             </div>
-            <button
-              v-else
-              class="btn btn-primary btn-guardar"
-              @click="guardarAsistenciaDia"
-              :disabled="guardandoAsistencia"
-              title="Guardar"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            </button>
           </div>
         </div>
 
