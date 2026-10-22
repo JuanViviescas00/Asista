@@ -111,10 +111,13 @@ export async function finalizar(req, res) {
     clase.finalizadaAt = new Date()
     await clase.save()
 
-    // Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella
-    cerrarInasistenciasFicha(clase.fichaId, getHoyString(), clase.instructorId).catch(err => {
+    // Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella.
+    // Se espera a que termine antes de responder y emitir, para que el frontend ya vea las fallas.
+    try {
+      await cerrarInasistenciasFicha(clase.fichaId, getHoyString(), clase.instructorId)
+    } catch (err) {
       console.error('[claseController] Error en auto-cierre de inasistencias:', err.message)
-    })
+    }
 
     const enviado = emitirDesactivacion(clase.deviceId, {
       type: 'DEACTIVATE',

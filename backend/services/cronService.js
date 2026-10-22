@@ -38,7 +38,15 @@ export async function cerrarClasesExpiradas() {
       const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
       const instructorIdStr = String(clase.instructorId)
 
-      // 1. Notificar al lector físico para que apague la captura de huellas
+      // 1. Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella.
+      // Se espera a que termine antes de emitir, para que el frontend ya vea las fallas al recargar.
+      try {
+        await cerrarInasistenciasFicha(clase.fichaId?._id || clase.fichaId, getHoyString(), clase.instructorId)
+      } catch (err) {
+        console.error('[AutoCierre] Error al completar inasistencias de la clase expirada:', err.message)
+      }
+
+      // 2. Notificar al lector físico para que apague la captura de huellas
       if (clase.deviceId) {
         emitirDesactivacion(clase.deviceId, {
           type: 'DEACTIVATE',
@@ -48,15 +56,10 @@ export async function cerrarClasesExpiradas() {
         })
       }
 
-      // 2. Notificar a las salas del frontend/dashboard
+      // 3. Notificar a las salas del frontend/dashboard
       emitirClaseDesactivada(fichaIdStr, {
         fichaId: fichaIdStr,
         motivo: 'AUTO_CIERRE_3_HORAS'
-      })
-
-      // 3. Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella
-      cerrarInasistenciasFicha(clase.fichaId?._id || clase.fichaId, getHoyString(), clase.instructorId).catch(err => {
-        console.error('[AutoCierre] Error al completar inasistencias de la clase expirada:', err.message)
       })
 
       cerradas++
