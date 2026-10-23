@@ -340,25 +340,16 @@ export async function getInasistenciasParaRPA(req, res) {
       return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
     }
 
-    // Fichas donde el instructor es líder o instructor de apoyo
-    const fichas = await Ficha.find({
-      $or: [
-        { instructorLiderId: instructor._id },
-        { instructores: instructor._id }
-      ]
-    })
-    const fichaIds = fichas.map(f => f._id)
-
-    let targetFichaIds = fichaIds
-    if (fichaId) {
-      const fichaDoc = await resolverFicha(fichaId)
-      targetFichaIds = fichaDoc ? [fichaDoc._id] : []
-    }
-
+    // Filtrar estrictamente las inasistencias que fueron dictadas / registradas por este instructor
     const filter = {
-      fichaId: { $in: targetFichaIds },
+      instructorId: instructor._id,
       tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
       estadoCarga: 'LISTO_PARA_SUBIR'
+    }
+
+    if (fichaId) {
+      const fichaDoc = await resolverFicha(fichaId)
+      if (fichaDoc) filter.fichaId = fichaDoc._id
     }
     if (fecha) filter.fecha = fecha
 
@@ -435,20 +426,9 @@ export async function getTodosInasistenciasParaRPA(req, res) {
     let granTotalInasistencias = 0
 
     for (const inst of instructores) {
-      // Fichas donde el instructor es líder o instructor de apoyo
-      const fichas = await Ficha.find({
-        $or: [
-          { instructorLiderId: inst._id },
-          { instructores: inst._id }
-        ]
-      })
-
-      if (!fichas || fichas.length === 0) continue
-
-      const fichaIds = fichas.map(f => f._id)
-
+      // Filtrar estrictamente las inasistencias de este instructor
       const filter = {
-        fichaId: { $in: fichaIds },
+        instructorId: inst._id,
         tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
         estadoCarga: 'LISTO_PARA_SUBIR'
       }

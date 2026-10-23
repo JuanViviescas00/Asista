@@ -94,6 +94,7 @@ test('getInasistenciasParaRPA: lista solo LISTO_PARA_SUBIR con forma exacta de c
 
   assert.equal(res.body.ok, true)
   assert.equal(capturedFilter.estadoCarga, 'LISTO_PARA_SUBIR')
+  assert.equal(String(capturedFilter.instructorId), instId)
   assert.deepEqual(capturedFilter.tipo, { $in: ['Falta', 'Tardanza', 'Excusada'] })
   assert.equal(res.body.total, 1)
 

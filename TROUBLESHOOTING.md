@@ -1,5 +1,32 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 20:05] Filtro Estricto por Docente Dictante en Endpoints RPA (Asignación Responsable de Inasistencias)
+
+- **Fecha y Hora:** 2026-10-22 20:05:00 -05:00
+- **Descripción del Problema / Bug:**
+  - En la prueba del robot RPA para la instructora Silvia López, el bot cargaba las inasistencias de la jornada del 21/10/2026 de la ficha 3139319, a pesar de que dicha clase fue dictada y registrada por el docente **Alexander Guevara**.
+  - En el SENA y en Sofía Plus, cada instructor debe reportar única y exclusivamente las inasistencias correspondientes a las jornadas u horas que él mismo dictó, para evitar suplantaciones o errores en el historial de horas y novedades.
+- **Causa Raíz:**
+  - Los endpoints `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA` en `backend/controllers/instructorController.js` filtraban únicamente por fichas donde el docente fuera líder o apoyo (`fichaId: { $in: targetFichaIds }`), sin exigir que el campo `instructorId` de la inasistencia coincidiera con el instructor autenticado.
+- **Solución Aplicada:**
+  1. *Filtro Estricto por Docente (`backend/controllers/instructorController.js`):*
+     - En `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA`, se fijó `instructorId: instructor._id` (o `inst._id`) como condición obligatoria en la consulta a `Inasistencia.find()`.
+     - Ahora Silvia López solo recibe las inasistencias de las clases que ella misma dictó, y Alexander Guevara recibe las suyas.
+  2. *Actualización de Suite de Pruebas (`backend/controllers/rpaController.test.js`):*
+     - Se añadió la aserción de `instructorId` en el filtro capturado para garantizar que futuras modificaciones no eliminen esta restricción.
+  3. *Reinicio y Validación del Servicio:*
+     - Se reinició el proceso backend y se validó vía HTTP contra MongoDB Atlas.
+- **Archivos Modificados:**
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/rpaController.test.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Petición HTTP a `GET /api/instructores/documento/1100959620/inasistencias-rpa` (Silvia López): Devuelve `total: 0, inasistencias: []`.
+  - Petición HTTP a `GET /api/instructores/documento/1100953511/inasistencias-rpa` (Alexander Guevara): Devuelve `total: 3, inasistencias: [...]` con las 3 inasistencias del 21/10/2026.
+  - Suite de 50 pruebas con `node --test` pasando al 100%.
+
+---
+
 ## [2026-10-22 19:30] Integración de Inasistencias/Jornadas, Corrección de Errores Críticos e Implementación de RPA Sofía Plus (Pasos 6d-6 / 6d-7)
 
 - **Fecha y Hora:** 2026-10-22 19:30:00 -05:00
