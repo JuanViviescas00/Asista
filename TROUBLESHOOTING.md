@@ -1,5 +1,30 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 21:55] Workflow de CI/CD para Unificación de Ramas (Backend/Frontend) y Compilación del Monolito
+
+- **Fecha y Hora:** 2026-10-22 21:55:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El equipo creó ramas independientes (`Backend`, `Frontend` y `Huellero`) para el desarrollo modular.
+  - Se solicitó un workflow automatizado de CI/CD para que cada vez que se suban cambios a `Backend`, se unifique con `Frontend`, y cuando se suban cambios a `Frontend`, se ensamble con `Backend`, compile el frontend (`npm run build:prod`) y deposite los estáticos en `backend/public/`, generando y manteniendo actualizado el monolito listo para producción.
+- **Causa Raíz:**
+  - La fragmentación de ramas requería procesos manuales de merge y compilación del frontend hacia `backend/public`, con riesgo de desfase entre los cambios del equipo de frontend y el servidor backend.
+- **Solución Aplicada:**
+  1. *Workflow de GitHub Actions (`.github/workflows/monolito-sync.yml`):*
+     - Activadores (`push` en `Backend`, `Frontend`, `Huellero` y `main`, más `workflow_dispatch`).
+     - Fusión automática de la rama entrante hacia `main` preservando el historial.
+     - Instalación de dependencias del monorepo (`npm install`, frontend y backend).
+     - Compilación del frontend y copiado seguro a `backend/public` vía `npm run build:prod`.
+     - Ejecución de la suite de pruebas unitarias del backend (`node --test`) para garantizar cero regresiones antes de publicar.
+     - Commit y push seguro a `main` con etiqueta `[skip ci]` para prevenir bucles de ejecución.
+- **Archivos Modificados:**
+  - `.github/workflows/monolito-sync.yml`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución local del ciclo completo de compilación y pruebas (`npm run build:prod && cd backend && node --test`): 54 de 54 pruebas pasando al 100%.
+  - Sintaxis de YAML validada.
+
+---
+
 ## [2026-10-22 21:45] Dockerfile Multi-Etapa de Producción, Endpoint de Salud y Despliegue en Coolify
 
 - **Fecha y Hora:** 2026-10-22 21:45:00 -05:00

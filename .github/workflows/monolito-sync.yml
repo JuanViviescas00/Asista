@@ -1,0 +1,91 @@
+name: Monolito CI/CD - Sincronización y Build
+
+on:
+  push:
+    branches:
+      - Backend
+      - Frontend
+      - Huellero
+      - main
+  workflow_dispatch:
+
+# Permisos para que GitHub Actions pueda hacer commit y push a las ramas del repositorio
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sincronizar_y_compilar_monolito:
+    name: Unificar Ramas y Compilar Monolito
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Clonar repositorio con todo el historial de ramas
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 2. Configurar identidad de Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: 3. Integrar rama disparadora hacia main
+        run: |
+          RAMA_ORIGEN="${GITHUB_REF#refs/heads/}"
+          echo "=========================================="
+          echo "Rama que disparó el evento: $RAMA_ORIGEN"
+          echo "=========================================="
+
+          # Posicionarse siempre en main (la rama principal del monolito)
+          git checkout main
+
+          if [ "$RAMA_ORIGEN" != "main" ]; then
+            echo "Fusionando cambios de origin/$RAMA_ORIGEN hacia main..."
+            # Intentar merge automático sin editar mensaje; si hay conflicto menor, priorizar la rama entrante
+            git merge "origin/$RAMA_ORIGEN" --no-edit -m "ci: sincronizar $RAMA_ORIGEN en monolito [skip ci]" || {
+              echo "Aviso: Resolviendo conflicto automático priorizando los cambios de $RAMA_ORIGEN..."
+              git merge --abort || true
+              git merge -X theirs "origin/$RAMA_ORIGEN" --no-edit -m "ci: sincronizar $RAMA_ORIGEN en monolito (auto-resolve) [skip ci]"
+            }
+          fi
+
+      - name: 4. Configurar entorno de Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            package.json
+            frontend/package.json
+            backend/package.json
+
+      - name: 5. Instalar dependencias del proyecto y workspaces
+        run: |
+          npm install
+          npm install --prefix frontend
+          npm install --prefix backend
+
+      - name: 6. Compilar Frontend y copiar bundle a backend/public (Monolito)
+        run: |
+          npm run build:prod
+
+      - name: 7. Ejecutar pruebas unitarias del Backend
+        run: |
+          cd backend
+          node --test
+
+      - name: 8. Confirmar y publicar Monolito actualizado en main
+        run: |
+          # Forzar agregado de backend/public para que forme parte integral del monolito
+          git add -f backend/public
+
+          # Verificar si hay cambios tras la compilación o el merge
+          if git diff --staged --quiet; then
+            echo "El monolito en main ya está completamente al día. No se requieren nuevos commits."
+          else
+            echo "Cambios detectados. Creando commit del monolito en main..."
+            git commit -m "ci(monolito): compilar frontend a backend/public y unificar monolito [skip ci]"
+            git push origin main
+          fi
