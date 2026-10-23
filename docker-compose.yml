@@ -1,36 +1,28 @@
 services:
-  backend:
-    image: sena-huellero-backend:prod
+  asista:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: sena-huellero-backend
+    container_name: asista-app
     restart: unless-stopped
     ports:
-      - "3001:3001"
-    env_file:
-      - ./backend/.env
+      - "${PORT:-3000}:3000"
     environment:
-      PORT: 3001
+      - NODE_ENV=production
+      - PORT=3000
+      - TZ=America/Bogota
+      - MONGODB_URI=${MONGODB_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY}
     volumes:
-      - ./backend/data:/app/data
-    networks:
-      - sena-network
+      - asista-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
-  frontend:
-    image: sena-huellero-frontend:prod
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: sena-huellero-frontend
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-    networks:
-      - sena-network
-
-networks:
-  sena-network:
-    driver: bridge
+volumes:
+  asista-data:
+    driver: local

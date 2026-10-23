@@ -114,6 +114,16 @@ async function iniciarServidor() {
   })
 }
 
+// Health check endpoint para monitorización, Docker y Coolify
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    servicio: 'asista-backend',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  })
+})
+
 app.use('/api/auth', authRoutes)
 app.use('/api/instructores', instructoresRoutes)
 app.use('/api/fichas', fichasRoutes)

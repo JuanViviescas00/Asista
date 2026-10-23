@@ -1,5 +1,35 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 21:45] Dockerfile Multi-Etapa de Producción, Endpoint de Salud y Despliegue en Coolify
+
+- **Fecha y Hora:** 2026-10-22 21:45:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario solicitó la creación/actualización del `Dockerfile` para la aplicación, preparándola para su despliegue en entornos contenerizados y plataformas PaaS autoalojadas como **Coolify**.
+- **Causa Raíz:**
+  - El `Dockerfile` anterior estaba configurado con variables y puertos rígidos para Render (`PORT=10000`), carecía de paquetes de compilación del sistema para dependencias nativas de C++ (como `better-sqlite3`) y no contaba con un healthcheck para monitorización de contenedores.
+- **Solución Aplicada:**
+  1. *Optimización de `Dockerfile` Multi-Etapa:*
+     - **Etapa 1 (`frontend-builder`):** Compilación aislada de Vue 3 / Vite en `node:22-bookworm-slim`.
+     - **Etapa 2 (`runner`):** Servidor de producción en `node:22-bookworm-slim` con instalación de dependencias nativas (`python3`, `make`, `g++`) para garantizar compatibilidad con `better-sqlite3`, e inyección del frontend en `public/`.
+     - Se añadió `HEALTHCHECK` consultando `/api/health` cada 30 segundos.
+     - Se fijó el puerto estándar `PORT=3000` y `EXPOSE 3000`.
+  2. *Endpoint de Salud en Backend (`backend/index.js`):*
+     - Se añadió la ruta `GET /api/health` que devuelve estado 200 con JSON `{ status: 'ok', servicio: 'asista-backend', uptime, timestamp }`.
+  3. *Actualización de `docker-compose.yml` y `.dockerignore`:*
+     - `docker-compose.yml` simplificado para orquestar el contenedor `asista` con volumen persistente `asista-data:/app/data` para SQLite y variables de entorno.
+     - `.dockerignore` ampliado para ignorar `node_modules`, `backend/data`, `frontend/dist` y archivos `.env` locales.
+- **Archivos Modificados:**
+  - `Dockerfile`
+  - `.dockerignore`
+  - `docker-compose.yml`
+  - `backend/index.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Pruebas unitarias completas: 54 de 54 pruebas pasando al 100% con `node --test`.
+  - Endpoint de salud comprobado exitosamente vía HTTP (`GET /api/health` devuelve 200 OK).
+
+---
+
 ## [2026-10-22 20:55] Onboarding Obligatorio de Instructores (Cambio de Contraseña y Clave Sofía Plus en Primer Login)
 
 - **Fecha y Hora:** 2026-10-22 20:55:00 -05:00
