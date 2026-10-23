@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
+import Estudiante from '../models/Estudiante.js'
 import Asistencia from '../models/Asistencia.js'
 import Inasistencia from '../models/Inasistencia.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
