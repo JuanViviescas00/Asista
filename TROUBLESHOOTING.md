@@ -892,3 +892,27 @@
   - TROUBLESHOOTING.md
 - **Verificacion:**
   - Sintaxis de workflow validada. Sincronizacion total en remotes.
+
+---
+
+## [2026-10-22 22:13] Establecimiento del Protocolo de Ramas por Modulo y Flujo Monolito
+
+- **Fecha y Hora:** 2026-10-22 22:13:00 -05:00
+- **Descripcion del Problema / Requerimiento:**
+  Definicion formal de la arquitectura de ramas: el usuario establecio que cada rama debe recibir exclusivamente los cambios correspondientes a su modulo ('en cada rama solo se suba lo pertinente: el backend en el backend, el frontend en el frontend').
+- **Causa Raiz / Contexto:**
+  Evitar la mezcla accidental o sobreescritura de las ramas hijas (Backend, Frontend, Huellero) con el monolito general (main), garantizando que los desarrolladores de frontend y backend trabajen aislados en sus respectivas carpetas sin ruido de otros componentes.
+- **Solucion Aplicada:**
+  1. **Aislamiento de Ramas:**
+     - Rama Backend: Exclusiva para desarrollo en la carpeta ackend/ (endpoints, servicios, controladores, modelos, base de datos).
+     - Rama Frontend: Exclusiva para desarrollo en la carpeta rontend/ (vistas Vue, componentes, estilos, assets).
+     - Rama Huellero: Exclusiva para la aplicacion de escritorio Electron (huellero/).
+     - Rama main: Rama de produccion / monolito donde convergen todas las ramas via GitHub Actions CI/CD y donde reside el bundle estatico compilado en ackend/public/.
+  2. **Direccionalidad Estricta:**
+     - El flujo es unidireccional hacia main: Rama Hija -> Push Remoto -> GitHub Actions CI/CD -> Merge a main -> Build Frontend -> Publicacion en main.
+     - Queda estrictamente prohibido sobreescribir o forzar push de main hacia las ramas hijas.
+  3. **Configuracion Local:** Ramas locales creadas con tracking a origin (git branch --track Backend origin/Backend, etc.).
+- **Archivos Modificados:**
+  - TROUBLESHOOTING.md
+- **Verificacion:**
+  - Ramas locales y remotas alineadas. Regla de integracion validada en .github/workflows/monolito-sync.yml.
