@@ -1,5 +1,46 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 20:55] Onboarding Obligatorio de Instructores (Cambio de Contraseña y Clave Sofía Plus en Primer Login)
+
+- **Fecha y Hora:** 2026-10-22 20:55:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Al iniciar sesión por primera vez, los instructores contaban con su número de documento como contraseña provisional y carecían de la clave de Sofía Plus configurada.
+  - El usuario solicitó que al ingresar por primera vez sea obligatorio e ineludible cambiar la contraseña del sistema y, secuencialmente a continuación, registrar la contraseña del portal de Sofía Plus para habilitar la sincronización del robot RPA.
+- **Causa Raíz:**
+  - No existía un flag (`primerLogin`) en el modelo `Instructor` ni un mecanismo bloqueante a nivel de interfaz que exigiera este doble paso de forma obligatoria antes de habilitar las funciones del panel de instructor.
+- **Solución Aplicada:**
+  1. *Backend (`backend/models/Instructor.js` y `backend/controllers/authController.js`):*
+     - Se añadieron los campos `primerLogin: { type: Boolean, default: true }` y `debeCambiarPassword: { type: Boolean, default: true }` al esquema `Instructor`.
+     - En el endpoint `POST /api/auth/login`, se evalúa si el docente debe completar su configuración inicial y se expone `primerLogin: true` y `tienePasswordSofia: Boolean(passwordSofiaPlus)` en el payload del usuario.
+     - Se creó el endpoint atómico `POST /api/auth/completar-primer-login` protegido con JWT que valida la contraseña actual/provisional, actualiza con hash seguro bcrypt la nueva contraseña del sistema, cifra con AES-256-GCM la clave de Sofía Plus, marca `primerLogin: false` y expide un token actualizado.
+  2. *Frontend (`ModalPrimerLoginInstructor.vue`, `DefaultLayout.vue`, `AdminPerfil.vue`, `useAuth.js`):*
+     - Se implementó el componente `<ModalPrimerLoginInstructor />` con un wizard de 2 pasos bloqueante (sin botón de cerrar, sin cierre por clic exterior ni escape).
+     - **Paso 1:** Validación y cambio de contraseña provisional (mínimo 6 caracteres, validación de coincidencia y diferencia respecto a la actual).
+     - **Paso 2:** Solicitud y confirmación de la contraseña oficial de Sofía Plus con aviso de cifrado AES-256 y botón "Guardar y Comenzar".
+     - Se añadió botón secundario "Cerrar sesión" en el pie por si el instructor no tiene sus credenciales en el momento.
+     - Se integró en `DefaultLayout.vue` activándose automáticamente si `usuario.rol === 'Instructor' && usuario.primerLogin`.
+     - En `AdminPerfil.vue`, se integró botón y modal para que los instructores puedan actualizar su clave de Sofía Plus en cualquier momento posterior.
+  3. *Suite de Pruebas Automatizadas (`backend/controllers/authController.test.js`):*
+     - 4 nuevas pruebas unitarias cubriendo: detección de primer login, rechazo por clave actual incorrecta, validación de longitud/coincidencia de contraseña, y actualización atómica exitosa con cifrado AES-256 y desactivación del flag `primerLogin`.
+- **Archivos Modificados:**
+  - `backend/models/Instructor.js`
+  - `backend/controllers/authController.js`
+  - `backend/routes/auth.js`
+  - `backend/controllers/authController.test.js`
+  - `frontend/src/composables/useAuth.js`
+  - `frontend/src/services/index.js`
+  - `frontend/src/components/ModalPrimerLoginInstructor.vue`
+  - `frontend/src/layouts/DefaultLayout.vue`
+  - `frontend/src/views/AdminPerfil.vue`
+  - `backend/public/` (Sincronizado vía `npm run build:prod`)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - 54 de 54 pruebas unitarias pasando al 100% (`node --test`).
+  - Compilación de producción con `npm run build:prod` completada en 1.1s sin errores.
+  - Verificación en MongoDB Atlas de los flags `primerLogin` para docentes.
+
+---
+
 ## [2026-10-22 20:05] Filtro Estricto por Docente Dictante en Endpoints RPA (Asignación Responsable de Inasistencias)
 
 - **Fecha y Hora:** 2026-10-22 20:05:00 -05:00

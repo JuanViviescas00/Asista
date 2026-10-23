@@ -4,6 +4,7 @@ import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import { generarToken } from '../middlewares/auth.js'
 import { hashPassword, verifyAndUpgradePassword } from '../services/passwordService.js'
+import { encrypt } from '../services/cryptoService.js'
 import { enviarCorreoRecuperacion, enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 
 export async function login(req, res) {
@@ -76,13 +77,22 @@ export async function login(req, res) {
         const fichaLider = await Ficha.findOne({ instructorLiderId: instructor._id })
         const esLider = !!(instructor.esLider || fichaLider)
         const nombreCompleto = `${instructor.nombres} ${instructor.apellidos}`
+        const esClaveProvisional = await verifyAndUpgradePassword(instructor, instructor.numeroDocumento)
+        const debeCompletarPrimerLogin = instructor.primerLogin !== false && (
+          instructor.primerLogin === true ||
+          esClaveProvisional ||
+          !instructor.passwordSofiaPlus
+        )
+
         const payload = {
           id: instructor._id,
           nombre: nombreCompleto,
           correo: instructor.correo,
           rol: 'Instructor',
           esLider,
-          rolDetallado: esLider ? 'Instructor Líder' : 'Instructor Común'
+          rolDetallado: esLider ? 'Instructor Líder' : 'Instructor Común',
+          primerLogin: Boolean(debeCompletarPrimerLogin),
+          tienePasswordSofia: Boolean(instructor.passwordSofiaPlus)
         }
         const token = generarToken(payload)
         return res.json({
@@ -337,6 +347,81 @@ export async function cambiarPassword(req, res) {
     }
 
     return res.json({ ok: true, message: '¡Contraseña actualizada exitosamente con cifrado seguro!' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function completarPrimerLoginInstructor(req, res) {
+  try {
+    const instructorId = req.usuario?.id
+    const { passwordActual, nuevaPassword, passwordSofiaPlus } = req.body
+
+    if (!instructorId) {
+      return res.status(401).json({ error: 'Usuario no autenticado' })
+    }
+
+    if (!passwordActual || !nuevaPassword || !passwordSofiaPlus) {
+      return res.status(400).json({ error: 'Todos los campos son requeridos: contraseña actual, nueva contraseña y contraseña de Sofía Plus.' })
+    }
+
+    if (String(nuevaPassword).length < 6) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' })
+    }
+
+    if (String(nuevaPassword).trim() === String(passwordActual).trim()) {
+      return res.status(400).json({ error: 'La nueva contraseña debe ser diferente a la contraseña actual.' })
+    }
+
+    if (String(passwordSofiaPlus).trim().length < 4) {
+      return res.status(400).json({ error: 'Debes ingresar una contraseña de Sofía Plus válida.' })
+    }
+
+    const instructor = await Instructor.findById(instructorId)
+    if (!instructor) {
+      return res.status(404).json({ error: 'Instructor no encontrado' })
+    }
+
+    const passOk = await verifyAndUpgradePassword(instructor, passwordActual)
+    if (!passOk) {
+      return res.status(400).json({ error: 'La contraseña actual no es correcta. Verifica e intenta de nuevo.' })
+    }
+
+    instructor.password = await hashPassword(nuevaPassword)
+    instructor.passwordSofiaPlus = encrypt(String(passwordSofiaPlus).trim())
+    instructor.primerLogin = false
+    instructor.debeCambiarPassword = false
+    await instructor.save()
+
+    const fichaLider = await Ficha.findOne({ instructorLiderId: instructor._id })
+    const esLider = !!(instructor.esLider || fichaLider)
+    const nombreCompleto = `${instructor.nombres} ${instructor.apellidos}`
+
+    const payload = {
+      id: instructor._id,
+      nombre: nombreCompleto,
+      correo: instructor.correo,
+      rol: 'Instructor',
+      esLider,
+      rolDetallado: esLider ? 'Instructor Líder' : 'Instructor Común',
+      primerLogin: false,
+      tienePasswordSofia: true
+    }
+
+    const token = generarToken(payload)
+
+    if (instructor.correo) {
+      enviarCorreoConfirmacionCambioPassword(instructor.correo, nombreCompleto).catch(err => {
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña (primer login):', err.message)
+      })
+    }
+
+    return res.json({
+      ok: true,
+      token,
+      usuario: payload,
+      message: '¡Configuración inicial completada exitosamente! Ya puedes acceder a todas las funciones.'
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

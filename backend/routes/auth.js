@@ -20,4 +20,7 @@ router.post('/reset-password', recoveryLimiter, validarCamposRequeridos(['correo
 // Cambio de contraseña protegido por JWT y verificación de clave actual
 router.post('/cambiar-password', autenticarJWT, validarCamposRequeridos(['passwordActual', 'nuevaPassword']), authController.cambiarPassword)
 
+// Onboarding obligatorio de primer login para instructores (requiere autenticación JWT)
+router.post('/completar-primer-login', autenticarJWT, validarCamposRequeridos(['passwordActual', 'nuevaPassword', 'passwordSofiaPlus']), authController.completarPrimerLoginInstructor)
+
 export default router

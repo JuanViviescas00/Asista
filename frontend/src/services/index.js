@@ -99,6 +99,9 @@ const api = {
     cambiarPassword(body) {
       return request('/auth/cambiar-password', { method: 'POST', body: JSON.stringify(body) })
     },
+    completarPrimerLogin(body) {
+      return request('/auth/completar-primer-login', { method: 'POST', body: JSON.stringify(body) })
+    },
   },
 
   instructores: {

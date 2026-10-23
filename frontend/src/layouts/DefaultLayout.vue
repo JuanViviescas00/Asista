@@ -8,6 +8,7 @@ import senaLogo from '../assets/sena-logo.png'
 import instructorAvatar from '../assets/instructor-avatar.png'
 import iconoEstudiantesMenu from '../assets/estudiantes-menu-icon.png'
 import iconoInstructoresMenu from '../assets/instructores-menu-icon.png'
+import ModalPrimerLoginInstructor from '../components/ModalPrimerLoginInstructor.vue'
 
 const $q = useQuasar()
 const { usuario, headerTitulo, headerSubtitulo, cerrarSesion } = useAuth()
@@ -47,6 +48,12 @@ const tienePerfil = computed(() => !!vistasDelRol.value.perfil)
 const esMovil = computed(() => $q.screen.lt.md)
 const miniEfectivo = computed(() => drawerMini.value && !esMovil.value)
 const currentComponent = computed(() => currentComponentFor(usuario.value?.rol || 'Administrador'))
+
+// Modal obligatorio para cambio de contraseña y clave Sofía Plus en primer ingreso
+const debePrimerLogin = computed(() => {
+  return usuario.value?.rol === 'Instructor' && Boolean(usuario.value?.primerLogin)
+})
+
 
 // Ícono (Material Icons, vía Quasar) asociado a cada vista del menú.
 const iconosPorVista = {
@@ -229,6 +236,12 @@ function irA(key) {
         <component :is="currentComponent" />
       </main>
     </q-page-container>
+      <!-- Modal bloqueante obligatorio para instructores en su primer login -->
+    <ModalPrimerLoginInstructor
+      v-if="debePrimerLogin"
+      :usuario="usuario"
+      @cerrar-sesion="cerrarSesion"
+    />
   </q-layout>
 </template>
 
