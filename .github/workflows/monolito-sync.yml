@@ -9,6 +9,11 @@ on:
       - main
   workflow_dispatch:
 
+# Evitar colisiones de ejecución concurrente entre ramas que compiten por actualizar main
+concurrency:
+  group: monolito-sync
+  cancel-in-progress: false
+
 # Permisos para que GitHub Actions pueda hacer commit y push a las ramas del repositorio
 permissions:
   contents: write
@@ -38,8 +43,9 @@ jobs:
           echo "Rama que disparó el evento: $RAMA_ORIGEN"
           echo "=========================================="
 
-          # Posicionarse siempre en main (la rama principal del monolito)
+          # Posicionarse siempre en main (la rama principal del monolito) y traer el último estado
           git checkout main
+          git pull origin main --no-edit || true
 
           if [ "$RAMA_ORIGEN" != "main" ]; then
             echo "Fusionando cambios de origin/$RAMA_ORIGEN hacia main..."
@@ -76,11 +82,37 @@ jobs:
           # Forzar agregado de backend/public para que forme parte integral del monolito
           git add -f backend/public
 
+          # Obtener cambios remotos recientes antes de evaluar estado
+          git fetch origin main
+
           # Verificar si hay cambios tras la compilación o el merge
           if git diff --staged --quiet; then
             echo "El monolito en main ya está completamente al día. No se requieren nuevos commits."
           else
             echo "Cambios detectados. Creando commit del monolito en main..."
             git commit -m "ci(monolito): compilar frontend a backend/public y unificar monolito [skip ci]"
-            git push origin main
+            
+            # Reintentar push con fetch/rebase automático en caso de carreras concurrentes
+            SUCCESS=0
+            for i in 1 2 3; do
+              echo "Intentando push a origin main (intento $i)..."
+              if git push origin main; then
+                echo "Push a main completado exitosamente."
+                SUCCESS=1
+                break
+              else
+                echo "Aviso: push rechazado. Rebaseando con origin/main..."
+                git fetch origin main
+                git pull --rebase origin main || {
+                  git rebase --abort || true
+                  git merge -X theirs origin/main --no-edit || true
+                }
+                sleep 2
+              fi
+            done
+
+            if [ $SUCCESS -ne 1 ]; then
+              echo "Error: no se pudo sincronizar main tras múltiples reintentos."
+              exit 1
+            fi
           fi

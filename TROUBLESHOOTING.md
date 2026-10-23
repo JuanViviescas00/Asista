@@ -850,3 +850,26 @@
 - **Verificacion:**
   - Verificacion con git ls-files confirmando la remocion total de archivos de prueba.
   - Flujo de sincronizacion de monolito validado sin dependencias a suites de test.
+
+---
+
+## [2026-10-22 22:04] Correccion de Carrera Concurrente en Workflow de CI/CD (Monolito)
+
+- **Fecha y Hora:** 2026-10-22 22:04:00 -05:00
+- **Descripcion del Problema / Bug:**
+  El runner de GitHub Actions fallo en el paso 7 al intentar publicar el monolito:
+  To https://github.com/ivanrene86/HuelleroActualizado
+  ! [rejected] main -> main (fetch first)
+  error: failed to push some refs to 'https://github.com/ivanrene86/HuelleroActualizado'
+- **Causa Raiz:**
+  Al sincronizar o actualizar simultaneamente varias ramas vinculadas al workflow (main, Backend, Frontend, Huellero), GitHub Actions disparo multiples runners en paralelo. Uno de los runners compilo y publico exitosamente el commit ci(monolito): compilar frontend a backend/public y unificar monolito [skip ci] (commit 35b8c34), mientras que los otros runners concurrentes quedaron con un HEAD desactualizado y fueron rechazados por Git al no ser un fast-forward.
+- **Solucion Aplicada:**
+  1. **Control de Concurrencia:** Se agrego la directiva concurrency: group: monolito-sync, cancel-in-progress: false en .github/workflows/monolito-sync.yml, garantizando que GitHub Actions procese las solicitudes en cola secuencial sin competir entre si.
+  2. **Fetch y Pull Temprano:** Se anadio git pull origin main --no-edit || true tras git checkout main en el paso 3.
+  3. **Mecanismo de Reintento y Rebase Automatico:** En el paso 7, antes de publicar, se consulta el estado remoto con git fetch origin main y, en caso de rechazo por concurrencia externa, se aplica un bucle de reintento con git pull --rebase origin main para resolver el desfase automaticamente sin romper el pipeline.
+- **Archivos Modificados:**
+  - .github/workflows/monolito-sync.yml
+  - TROUBLESHOOTING.md
+- **Verificacion:**
+  - Sincronizacion y alineacion de los remotos origin, sista y juan en el commit generado por el bot.
+  - Validacion de sintaxis YAML y politica de concurrencia en la accion de GitHub.
