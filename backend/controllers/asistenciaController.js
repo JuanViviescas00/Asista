@@ -3,6 +3,7 @@ import Inasistencia from '../models/Inasistencia.js'
 import Jornada from '../models/Jornada.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
+import Instructor from '../models/Instructor.js'
 import DiaFestivo from '../models/DiaFestivo.js'
 import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
@@ -681,31 +682,74 @@ export async function reactivarJornada(req, res) {
   }
 }
 
+
+export async function obtenerTodasAsistenciasConsolidadas() {
+  const [inasistencias, jornadas] = await Promise.all([
+    Inasistencia.find().populate('estudianteId').populate('fichaId').populate('instructorId'),
+    Jornada.find().populate('fichaId').populate('instructorId').populate('presentes.estudianteId').populate('presentes.instructorId')
+  ])
+
+  const rows = []
+  const marcasRegistradas = new Set()
+
+  for (const a of inasistencias) {
+    if (!a.estudianteId || !a.fichaId) continue
+    const key = `${String(a.fichaId._id || a.fichaId)}|${a.fecha}|${String(a.estudianteId._id || a.estudianteId)}`
+    marcasRegistradas.add(key)
+    rows.push({
+      fichaDoc: a.fichaId,
+      estudianteDoc: a.estudianteId,
+      instructorDoc: a.instructorId,
+      fichaCodigo: a.fichaId.codigoFicha || String(a.fichaId._id || a.fichaId),
+      nombrePrograma: a.fichaId.nombrePrograma || '',
+      jornada: a.fichaId.jornada || '',
+      documentoAprendiz: a.estudianteId.numeroDocumento || '',
+      nombreAprendiz: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim(),
+      correoAprendiz: a.estudianteId.correo || '',
+      fecha: a.fecha,
+      estado: a.tipo,
+      hora: a.hora || '—',
+      horasTardanza: a.tipo === 'Tardanza' ? (a.horas || 0) : 0,
+      tiempoTardanza: a.tiempoTardanza || '0 horas',
+      estadoCarga: a.estadoCarga || 'EN_ESPERA'
+    })
+  }
+
+  for (const j of jornadas) {
+    if (!j.fichaId) continue
+    for (const p of (j.presentes || [])) {
+      if (!p.estudianteId) continue
+      const estId = String(p.estudianteId._id || p.estudianteId)
+      const key = `${String(j.fichaId._id || j.fichaId)}|${j.fecha}|${estId}`
+      if (marcasRegistradas.has(key)) continue
+      marcasRegistradas.add(key)
+      rows.push({
+        fichaDoc: j.fichaId,
+        estudianteDoc: p.estudianteId,
+        instructorDoc: p.instructorId || j.instructorId,
+        fichaCodigo: j.fichaId.codigoFicha || String(j.fichaId._id || j.fichaId),
+        nombrePrograma: j.fichaId.nombrePrograma || '',
+        jornada: j.fichaId.jornada || '',
+        documentoAprendiz: p.estudianteId.numeroDocumento || '',
+        nombreAprendiz: `${p.estudianteId.nombres || ''} ${p.estudianteId.apellidos || ''}`.trim(),
+        correoAprendiz: p.estudianteId.correo || '',
+        fecha: j.fecha,
+        estado: 'Presente',
+        hora: p.hora || '—',
+        horasTardanza: 0,
+        tiempoTardanza: '0 horas',
+        estadoCarga: 'EN_ESPERA'
+      })
+    }
+  }
+
+  return rows
+}
+
 export async function downloadSqlite(req, res) {
   try {
     const filePath = getSqliteFilePath()
-
-    const asistencias = await Asistencia.find()
-      .populate('estudianteId')
-      .populate('fichaId')
-
-    const rows = []
-    for (const a of asistencias) {
-      if (!a.estudianteId || !a.fichaId) continue
-      rows.push({
-        fichaCodigo: a.fichaId.codigoFicha || String(a.fichaId._id || a.fichaId),
-        nombrePrograma: a.fichaId.nombrePrograma || '',
-        jornada: a.fichaId.jornada || '',
-        documentoAprendiz: a.estudianteId.numeroDocumento || '',
-        nombreAprendiz: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim(),
-        correoAprendiz: a.estudianteId.correo || '',
-        fecha: a.fecha,
-        estado: a.estado,
-        hora: a.hora || '—',
-        horasTardanza: a.horasTardanza || 0,
-        tiempoTardanza: a.tiempoTardanza || '0 horas'
-      })
-    }
+    const rows = await obtenerTodasAsistenciasConsolidadas()
     upsertAsistenciasBatchSQLite(rows)
     checkpointSQLite()
 
@@ -720,28 +764,7 @@ export async function downloadSqlite(req, res) {
 
 export async function syncAllSqlite(req, res) {
   try {
-    const asistencias = await Asistencia.find()
-      .populate('estudianteId')
-      .populate('fichaId')
-
-    const rows = []
-    for (const a of asistencias) {
-      if (!a.estudianteId || !a.fichaId) continue
-      rows.push({
-        fichaCodigo: a.fichaId.codigoFicha || String(a.fichaId._id || a.fichaId),
-        nombrePrograma: a.fichaId.nombrePrograma || '',
-        jornada: a.fichaId.jornada || '',
-        documentoAprendiz: a.estudianteId.numeroDocumento || '',
-        nombreAprendiz: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim(),
-        correoAprendiz: a.estudianteId.correo || '',
-        fecha: a.fecha,
-        estado: a.estado,
-        hora: a.hora || '—',
-        horasTardanza: a.horasTardanza || 0,
-        tiempoTardanza: a.tiempoTardanza || '0 horas'
-      })
-    }
-
+    const rows = await obtenerTodasAsistenciasConsolidadas()
     const resultado = upsertAsistenciasBatchSQLite(rows)
     res.json({ ok: true, total: rows.length, ...resultado })
   } catch (err) {

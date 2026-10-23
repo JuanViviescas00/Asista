@@ -1409,7 +1409,7 @@ function descargarExcel(data, nombreArchivo) {
               <div class="docente-jornada-header-line">
                 <span class="docente-jornada-pre">Docente a cargo de la jornada:</span>
                 <strong class="docente-jornada-nombre">
-                  Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : (usuario?.nombre || 'Instructor') }}
+                  Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : (usuario?.nombre || `${usuario?.nombres || ''} ${usuario?.apellidos || ''}`.trim() || 'Instructor') }}
                 </strong>
                 <span v-if="jornadaEsDeOtroDocente" class="badge-solo-lectura-tag">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>

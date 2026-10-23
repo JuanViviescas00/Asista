@@ -1,5 +1,55 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-22 19:30] Integración de Inasistencias/Jornadas, Corrección de Errores Críticos e Implementación de RPA Sofía Plus (Pasos 6d-6 / 6d-7)
+
+- **Fecha y Hora:** 2026-10-22 19:30:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Fusión y Optimización de Asistencias:* Se requirió integrar la arquitectura de separación de novedades (`Inasistencia` y `Jornada`) proveniente de la rama `Maria`, la cual elimina la sobrecarga de miles de registros diarios con `Presente` y añade auto-guardado en tiempo real en el panel del instructor.
+  2. *Contrato Inmutable con RPA de Sofía Plus (Pasos 6d-6 / 6d-7):* Conectar los nuevos modelos con los endpoints del robot RPA (`getInasistenciasParaRPA`, `getTodosInasistenciasParaRPA` y `confirmarSubidaSofia`), filtrando estrictamente por `estadoCarga: 'LISTO_PARA_SUBIR'`, garantizando idempotencia en la confirmación y preservando la autenticación `autenticarOpcional`.
+  3. *Corrección de Errores Críticos:*
+     - `diaFestivoController.js` había sido eliminado accidentalmente en la rama `Maria`, provocando la caída inmediata del backend (`Cannot find module`).
+     - Ausencia de import de `Instructor` en `asistenciaController.js`, disparando error de `Schema hasn't been registered for model "Instructor"`.
+     - `excusaController.js`, `downloadSqlite`, `syncAllSqlite` y `sincronizarSqlitePorDocente` seguían atados al modelo obsoleto `Asistencia`.
+     - Existían 26 registros históricos en MongoDB Atlas que hubieran desaparecido sin un script de migración seguro.
+     - En `PanelInstructor.vue` se mostraba "Prof. Instructor" por usar `usuario.nombre` en lugar del nombre real del instructor.
+- **Causa Raíz:**
+  - Migración arquitectónica parcial en la rama `Maria` que dejó endpoints externos, modelos relacionados (`SofiaPlusSync`), crons y controladores satélite sin actualizar a `Inasistencia`.
+  - Eliminación no intencional de archivos durante el commit `4cafc75`.
+- **Solución Aplicada:**
+  1. *Restauración y Reparación del Backend:*
+     - Se restauró `backend/controllers/diaFestivoController.js` desde `main`.
+     - Se importó `Instructor` en `backend/controllers/asistenciaController.js` para habilitar el populate sin fallas de esquema.
+     - Se implementó la función consolidada `obtenerTodasAsistenciasConsolidadas()` para poblar los archivos `.sqlite` tanto globalmente como por cada docente.
+  2. *Contrato del RPA Sofía Plus (Pasos 6d-6 y 6d-7):*
+     - `getInasistenciasParaRPA` y `getTodosInasistenciasParaRPA`: Consultan `Inasistencia.find({ tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] }, estadoCarga: 'LISTO_PARA_SUBIR' })` y mapean exactamente la estructura requerida: `asistenciaId = String(ina._id)`, `estado = ina.tipo`, `horas = ina.horas`, `justificacion`.
+     - `confirmarSubidaSofia`: Realiza `Inasistencia.findOneAndUpdate(query, { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } }, { new: true })` y actualiza `SofiaPlusSync`. Completamente idempotente ante dobles envíos.
+     - [SofiaPlusSync.js](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/backend/models/SofiaPlusSync.js): Migrado el campo principal a `inasistenciaId` (ref `'Inasistencia'`, unique) manteniendo compatibilidad con `asistenciaId`.
+     - `revisarYEncolarSofiaPlus`: Actualizado para encolar inasistencias en `LISTO_PARA_SUBIR` por `inasistenciaId` sin duplicar.
+  3. *Módulo de Excusas y Consistencia:*
+     - En `aprobarExcusa` ([excusaController.js](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/backend/controllers/excusaController.js)), se crea/actualiza `Inasistencia` con `tipo = 'Excusada'`, `horas = tope` y `estadoCarga = 'LISTO_PARA_SUBIR'`, reflejándose de inmediato en la asistencia del aprendiz y en el robot RPA.
+  4. *Migración de Datos Históricos en MongoDB Atlas:*
+     - Creación y ejecución de [migrar-asistencias-a-inasistencias.js](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/backend/scripts/migrar-asistencias-a-inasistencias.js): Migró exitosamente los 26 registros existentes en Atlas (21 aprendices presentes a la colección `jornadas` y 5 novedades a `inasistencias`).
+  5. *Ajuste en Frontend:*
+     - Se corrigió la interpolación del docente en [PanelInstructor.vue](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/frontend/src/views/PanelInstructor.vue) soportando `usuario.nombre` y `usuario.nombres` + `usuario.apellidos`.
+- **Archivos Modificados:**
+  - `backend/controllers/asistenciaController.js`
+  - `backend/controllers/diaFestivoController.js` (Restaurado)
+  - `backend/controllers/excusaController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/rpaController.test.js` (Nuevo)
+  - `backend/models/SofiaPlusSync.js`
+  - `backend/scripts/migrar-asistencias-a-inasistencias.js` (Nuevo)
+  - `backend/services/cronService.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Suite de 50 pruebas unitarias con `node --test` pasando al 100% (incluyendo 5 pruebas específicas de mocks para RPA).
+  - Verificación de consulta real a MongoDB Atlas: `getAsistencias` devuelve exactamente los 26 registros migrados sin errores.
+  - Verificación de sintaxis `node --check` en todos los archivos del backend.
+  - Compilación de producción con Vite `npm run build:prod` completada en 2.05 s y sincronizada a `backend/public/`.
+
+---
+
 ## [2026-10-22 09:42] Despliegue de Programas Mediante Select y Restricción Estricta de Gestión de Catálogo al Administrador
 
 - **Fecha y Hora:** 2026-10-22 09:42:00 -05:00

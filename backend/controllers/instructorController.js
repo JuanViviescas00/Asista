@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
 import Asistencia from '../models/Asistencia.js'
+import Inasistencia from '../models/Inasistencia.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
@@ -355,49 +356,43 @@ export async function getInasistenciasParaRPA(req, res) {
 
     const filter = {
       fichaId: { $in: targetFichaIds },
-      estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
-      subidoSofia: { $ne: true }
+      tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
+      estadoCarga: 'LISTO_PARA_SUBIR'
     }
     if (fecha) filter.fecha = fecha
 
-    const asistencias = await Asistencia.find(filter)
+    const inasistenciasDocs = await Inasistencia.find(filter)
       .populate('estudianteId')
       .populate('fichaId')
       .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
 
-    const inasistencias = asistencias
+    const inasistencias = inasistenciasDocs
       .filter(a => a.estudianteId && a.fichaId)
-      .map(a => {
-        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
-        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
-        const horasJornada = esNoche ? 5 : 6
-        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
-        return {
-          asistenciaId: a._id,
-          fecha: a.fecha,
-          estado: a.estado,
-          horas,
-          ficha: {
-            id: a.fichaId._id,
-            codigo: a.fichaId.codigoFicha || '',
-            nombre: a.fichaId.nombre || '',
-            jornada: a.fichaId.jornada || ''
-          },
-          aprendiz: {
-            id: a.estudianteId._id,
-            tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
-            numeroDocumento: a.estudianteId.numeroDocumento || '',
-            nombres: a.estudianteId.nombres || '',
-            apellidos: a.estudianteId.apellidos || '',
-            nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
-          },
-          justificacion: a.estado === 'Excusada'
-            ? 'Falla justificada'
-            : (a.estado === 'Falta'
-                ? 'Falla injustificada'
-                : 'Tardanza injustificada')
-        }
-      })
+      .map(a => ({
+        asistenciaId: String(a._id),
+        fecha: a.fecha,
+        estado: a.tipo,
+        horas: a.horas,
+        ficha: {
+          id: a.fichaId._id,
+          codigo: a.fichaId.codigoFicha || '',
+          nombre: a.fichaId.nombrePrograma || a.fichaId.nombre || '',
+          jornada: a.fichaId.jornada || ''
+        },
+        aprendiz: {
+          id: a.estudianteId._id,
+          tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
+          numeroDocumento: a.estudianteId.numeroDocumento || '',
+          nombres: a.estudianteId.nombres || '',
+          apellidos: a.estudianteId.apellidos || '',
+          nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
+        },
+        justificacion: a.tipo === 'Excusada'
+          ? 'Falla justificada'
+          : (a.tipo === 'Falta'
+              ? 'Falla injustificada'
+              : 'Tardanza injustificada')
+      }))
 
     res.json({
       ok: true,
@@ -453,17 +448,16 @@ export async function getTodosInasistenciasParaRPA(req, res) {
 
       const filter = {
         fichaId: { $in: fichaIds },
-        estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
-        subidoSofia: { $ne: true }
+        tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
+        estadoCarga: 'LISTO_PARA_SUBIR'
       }
       if (fecha) filter.fecha = fecha
 
-      const asistencias = await Asistencia.find(filter)
+      const inasistenciasValidas = (await Inasistencia.find(filter)
         .populate('estudianteId')
         .populate('fichaId')
-        .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
-
-      const inasistenciasValidas = asistencias.filter(a => a.estudianteId && a.fichaId)
+        .sort({ fecha: -1, 'fichaId.codigoFicha': 1 }))
+        .filter(a => a.estudianteId && a.fichaId)
 
       if (inasistenciasValidas.length === 0) continue
 
@@ -475,21 +469,17 @@ export async function getTodosInasistenciasParaRPA(req, res) {
           fichasMap.set(fCodigo, {
             id: a.fichaId._id,
             codigo: fCodigo,
-            nombre: a.fichaId.nombre || '',
+            nombre: a.fichaId.nombrePrograma || a.fichaId.nombre || '',
             jornada: a.fichaId.jornada || '',
             aprendices: []
           })
         }
 
-        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
-        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
-        const horasJornada = esNoche ? 5 : 6
-        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
         fichasMap.get(fCodigo).aprendices.push({
-          asistenciaId: a._id,
+          asistenciaId: String(a._id),
           fecha: a.fecha,
-          estado: a.estado,
-          horas,
+          estado: a.tipo,
+          horas: a.horas,
           aprendiz: {
             id: a.estudianteId._id,
             tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
@@ -498,9 +488,9 @@ export async function getTodosInasistenciasParaRPA(req, res) {
             apellidos: a.estudianteId.apellidos || '',
             nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
           },
-          justificacion: a.estado === 'Excusada'
+          justificacion: a.tipo === 'Excusada'
             ? 'Falla justificada'
-            : (a.estado === 'Falta'
+            : (a.tipo === 'Falta'
                 ? 'Falla injustificada'
                 : 'Tardanza injustificada')
         })
@@ -536,39 +526,43 @@ export async function getTodosInasistenciasParaRPA(req, res) {
 // Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus
 export async function confirmarSubidaSofia(req, res) {
   try {
-    const { asistenciaId, estudianteId, fichaId, fecha } = req.body
+    const { asistenciaId, inasistenciaId, estudianteId, fichaId, fecha } = req.body
 
-    if (!asistenciaId && (!estudianteId || !fecha)) {
+    const idBuscado = inasistenciaId || asistenciaId
+    if (!idBuscado && (!estudianteId || !fecha)) {
       return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId o (estudianteId y fecha)' })
     }
 
-    const query = asistenciaId ? { _id: asistenciaId } : { estudianteId, fecha }
+    const query = idBuscado ? { _id: idBuscado } : { estudianteId, fecha }
     if (fichaId) query.fichaId = fichaId
 
-    const asistenciaActualizada = await Asistencia.findOneAndUpdate(
+    // Actualizar Inasistencia marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
+    // Idempotente: doble confirmación no falla ni duplica
+    const inasistenciaActualizada = await Inasistencia.findOneAndUpdate(
       query,
-      { subidoSofia: true, fechaSubidaSofia: new Date() },
+      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } },
       { new: true }
     )
 
-    if (!asistenciaActualizada) {
-      return res.status(404).json({ ok: false, error: 'Registro de asistencia no encontrado' })
+    if (!inasistenciaActualizada) {
+      return res.status(404).json({ ok: false, error: 'Registro de inasistencia no encontrado' })
     }
 
     // Actualizar o marcar en la colección SofiaPlusSync si existe
     await SofiaPlusSync.findOneAndUpdate(
-      { asistenciaId: asistenciaActualizada._id },
-      { estadoSync: 'subido', fechaSubida: new Date() },
+      { $or: [{ inasistenciaId: inasistenciaActualizada._id }, { asistenciaId: inasistenciaActualizada._id }] },
+      { $set: { estadoSync: 'subido', fechaSubida: new Date(), inasistenciaId: inasistenciaActualizada._id } },
       { upsert: false }
     )
 
     res.json({
       ok: true,
-      mensaje: 'Asistencia marcada como subida a Sofia Plus correctamente',
+      mensaje: 'Inasistencia confirmada y sincronizada con Sofia Plus exitosamente',
       asistencia: {
-        id: asistenciaActualizada._id,
-        subidoSofia: asistenciaActualizada.subidoSofia,
-        fechaSubidaSofia: asistenciaActualizada.fechaSubidaSofia
+        id: inasistenciaActualizada._id,
+        fecha: inasistenciaActualizada.fecha,
+        subidoSofia: inasistenciaActualizada.estadoCarga === 'SUBIDA',
+        fechaSubidaSofia: inasistenciaActualizada.fechaSubidaSofia
       }
     })
   } catch (err) {

@@ -5,6 +5,7 @@ import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import Inasistencia from '../models/Inasistencia.js'
+import { obtenerTodasAsistenciasConsolidadas } from '../controllers/asistenciaController.js'
 import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
 import { getHoyString, finalizarClase } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
@@ -189,12 +190,8 @@ export async function sincronizarSqlitePorDocente() {
   const instructoresMap = new Map()
   instructores.forEach(inst => instructoresMap.set(String(inst._id), inst))
 
-  // 3. Obtener todas las asistencias registradas
-  const asistencias = await Asistencia.find()
-    .populate('estudianteId', 'nombres apellidos numeroDocumento correo')
-    .populate('fichaId', 'codigoFicha nombrePrograma jornada')
-    .populate('instructorId', 'nombres apellidos numeroDocumento especialidad correo')
-    .sort({ fecha: 1 })
+  // 3. Obtener todas las asistencias consolidadas (Inasistencia + Jornada)
+  const asistencias = await obtenerTodasAsistenciasConsolidadas()
 
   if (!asistencias || asistencias.length === 0) {
     return { ok: true, totalDocentes: 0, totalRegistros: 0, totalElegiblesSubida: 0 }
@@ -204,9 +201,7 @@ export async function sincronizarSqlitePorDocente() {
   const asistenciasPorDocente = new Map()
 
   for (const a of asistencias) {
-    if (!a.estudianteId || !a.fichaId) continue
-
-    const inst = a.instructorId || (a.fichaId.instructorLiderId ? instructoresMap.get(String(a.fichaId.instructorLiderId)) : null)
+    const inst = a.instructorDoc || (a.fichaDoc?.instructorLiderId ? instructoresMap.get(String(a.fichaDoc.instructorLiderId)) : null)
     const docenteKey = inst?.numeroDocumento ? String(inst.numeroDocumento) : (inst?._id ? String(inst._id) : 'sin_asignar')
 
     if (!asistenciasPorDocente.has(docenteKey)) {
@@ -216,18 +211,17 @@ export async function sincronizarSqlitePorDocente() {
       })
     }
 
-    const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId?.jornada || '')
-    // Vencida (injustificada) solo si el 5.º día hábil ya terminó (ver constante).
-    const esElegible = diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1
+    const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.jornada || '')
+    const esElegible = a.estadoCarga === 'LISTO_PARA_SUBIR' || diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1
     const estadoCarga = esElegible ? 'LISTO_PARA_SUBIR' : 'EN_ESPERA'
 
     asistenciasPorDocente.get(docenteKey).rows.push({
-      fichaCodigo: a.fichaId.codigoFicha || 'Sin Ficha',
-      nombrePrograma: a.fichaId.nombrePrograma || '',
-      jornada: a.fichaId.jornada || '',
-      documentoAprendiz: a.estudianteId.numeroDocumento || '',
-      nombreAprendiz: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim(),
-      correoAprendiz: a.estudianteId.correo || '',
+      fichaCodigo: a.fichaCodigo || 'Sin Ficha',
+      nombrePrograma: a.nombrePrograma || '',
+      jornada: a.jornada || '',
+      documentoAprendiz: a.documentoAprendiz || '',
+      nombreAprendiz: a.nombreAprendiz || '',
+      correoAprendiz: a.correoAprendiz || '',
       fecha: a.fecha,
       estado: a.estado,
       hora: a.hora || '—',
@@ -293,69 +287,52 @@ export async function sincronizarSqlitePorDocente() {
  * - No duplica: si ya existe un SofiaPlusSync para una asistencia, la omite.
  */
 export async function revisarYEncolarSofiaPlus() {
-  const hoyStr = getHoyString()
-
-  // 1. Cargar conjunto de días festivos para cálculo de días hábiles
-  const festivosDocs = await DiaFestivo.find().select('fecha')
-  const festivosSet = new Set(festivosDocs.map(f => f.fecha))
-
-  // 2. Obtener asistencias relevantes (fallas y excusadas que no hayan sido subidas aún)
-  const asistencias = await Asistencia.find({
-    estado: { $in: ['Falta', 'Excusada'] },
-    subidoSofia: { $ne: true }
+  // 1. Leer Inasistencias que estén en LISTO_PARA_SUBIR (Falta o Excusada)
+  const inasistencias = await Inasistencia.find({
+    tipo: { $in: ['Falta', 'Excusada'] },
+    estadoCarga: 'LISTO_PARA_SUBIR'
   }).populate('fichaId', 'jornada instructorLiderId')
 
-  if (!asistencias || asistencias.length === 0) {
+  if (!inasistencias || inasistencias.length === 0) {
     return { encolados: 0, omitidosYaExistentes: 0, enEsperaDiasHabiles: 0 }
   }
 
-  // 3. IDs de asistencias que ya tienen un SofiaPlusSync (para no duplicar)
+  // 2. IDs ya encolados en SofiaPlusSync
+  const idsInasistencias = inasistencias.map(ina => ina._id)
+  const yaEncoladosDocs = await SofiaPlusSync.find({
+    $or: [
+      { inasistenciaId: { $in: idsInasistencias } },
+      { asistenciaId: { $in: idsInasistencias } }
+    ]
+  }).select('inasistenciaId asistenciaId')
+
   const yaEncolados = new Set(
-    (await SofiaPlusSync.find({ asistenciaId: { $in: asistencias.map(a => a._id) } }).select('asistenciaId'))
-      .map(s => String(s.asistenciaId))
+    yaEncoladosDocs.map(s => String(s.inasistenciaId || s.asistenciaId))
   )
 
   const aEncolar = []
   let omitidosYaExistentes = 0
-  let enEsperaDiasHabiles = 0
 
-  for (const a of asistencias) {
-    if (!a.fichaId) continue
+  for (const ina of inasistencias) {
+    if (!ina.fichaId) continue
 
-    if (yaEncolados.has(String(a._id))) {
+    const idStr = String(ina._id)
+    if (yaEncolados.has(idStr)) {
       omitidosYaExistentes++
       continue
     }
 
-    const instructorId = a.instructorId || (a.fichaId.instructorLiderId || null)
+    const instructorId = ina.instructorId || (ina.fichaId.instructorLiderId || null)
 
-    if (a.estado === 'Excusada') {
-      aEncolar.push({
-        asistenciaId: a._id,
-        estudianteId: a.estudianteId,
-        fichaId: a.fichaId._id || a.fichaId,
-        instructorId,
-        fecha: a.fecha,
-        resultado: 'Excusada',
-      })
-      continue
-    }
-
-    // estado === 'Falta'
-    const diasHabiles = calcularDiasHabilesTranscurridos(a.fecha, festivosSet, hoyStr, a.fichaId.jornada || '')
-    // Vencida (injustificada) solo si el 5.º día hábil ya terminó (ver constante).
-    if (diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1) {
-      aEncolar.push({
-        asistenciaId: a._id,
-        estudianteId: a.estudianteId,
-        fichaId: a.fichaId._id || a.fichaId,
-        instructorId,
-        fecha: a.fecha,
-        resultado: 'Falta',
-      })
-    } else {
-      enEsperaDiasHabiles++
-    }
+    aEncolar.push({
+      inasistenciaId: ina._id,
+      asistenciaId: ina._id,
+      estudianteId: ina.estudianteId,
+      fichaId: ina.fichaId._id || ina.fichaId,
+      instructorId,
+      fecha: ina.fecha,
+      resultado: ina.tipo,
+    })
   }
 
   if (aEncolar.length > 0) {
@@ -368,9 +345,9 @@ export async function revisarYEncolarSofiaPlus() {
     }
   }
 
-  console.log(`[SofiaPlus] Encolados: ${aEncolar.length}, ya existentes: ${omitidosYaExistentes}, en espera de días hábiles: ${enEsperaDiasHabiles}`)
+  console.log(`[SofiaPlus] Encolados: ${aEncolar.length}, ya existentes: ${omitidosYaExistentes}`)
 
-  return { encolados: aEncolar.length, omitidosYaExistentes, enEsperaDiasHabiles }
+  return { encolados: aEncolar.length, omitidosYaExistentes, enEsperaDiasHabiles: 0 }
 }
 
 /**
