@@ -873,3 +873,22 @@
 - **Verificacion:**
   - Sincronizacion y alineacion de los remotos origin, sista y juan en el commit generado por el bot.
   - Validacion de sintaxis YAML y politica de concurrencia en la accion de GitHub.
+
+---
+
+## [2026-10-22 22:10] Robustecimiento de Deteccion de Commits y Publicacion en Monolito CI/CD
+
+- **Fecha y Hora:** 2026-10-22 22:10:00 -05:00
+- **Descripcion del Problema / Mejora:**
+  Al revisar los logs de ejecuciones anteriores de GitHub Actions (commits rechazados por non-fast-forward en runs concurrentes heredados), se identifico un caso limite critico: si una rama disparadora (por ejemplo Backend) contiene cambios de servidor que no alteran el build de frontend en backend/public, la condicion anterior git diff --staged --quiet evaluaba falso para el build y omitia el push, dejando el merge de Backend sin publicar en main.
+- **Causa Raiz:**
+  El script evaluaba unicamente los cambios en stage de ackend/public para decidir si hacia push a origin main, ignorando si el git merge previo de la rama disparadora ya habia generado un commit de integracion en main.
+- **Solucion Aplicada:**
+  1. Se separo la creacion de commit de frontend (ackend/public) de la decision de push.
+  2. Se implemento la evaluacion de commits pendientes mediante COMMITS_AHEAD=0.
+  3. Si COMMITS_AHEAD > 0 (bien sea por merge de ramas o por nuevo bundle de frontend), se activa el proceso de publicacion con reintentos y rebase.
+- **Archivos Modificados:**
+  - .github/workflows/monolito-sync.yml
+  - TROUBLESHOOTING.md
+- **Verificacion:**
+  - Sintaxis de workflow validada. Sincronizacion total en remotes.

@@ -82,15 +82,24 @@ jobs:
           # Forzar agregado de backend/public para que forme parte integral del monolito
           git add -f backend/public
 
-          # Obtener cambios remotos recientes antes de evaluar estado
+          # Si se detectaron cambios en el build del frontend, confirmarlos
+          if ! git diff --staged --quiet; then
+            echo "Cambios detectados en el build de backend/public. Creando commit del monolito..."
+            git commit -m "ci(monolito): compilar frontend a backend/public y unificar monolito [skip ci]"
+          else
+            echo "El build de backend/public no tuvo modificaciones."
+          fi
+
+          # Consultar commits remotos recientes
           git fetch origin main
 
-          # Verificar si hay cambios tras la compilación o el merge
-          if git diff --staged --quiet; then
-            echo "El monolito en main ya está completamente al día. No se requieren nuevos commits."
+          # Verificar si main local tiene commits pendientes de publicar (por merge o por build)
+          COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
+
+          if [ "$COMMITS_AHEAD" -eq 0 ]; then
+            echo "El monolito en main ya está completamente al día con origin/main ($COMMITS_AHEAD commits pendientes)."
           else
-            echo "Cambios detectados. Creando commit del monolito en main..."
-            git commit -m "ci(monolito): compilar frontend a backend/public y unificar monolito [skip ci]"
+            echo "Se detectaron $COMMITS_AHEAD commit(s) pendientes de publicar en origin/main. Iniciando sincronización..."
             
             # Reintentar push con fetch/rebase automático en caso de carreras concurrentes
             SUCCESS=0
