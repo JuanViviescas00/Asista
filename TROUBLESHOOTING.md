@@ -815,3 +815,38 @@
   - `TROUBLESHOOTING.md`
 - **Verificación:**
   - Compilación de producción con `npm run build:prod` (Vite v8, 319 módulos) completada exitosamente en 599ms sin advertencias de resolución.
+
+---
+
+## [2026-10-22 22:00] Eliminacion de Suite de Pruebas Unitarias y Ajuste del Workflow Monolito
+
+- **Fecha y Hora:** 2026-10-22 22:00:00 -05:00
+- **Descripcion del Problema / Requerimiento:**
+  El usuario solicito remover todas las pruebas del proyecto ('borra las pruebas no son necesarias'). Se requeria eliminar los archivos de prueba en backend/ y actualizar la canalizacion de integracion continua (CI/CD) para evitar ejecuciones o fallos por tests ausentes.
+- **Causa Raiz:**
+  Existian 8 archivos de pruebas unitarias (*.test.js) en backend/controllers/, backend/services/ y backend/utils/. Adicionalmente, el flujo automatizado .github/workflows/monolito-sync.yml contenia el paso explicito 'node --test' que causaria error en CI al no encontrar tests o depender de ellos.
+- **Solucion Aplicada:**
+  1. Se eliminaron definitivamente mediante git rm los 8 archivos de test:
+     - backend/controllers/asistenciaController.test.js
+     - backend/controllers/authController.test.js
+     - backend/controllers/inhabilitarJornada.test.js
+     - backend/controllers/procesarAsistencia.test.js
+     - backend/controllers/rpaController.test.js
+     - backend/services/asistenciaService.test.js
+     - backend/utils/desercionUtils.test.js
+     - backend/utils/inasistenciaEstado.test.js
+  2. Se edito .github/workflows/monolito-sync.yml retirando el paso de ejecucion 'node --test' y resecuenciando el paso de publicacion del monolito.
+- **Archivos Modificados:**
+  - .github/workflows/monolito-sync.yml
+  - backend/controllers/asistenciaController.test.js (eliminado)
+  - backend/controllers/authController.test.js (eliminado)
+  - backend/controllers/inhabilitarJornada.test.js (eliminado)
+  - backend/controllers/procesarAsistencia.test.js (eliminado)
+  - backend/controllers/rpaController.test.js (eliminado)
+  - backend/services/asistenciaService.test.js (eliminado)
+  - backend/utils/desercionUtils.test.js (eliminado)
+  - backend/utils/inasistenciaEstado.test.js (eliminado)
+  - TROUBLESHOOTING.md
+- **Verificacion:**
+  - Verificacion con git ls-files confirmando la remocion total de archivos de prueba.
+  - Flujo de sincronizacion de monolito validado sin dependencias a suites de test.

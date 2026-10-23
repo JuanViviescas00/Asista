@@ -71,12 +71,7 @@ jobs:
         run: |
           npm run build:prod
 
-      - name: 7. Ejecutar pruebas unitarias del Backend
-        run: |
-          cd backend
-          node --test
-
-      - name: 8. Confirmar y publicar Monolito actualizado en main
+      - name: 7. Confirmar y publicar Monolito actualizado en main
         run: |
           # Forzar agregado de backend/public para que forme parte integral del monolito
           git add -f backend/public
