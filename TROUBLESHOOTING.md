@@ -1011,3 +1011,29 @@
   - Sintaxis validada con `node -c` en todos los archivos modificados (código 0).
   - Prueba de ejecución del bot en modo batch y dry-run conectando exitosamente con la API de Asista (`http://localhost:3000/api/instructores/todos-inasistencias-rpa`) y detectando inasistencias.
   - Compilación de producción frontend con `npm run build` exitosa en 2.12s con 0 errores.
+---
+
+## [2026-10-24 11:00] Configuración de Registro Real de Novedades, Agrupación de Excusas por Rango y Verificación de Login de Docentes
+
+- **Fecha y Hora:** 2026-10-24 11:00:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. **Activación de Registro Real:** Configurar el robot RPA para que opere por defecto en Modo Real (`dryRun: false`), realizando efectivamente el clic en "Registrar Novedad" en Sofia Plus y bloqueando la asistencia en MongoDB tras la confirmación exitosa.
+  2. **Agrupación y Suma de Excusas/Faltas por Aprendiz:** Si un docente tiene más de una inasistencia o excusa para el mismo aprendiz en la misma ficha, el robot debe consolidarlas en un único formulario en Sofia Plus, sumando el total de horas fallidas y enviando la fecha inicial (`formNovedadAprendiz:fechaEjecucion`) a la fecha final (`formNovedadAprendiz:fechaFin`).
+  3. **Verificación de Inicio de Sesión de Instructores:** Confirmar el flujo completo de autenticación de docentes en Sofia Plus y mantener disponible la herramienta `bot_sofia_login.js` para pruebas directas.
+- **Causa Raíz:**
+  El robot procesaba cada inasistencia en formularios individuales separados (1 por cada fecha), generando múltiples registros repetitivos en Sofia Plus para aprendices con fallas continuas o acumuladas en la misma semana.
+- **Solución Aplicada:**
+  1. **Función `agruparInasistenciasPorAprendiz` en `rpa/bot_inasistencias_sofia.js`:** Consolida registros por ficha, aprendiz y tipo de novedad, calculando la fecha más antigua como fecha de inicio, la fecha más reciente como fecha de fin, la sumatoria total de horas y una justificación compuesta descriptiva.
+  2. **Soporte de Lotes (`asistenciaIds`) en Backend:** Se actualizó `confirmarSubidaSofia` en `backend/controllers/instructorController.js` para aceptar un array `asistenciaIds`, marcando atómicamente todos los registros agrupados con `estadoCarga: 'SUBIDA'` y `fechaSubidaSofia: new Date()`, lo cual activa el candado visual (🔒) en el panel docente.
+  3. **Modo Real por Defecto:** Se configuró `envDryRun = process.env.RPA_DRY_RUN === 'true'` (falso por defecto), permitiendo que tanto el cron como las llamadas de backend radiquen cambios reales en Sofia Plus a menos que se use la bandera explícita `--dry-run`.
+  4. **Preservación de Login Independiente:** Se incorporó `rpa/bot_sofia_login.js` con los scripts `login:docente` en `rpa/package.json` y `rpa:login` en el `package.json` raíz.
+- **Archivos Modificados:**
+  - `rpa/bot_inasistencias_sofia.js`
+  - `rpa/bot_sofia_login.js`
+  - `rpa/package.json`
+  - `package.json`
+  - `backend/controllers/instructorController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis con `node -c` en todos los archivos JS modificados (código 0).
+  - Verificación del árbol de trabajo local sin realizar push a repositorios remotos según la instrucción del usuario.

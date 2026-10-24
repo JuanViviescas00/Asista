@@ -23,7 +23,8 @@
     "build:prod": "npm run build --prefix frontend && node scripts/copy-dist.js",
     "build": "npm run build:prod",
     "install:all": "npm install",
-    "rpa:inasistencias": "npm run inasistencias --prefix rpa"
+    "rpa:inasistencias": "npm run inasistencias --prefix rpa",
+    "rpa:login": "npm run login:docente --prefix rpa"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

@@ -505,54 +505,50 @@ export async function getTodosInasistenciasParaRPA(req, res) {
   }
 }
 
-// Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus
+// Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus (soporta individual o lote de IDs agrupados)
 export async function confirmarSubidaSofia(req, res) {
   try {
-    const { asistenciaId, inasistenciaId, estudianteId, fichaId, fecha } = req.body
+    const { asistenciaId, inasistenciaId, asistenciaIds, estudianteId, fichaId, fecha } = req.body
 
-    const idBuscado = inasistenciaId || asistenciaId
-    if (!idBuscado && (!estudianteId || !fecha)) {
-      return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId o (estudianteId y fecha)' })
+    const idsList = Array.isArray(asistenciaIds) && asistenciaIds.length > 0
+      ? asistenciaIds
+      : (inasistenciaId || asistenciaId ? [inasistenciaId || asistenciaId] : [])
+
+    if (idsList.length === 0 && (!estudianteId || !fecha)) {
+      return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId, asistenciaIds o (estudianteId y fecha)' })
     }
 
-    const query = idBuscado ? { _id: idBuscado } : { estudianteId, fecha }
+    const query = idsList.length > 0 ? { _id: { $in: idsList } } : { estudianteId, fecha }
     if (fichaId) query.fichaId = fichaId
 
-    // Actualizar Inasistencia marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
-    // Idempotente: doble confirmación no falla ni duplica
-    const inasistenciaActualizada = await Inasistencia.findOneAndUpdate(
+    // Actualizar Inasistencias marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
+    const updateResult = await Inasistencia.updateMany(
       query,
-      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } },
-      { new: true }
+      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } }
     )
 
-    if (!inasistenciaActualizada) {
-      return res.status(404).json({ ok: false, error: 'Registro de inasistencia no encontrado' })
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Registro(s) de inasistencia no encontrado(s)' })
     }
 
-    // Actualizar o marcar en la colección SofiaPlusSync si existe
-    await SofiaPlusSync.findOneAndUpdate(
-      { $or: [{ inasistenciaId: inasistenciaActualizada._id }, { asistenciaId: inasistenciaActualizada._id }] },
-      { $set: { estadoSync: 'subido', fechaSubida: new Date(), inasistenciaId: inasistenciaActualizada._id } },
-      { upsert: false }
-    )
+    // Actualizar o marcar en la colección SofiaPlusSync si existen
+    if (idsList.length > 0) {
+      await SofiaPlusSync.updateMany(
+        { $or: [{ inasistenciaId: { $in: idsList } }, { asistenciaId: { $in: idsList } }] },
+        { $set: { estadoSync: 'subido', fechaSubida: new Date() } }
+      )
+    }
 
     res.json({
       ok: true,
-      mensaje: 'Inasistencia confirmada y sincronizada con Sofia Plus exitosamente',
-      asistencia: {
-        id: inasistenciaActualizada._id,
-        fecha: inasistenciaActualizada.fecha,
-        subidoSofia: inasistenciaActualizada.estadoCarga === 'SUBIDA',
-        fechaSubidaSofia: inasistenciaActualizada.fechaSubidaSofia
-      }
+      mensaje: 'Inasistencia(s) confirmada(s) y sincronizada(s) con Sofia Plus exitosamente',
+      actualizados: updateResult.modifiedCount
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   }
 }
 
-// Disparar manualmente la ejecución del Robot RPA de inasistencias
 export async function ejecutarRobotRPA(req, res) {
   try {
     const { doc, fecha, ficha, dryRun, limite, headless } = req.body || {}

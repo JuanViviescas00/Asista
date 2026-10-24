@@ -85,12 +85,96 @@ function formatearFechaSENA(fechaStr) {
 /**
  * Procesa argumentos de línea de comandos
  */
+/**
+ * Agrupa inasistencias y excusas por Aprendiz y Ficha:
+ * Si un docente tiene más de una inasistencia o excusa de un estudiante:
+ * - Suma todas las horas acumuladas (horas fallidas).
+ * - Define la fecha inicial (más antigua) y fecha final (más reciente).
+ * - Consolida la justificación con el rango de fechas cubierto.
+ * - Mantiene la lista de asistenciaIds para bloquearlos y confirmarlos a todos en Asista.
+ */
+function agruparInasistenciasPorAprendiz(items) {
+  if (!items || items.length === 0) return [];
+
+  const mapa = new Map();
+
+  for (const item of items) {
+    const codFicha = String(item.ficha?.codigo || item.ficha?.id || 'sin_ficha');
+    const docAprendiz = String(item.aprendiz?.numeroDocumento || item.aprendiz?.id || 'sin_doc');
+    const tipoNovedad = item.estado === 'Excusada' ? 'Excusada' : 'Falta';
+    const clave = `${codFicha}__${docAprendiz}__${tipoNovedad}`;
+
+    if (!mapa.has(clave)) {
+      mapa.set(clave, {
+        aprendiz: item.aprendiz,
+        ficha: item.ficha,
+        estado: item.estado,
+        tipoNovedad,
+        fechas: [item.fecha],
+        horasTotales: Number(item.horas) || 0,
+        asistenciaIds: item.asistenciaId ? [String(item.asistenciaId)] : [],
+        justificaciones: [item.justificacion || (item.estado === 'Excusada' ? 'Falla justificada' : 'Falla injustificada')]
+      });
+    } else {
+      const grupo = mapa.get(clave);
+      if (item.fecha && !grupo.fechas.includes(item.fecha)) {
+        grupo.fechas.push(item.fecha);
+      }
+      grupo.horasTotales += Number(item.horas) || 0;
+      if (item.asistenciaId && !grupo.asistenciaIds.includes(String(item.asistenciaId))) {
+        grupo.asistenciaIds.push(String(item.asistenciaId));
+      }
+      if (item.justificacion && !grupo.justificaciones.includes(item.justificacion)) {
+        grupo.justificaciones.push(item.justificacion);
+      }
+    }
+  }
+
+  const agrupados = [];
+  for (const grupo of mapa.values()) {
+    grupo.fechas.sort();
+    const fechaInicioISO = grupo.fechas[0];
+    const fechaFinISO = grupo.fechas[grupo.fechas.length - 1];
+
+    let justificacionFinal = grupo.justificaciones.filter(Boolean).join('; ');
+    if (grupo.fechas.length > 1) {
+      const rangoTexto = `${formatearFechaSENA(fechaInicioISO)} al ${formatearFechaSENA(fechaFinISO)}`;
+      const prefijo = grupo.tipoNovedad === 'Excusada' ? 'Fallas justificadas' : 'Inasistencias acumuladas';
+      justificacionFinal = `${prefijo} (${grupo.fechas.length} sesiones: ${rangoTexto}). ${justificacionFinal}`.trim();
+    }
+
+    if (justificacionFinal.length > 200) {
+      justificacionFinal = justificacionFinal.substring(0, 197) + '...';
+    }
+
+    agrupados.push({
+      aprendiz: grupo.aprendiz,
+      ficha: grupo.ficha,
+      estado: grupo.estado,
+      tipoNovedad: grupo.tipoNovedad,
+      fecha: fechaInicioISO,
+      fechaInicio: fechaInicioISO,
+      fechaFin: fechaFinISO,
+      fechaInicioSENA: formatearFechaSENA(fechaInicioISO),
+      fechaFinSENA: formatearFechaSENA(fechaFinISO),
+      horas: grupo.horasTotales,
+      cantidadSesiones: grupo.fechas.length,
+      asistenciaId: grupo.asistenciaIds[0],
+      asistenciaIds: grupo.asistenciaIds,
+      justificacion: justificacionFinal
+    });
+  }
+
+  return agrupados;
+}
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const envHeadless = process.env.HEADLESS === 'true' || process.env.RPA_HEADLESS === 'true';
-  const envDryRun = process.env.RPA_DRY_RUN !== 'false';
+  // Por defecto MODO REAL activo (dryRun = false) para registrar efectivamente la novedad en Sofia Plus
+  const envDryRun = process.env.RPA_DRY_RUN === 'true';
   const params = {
-    dryRun: envDryRun, // Modo seguro por defecto (o según RPA_DRY_RUN)
+    dryRun: envDryRun, // false por defecto (registra la novedad de verdad)
     maxReintentosCaida: 4,
     minutosEsperaCaida: 5,
     auto: false,
@@ -198,6 +282,8 @@ async function cerrarModalesSiExisten(page) {
  * Procesa el registro de inasistencias de UN docente en Sofia Plus
  */
 async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, browser) {
+  // Consolidar novedades: si un estudiante tiene más de una inasistencia/excusa, se suman las horas y se define rango
+  const novedadesAgrupadas = agruparInasistenciasPorAprendiz(itemsInasistencias);
   const resultadosDocente = [];
   let context = null;
   let page = null;
@@ -206,7 +292,10 @@ async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, brows
 
   console.log(`\n${'='.repeat(72)}`);
   console.log(` 👨‍🏫 INICIANDO SESIÓN PARA: ${instructor.nombreCompleto} (${instructor.tipoDocumento} ${instructor.numeroDocumento})`);
-  console.log(`    Total de inasistencias a procesar: ${itemsInasistencias.length}`);
+  console.log(`    Total de inasistencias registradas: ${itemsInasistencias.length}`);
+  if (novedadesAgrupadas.length < itemsInasistencias.length) {
+    console.log(`    ✨ Agrupadas en ${novedadesAgrupadas.length} novedades para Sofia Plus (sumando horas y fecha inicial/final por aprendiz).`);
+  }
   console.log(`${'='.repeat(72)}`);
 
   // Bucle de conexión con Rate Limiter en caso de caída del servidor Sofia Plus
@@ -436,11 +525,16 @@ async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, brows
         await formCtx.locator("[id='formNovedadAprendiz:justificacionITA']").fill(justificacion);
         await sleep(300);
 
-        // 5. Fecha Inicio* y Fin*
-        console.log(`      > Ingresando Fechas: ${fechaStr}`);
-        await formCtx.locator("[id='formNovedadAprendiz:fechaEjecucion']").fill(fechaStr);
+        // 5. Fecha Inicio* y Fin* (si tiene varias excusas/faltas, va del inicio al fin del periodo)
+        const fInicio = item.fechaInicioSENA || fechaStr;
+        const fFin = item.fechaFinSENA || fechaStr;
+        if (item.cantidadSesiones > 1) {
+          console.log(`      > [ACUMULADO]: ${item.cantidadSesiones} sesiones del ${fInicio} al ${fFin} (Total: ${item.horas} horas fallidas)`);
+        }
+        console.log(`      > Ingresando Fechas: Desde ${fInicio} Hasta ${fFin}`);
+        await formCtx.locator("[id='formNovedadAprendiz:fechaEjecucion']").fill(fInicio);
         await sleep(300);
-        await formCtx.locator("[id='formNovedadAprendiz:fechaFin']").fill(fechaStr);
+        await formCtx.locator("[id='formNovedadAprendiz:fechaFin']").fill(fFin);
         await sleep(500);
 
         // Captura de pantalla como evidencia
@@ -483,17 +577,21 @@ async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, brows
 
           // Notificar y bloquear inmediatamente en el backend de Asista
           try {
-            await fetch(`${API_BASE_URL}/api/instructores/confirmar-subida-sofia`, {
+            const payloadConfirmar = {
+              asistenciaId: item.asistenciaId,
+              asistenciaIds: item.asistenciaIds && item.asistenciaIds.length > 0 ? item.asistenciaIds : [item.asistenciaId],
+              estudianteId: item.aprendiz?.id,
+              fecha: item.fecha,
+              fichaId: item.ficha?.id
+            };
+            const respConf = await fetch(`${API_BASE_URL}/api/instructores/confirmar-subida-sofia`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                asistenciaId: item.asistenciaId,
-                estudianteId: item.aprendiz?.id,
-                fecha: item.fecha,
-                fichaId: item.ficha?.id
-              })
+              body: JSON.stringify(payloadConfirmar)
             });
-            console.log(`      [🔒] Asistencia bloqueada y confirmada en Asista (subidoSofia: true).`);
+            const dataConf = await respConf.json().catch(() => ({}));
+            const cantConfirmadas = dataConf.actualizados || (item.asistenciaIds ? item.asistenciaIds.length : 1);
+            console.log(`      [🔒] ${cantConfirmadas} registro(s) bloqueado(s) y confirmado(s) en Asista (subidoSofia: true).`);
           } catch (eConf) {
             console.warn(`      [!] Aviso: Novedad creada en Sofia pero falló confirmación a Asista: ${eConf.message}`);
           }
@@ -521,7 +619,7 @@ async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, brows
       }
 
       // Pausa humana entre aprendices
-      if (i < itemsInasistencias.length - 1) {
+      if (i < novedadesAgrupadas.length - 1) {
         const pausa = 3 + Math.floor(Math.random() * 3);
         console.log(`      [Pausa humana: ${pausa}s antes del siguiente...]`);
         await sleep(pausa * 1000);

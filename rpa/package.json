@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node bot_inasistencias_sofia.js",
     "inasistencias": "node bot_inasistencias_sofia.js",
-    "inasistencias:batch": "node bot_inasistencias_sofia.js --batch --auto --confirmar-registro --headless",
-    "inasistencias:dry-run": "node bot_inasistencias_sofia.js --batch --auto"
+    "inasistencias:batch": "node bot_inasistencias_sofia.js --batch --auto --headless",
+    "inasistencias:dry-run": "node bot_inasistencias_sofia.js --batch --auto --dry-run",
+    "login:docente": "node bot_sofia_login.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
