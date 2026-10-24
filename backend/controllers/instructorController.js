@@ -9,6 +9,7 @@ import { hashPassword, claveInicialInstructor } from '../services/passwordServic
 import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
+import { ejecutarRPAInasistencias, obtenerEstadoRPA } from '../services/rpaService.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -551,5 +552,34 @@ export async function confirmarSubidaSofia(req, res) {
   }
 }
 
+// Disparar manualmente la ejecución del Robot RPA de inasistencias
+export async function ejecutarRobotRPA(req, res) {
+  try {
+    const { doc, fecha, ficha, dryRun, limite, headless } = req.body || {}
+    const resultado = await ejecutarRPAInasistencias({
+      doc,
+      fecha,
+      ficha,
+      dryRun,
+      limite,
+      headless
+    })
 
+    if (!resultado.ok) {
+      return res.status(400).json(resultado)
+    }
+    res.json(resultado)
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
 
+// Consultar el estado actual de ejecución del Robot RPA
+export function getEstadoRobotRPA(req, res) {
+  try {
+    const estado = obtenerEstadoRPA()
+    res.json({ ok: true, estado })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}

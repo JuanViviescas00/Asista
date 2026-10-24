@@ -43,3 +43,9 @@ huellero/config.json
 
 # Backend public dist folder (generado automaticamente en el build)
 backend/public/
+
+# RPA descargas y evidencias
+rpa/descargas/
+rpa/*.png
+rpa/*.pdf
+rpa/.env

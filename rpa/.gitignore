@@ -1,0 +1,17 @@
+# Archivos de entorno y credenciales (NUNCA subir a repositorios)
+.env
+
+# Dependencias de Node.js
+node_modules/
+package-lock.json
+
+# Archivos compilados y cache de Python
+__pycache__/
+*.pyc
+
+
+# Archivos descargados y evidencias de pantalla
+descargas/
+*.png
+*.pdf
+*.tmp

@@ -41,5 +41,7 @@ router.get('/documento/:documento/credenciales-sofia', autenticarJWT, verificarR
 router.get('/todos-inasistencias-rpa', autenticarOpcional, instructorController.getTodosInasistenciasParaRPA)
 router.get('/documento/:documento/inasistencias-rpa', autenticarOpcional, instructorController.getInasistenciasParaRPA)
 router.post('/confirmar-subida-sofia', autenticarOpcional, instructorController.confirmarSubidaSofia)
+router.post('/ejecutar-rpa', autenticarJWT, verificarRol(['Administrador']), instructorController.ejecutarRobotRPA)
+router.get('/estado-rpa', autenticarJWT, verificarRol(['Administrador']), instructorController.getEstadoRobotRPA)
 
 export default router

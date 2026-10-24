@@ -12,9 +12,10 @@ import { getHoyString, finalizarClase } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 import { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA } from '../utils/diasHabiles.js'
 import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { ejecutarRPAInasistencias } from './rpaService.js'
 
 // Reexportados para no romper a quienes ya importaban estas utilidades desde cronService.
-export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA }
+export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA, ejecutarRPAInasistencias }
 
 /**
  * Cierra automáticamente las clases al finalizar la jornada académica (6 horas diurna, 5 horas nocturna).
@@ -152,34 +153,44 @@ export function iniciarCronJobs() {
 
   console.log(`[CRON] Programador nocturno listo (${schedule} - ${timezone}) - Agrupación por Docente`)
 
-  // 3. Cron semanal de detección de fallas/excusas para Sofía Plus (desactivado por defecto; activar con ENABLE_SOFIA_SYNC=true)
-  if (process.env.ENABLE_SOFIA_SYNC === 'true') {
+  // 3. Cron semanal de detección de fallas/excusas y reporte RPA a Sofía Plus (activo por defecto; desactivar con ENABLE_SOFIA_SYNC=false)
+  if (process.env.ENABLE_SOFIA_SYNC !== 'false') {
     const scheduleSofia = process.env.CRON_SOFIA_SCHEDULE || '0 0 * * 6'
     cron.schedule(scheduleSofia, async () => {
-      console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas para Sofía Plus (Sábado 12:00 AM)...`)
+      console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas y reporte RPA a Sofía Plus (Sábado 12:00 AM)...`)
       try {
         const encolado = await revisarYEncolarSofiaPlus()
         console.log(`[CRON] SofiaPlus: ${encolado.encolados} encolados, ${encolado.omitidosYaExistentes} ya existentes, ${encolado.enEsperaDiasHabiles} en espera de días hábiles.`)
+
+        // Disparar Robot RPA de inasistencias en modo desatendido
+        if (process.env.ENABLE_RPA_ROBOT !== 'false') {
+          console.log('[CRON] 🤖 Disparando Robot RPA de inasistencias para reporte oficial en Sofia Plus...')
+          const resRPA = await ejecutarRPAInasistencias({
+            batch: true,
+            headless: true,
+            dryRun: process.env.RPA_DRY_RUN === 'true'
+          })
+          if (resRPA.ok) {
+            console.log('[CRON] 🤖 Robot RPA completó el proceso exitosamente.')
+          } else {
+            console.warn(`[CRON] ⚠️ Robot RPA finalizó con observaciones: ${resRPA.error || 'revisar logs'}`)
+          }
+        }
+
         const alertas = await revisarAlertasSofiaPlus()
         console.log(`[CRON] SofiaPlus: ${alertas.alertasEmitidas} alertas emitidas.`)
       } catch (err) {
-        console.error('[CRON] ❌ Error en revisión de Sofía Plus:', err.message)
+        console.error('[CRON] ❌ Error en ciclo semanal de Sofía Plus / RPA:', err.message)
       }
     }, {
       timezone: 'America/Bogota'
     })
-    console.log(`[CRON] Revisión semanal Sofía Plus activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
+    console.log(`[CRON] Revisión semanal Sofía Plus y RPA activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
   }
 }
 
 /**
- * Genera y actualiza un archivo SQLite independiente para cada Docente que haya impartido clases.
- * - Incluye todas las clases dictadas diariamente por el profesor (sin importar si es líder o apoyo).
- * - Evalúa la ventana de excusa (DIAS_HABILES_VENTANA_EXCUSA, Acuerdo 0009 de 2024, Art. 28 Parágrafo 3):
- *   - Si la ventana no venció: Estado de carga 'EN_ESPERA' (ventana reglamentaria para radicar excusas).
- *   - Si la ventana venció (diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1): 'LISTO_PARA_SUBIR'.
- */
-export async function sincronizarSqlitePorDocente() {
+ export async function sincronizarSqlitePorDocente() {
   const hoyStr = getHoyString()
 
   // 1. Cargar conjunto de días festivos para cálculo de días hábiles

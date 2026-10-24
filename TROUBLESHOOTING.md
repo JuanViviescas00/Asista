@@ -978,3 +978,36 @@
   - TROUBLESHOOTING.md
 - **Verificacion:**
   - Ramas locales y remotas alineadas. Regla de integracion validada en .github/workflows/monolito-sync.yml.
+---
+
+## [2026-10-24 10:55] Integración del Módulo RPA de Inasistencias en el Repositorio Principal y Conexión con el Cron
+
+- **Fecha y Hora:** 2026-10-24 10:55:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. El robot RPA de reporte de inasistencias en Sofia Plus se encontraba en una carpeta externa independiente (`Practica_RPA`), por lo cual el backend y el programador cron semanal no podían invocarlo de forma autónoma.
+  2. El usuario solicitó expresamente que el robot RPA dentro del repositorio principal fuera **exclusivo para el registro y reporte de inasistencias**, descartando bots de descarga de notas y certificados.
+- **Causa Raíz:**
+  Desacoplamiento físico de los scripts de RPA respecto al repositorio principal del Huellero y ausencia de un servicio puente en el backend para orquestar la ejecución desatendida del proceso Playwright.
+- **Solución Aplicada:**
+  1. **Incorporación del Módulo RPA Exclusivo (`rpa/`):** Se creó la carpeta `rpa/` en la raíz del proyecto conteniendo exclusivamente el orquestador `bot_inasistencias_sofia.js`, su configuración `package.json`, `.env.example`, `.gitignore` y `README.md`.
+  2. **Configuración de Workspace:** Se añadió `"rpa"` al array `workspaces` en el `package.json` raíz y se agregó el script `"rpa:inasistencias": "npm run inasistencias --prefix rpa"`.
+  3. **Servicio Puente Backend (`backend/services/rpaService.js`):** Se implementó `ejecutarRPAInasistencias` y `obtenerEstadoRPA` con control de concurrencia (bloqueo de ejecuciones paralelas), paso de argumentos CLI (`--batch`, `--auto`, `--headless`, `--confirmar-registro`), captura de logs en tiempo real y reporte de código de salida.
+  4. **Conexión al Cron Semanal (`backend/services/cronService.js`):** Se integró el disparo del robot en el cron nocturno de Sofia Plus (`0 0 * * 6` - medianoche del sábado), ejecutándose automáticamente tras encolar las inasistencias listas.
+  5. **Endpoints de Administración:** Se expusieron `POST /api/instructores/ejecutar-rpa` y `GET /api/instructores/estado-rpa` en `backend/routes/instructores.js` y `backend/controllers/instructorController.js` para control y auditoría por parte del Administrador.
+- **Archivos Modificados:**
+  - `package.json`
+  - `.gitignore`
+  - `backend/services/rpaService.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/routes/instructores.js`
+  - `rpa/bot_inasistencias_sofia.js`
+  - `rpa/package.json`
+  - `rpa/.env.example`
+  - `rpa/.gitignore`
+  - `rpa/README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis validada con `node -c` en todos los archivos modificados (código 0).
+  - Prueba de ejecución del bot en modo batch y dry-run conectando exitosamente con la API de Asista (`http://localhost:3000/api/instructores/todos-inasistencias-rpa`) y detectando inasistencias.
+  - Compilación de producción frontend con `npm run build` exitosa en 2.12s con 0 errores.
