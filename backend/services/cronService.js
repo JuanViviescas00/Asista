@@ -1,3 +1,4 @@
+import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import cron from 'node-cron'
 import Asistencia from '../models/Asistencia.js'
 import Instructor from '../models/Instructor.js'
@@ -16,33 +17,39 @@ import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
 export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA }
 
 /**
- * Cierra automáticamente las clases que lleven más de 3 horas activas.
+ * Cierra automáticamente las clases al finalizar la jornada académica (6 horas diurna, 5 horas nocturna).
  * Si el docente olvidó finalizar la clase, el sistema la finaliza de forma automática,
- * actualiza el estado en MongoDB ('Finalizada') y emite DEACTIVATE al lector físico y al frontend.
+ * actualiza el estado en MongoDB ('Finalizada'), genera las faltas de los ausentes
+ * y emite DEACTIVATE al lector físico y al frontend.
  */
 export async function cerrarClasesExpiradas() {
-  const LIMITE_HORAS = 3
-  const limiteMs = LIMITE_HORAS * 60 * 60 * 1000
   const ahora = new Date()
-  const fechaLimite = new Date(ahora.getTime() - limiteMs)
 
   try {
-    const clasesExpiradas = await Clase.find({
-      estado: 'Activa',
-      iniciadaAt: { $lte: fechaLimite }
+    const clasesActivas = await Clase.find({
+      estado: 'Activa'
     }).populate('fichaId')
 
-    if (!clasesExpiradas || clasesExpiradas.length === 0) {
+    if (!clasesActivas || clasesActivas.length === 0) {
       return { cerradas: 0 }
     }
 
     let cerradas = 0
-    for (const clase of clasesExpiradas) {
+    for (const clase of clasesActivas) {
+      const jornada = clase.fichaId?.jornada || ''
+      const duracionHoras = topeHorasPorJornada(jornada)
+      const duracionMs = duracionHoras * 60 * 60 * 1000
+      const tiempoTranscurrido = clase.iniciadaAt ? (ahora.getTime() - new Date(clase.iniciadaAt).getTime()) : 0
+
+      if (tiempoTranscurrido < duracionMs) {
+        continue
+      }
+
       const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
       const instructorIdStr = String(clase.instructorId)
 
       // Cierre atómico + auto-cierre de inasistencias (antes de emitir).
-      const resultado = await finalizarClase(clase._id, { motivo: 'AUTO_CIERRE_3_HORAS' })
+      const resultado = await finalizarClase(clase._id, { motivo: 'AUTO_CIERRE_FIN_JORNADA' })
 
       if (resultado.yaFinalizada) {
         // Ya se cerró en otro camino: no se vuelve a emitir.
@@ -55,19 +62,19 @@ export async function cerrarClasesExpiradas() {
           type: 'DEACTIVATE',
           fichaId: fichaIdStr,
           instructorId: instructorIdStr,
-          motivo: 'AUTO_CIERRE_3_HORAS'
+          motivo: 'AUTO_CIERRE_FIN_JORNADA'
         })
       }
 
       // 2. Notificar a las salas del frontend/dashboard
       emitirClaseDesactivada(fichaIdStr, {
         fichaId: fichaIdStr,
-        motivo: 'AUTO_CIERRE_3_HORAS'
+        motivo: 'AUTO_CIERRE_FIN_JORNADA'
       })
 
       cerradas++
       const codFicha = clase.fichaId?.codigoFicha || fichaIdStr
-      console.log(`[AutoCierre] ⏱ Clase de la ficha ${codFicha} finalizada automáticamente (superó las ${LIMITE_HORAS} horas).`)
+      console.log(`[AutoCierre] ⏱ Clase de la ficha ${codFicha} (${jornada || 'Diurna'}) finalizada automáticamente (superó las ${duracionHoras} horas de jornada).`)
     }
 
     return { cerradas }
@@ -128,7 +135,7 @@ export function iniciarCronJobs() {
 
   // Ejecución inicial preventiva al arrancar el servidor
   cerrarClasesExpiradas().catch(e => console.warn('[AutoCierre] Error inicial:', e.message))
-  console.log('[CRON] Auto-cierre de clases cada minuto activo (límite 3 horas)')
+  console.log('[CRON] Auto-cierre de clases cada minuto activo (fin de jornada: 6h diurna, 5h nocturna)')
 
   // 2. Cron nocturno de sincronización SQLite por Docente
   cron.schedule(schedule, async () => {

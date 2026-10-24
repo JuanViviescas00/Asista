@@ -1,3 +1,4 @@
+import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import { Server } from 'socket.io'
 import mongoose from 'mongoose'
 import crypto from 'crypto'
@@ -255,29 +256,30 @@ export function initSocket(httpServer) {
         // - Sin clase Activa → DEACTIVATE (para limpiar una "clase fantasma" local
         //   si el dispositivo estuvo offline al finalizar la clase).
         try {
-          const claseActiva = await Clase.findOne({ deviceId: String(deviceId), estado: 'Activa' })
+          const claseActiva = await Clase.findOne({ deviceId: String(deviceId), estado: 'Activa' }).populate('fichaId')
           if (claseActiva) {
-            // Comprobar si la clase superó el límite de 3 horas durante la desconexión
-            const LIMITE_3_HORAS_MS = 3 * 60 * 60 * 1000
+            // Comprobar si la clase superó la duración de la jornada durante la desconexión
+            const jornada = claseActiva.fichaId?.jornada || ''
+            const duracionHoras = topeHorasPorJornada(jornada)
+            const duracionMs = duracionHoras * 60 * 60 * 1000
             const tiempoTranscurrido = claseActiva.iniciadaAt ? (Date.now() - new Date(claseActiva.iniciadaAt).getTime()) : 0
-            if (tiempoTranscurrido >= LIMITE_3_HORAS_MS) {
-              // Cierre atómico + auto-cierre de inasistencias (ahora SÍ crea fallas).
-              const resultado = await finalizarClase(claseActiva._id, { motivo: 'AUTO_CIERRE_3_HORAS' })
+            if (tiempoTranscurrido >= duracionMs) {
+              const resultado = await finalizarClase(claseActiva._id, { motivo: 'AUTO_CIERRE_FIN_JORNADA' })
 
-              // Siempre se limpia la clase fantasma local de este dispositivo.
               emitirDesactivacion(deviceId, {
                 type: 'DEACTIVATE',
                 fichaId: null,
                 instructorId: null,
-                motivo: 'AUTO_CIERRE_3_HORAS'
+                motivo: 'AUTO_CIERRE_FIN_JORNADA'
               })
 
               if (!resultado.yaFinalizada) {
-                emitirClaseDesactivada(String(claseActiva.fichaId), {
-                  fichaId: String(claseActiva.fichaId),
-                  motivo: 'AUTO_CIERRE_3_HORAS'
+                const fichaIdStr = String(claseActiva.fichaId?._id || claseActiva.fichaId)
+                emitirClaseDesactivada(fichaIdStr, {
+                  fichaId: fichaIdStr,
+                  motivo: 'AUTO_CIERRE_FIN_JORNADA'
                 })
-                console.log(`[Socket.IO] Clase para ${deviceId} expiró (>3h) durante desconexión. Cerrada automáticamente.`)
+                console.log(`[Socket.IO] Clase para ${deviceId} expiró (>${duracionHoras}h) durante desconexión. Cerrada automáticamente.`)
               }
             } else {
               let codigoFicha = ''

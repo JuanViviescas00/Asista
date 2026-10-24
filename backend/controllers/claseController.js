@@ -1,3 +1,4 @@
+import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import mongoose from 'mongoose'
 import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
@@ -134,25 +135,30 @@ export async function estado(req, res) {
       return res.json({ activa: false, ficha: null, iniciadaAt: null })
     }
 
-    // Si la clase superó el límite de 3 horas, se finaliza automáticamente
-    const LIMITE_3_HORAS_MS = 3 * 60 * 60 * 1000
+    // Si la clase superó la duración de la jornada (6h diurna / 5h noche), se finaliza automáticamente
+    const jornada = clase.fichaId?.jornada || ''
+    const duracionHoras = topeHorasPorJornada(jornada)
+    const duracionMs = duracionHoras * 60 * 60 * 1000
     const tiempoTranscurrido = clase.iniciadaAt ? (Date.now() - new Date(clase.iniciadaAt).getTime()) : 0
-    if (tiempoTranscurrido >= LIMITE_3_HORAS_MS) {
-      clase.estado = 'Finalizada'
-      clase.finalizadaAt = new Date()
-      await clase.save()
 
+    if (tiempoTranscurrido >= duracionMs) {
+      const resultado = await finalizarClase(clase._id, { motivo: 'AUTO_CIERRE_FIN_JORNADA' })
       const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
-      emitirDesactivacion(clase.deviceId, {
-        type: 'DEACTIVATE',
-        fichaId: fichaIdStr,
-        instructorId: String(clase.instructorId),
-        motivo: 'AUTO_CIERRE_3_HORAS'
-      })
-      emitirClaseDesactivada(fichaIdStr, {
-        fichaId: fichaIdStr,
-        motivo: 'AUTO_CIERRE_3_HORAS'
-      })
+
+      if (!resultado.yaFinalizada) {
+        if (clase.deviceId) {
+          emitirDesactivacion(clase.deviceId, {
+            type: 'DEACTIVATE',
+            fichaId: fichaIdStr,
+            instructorId: String(clase.instructorId),
+            motivo: 'AUTO_CIERRE_FIN_JORNADA'
+          })
+        }
+        emitirClaseDesactivada(fichaIdStr, {
+          fichaId: fichaIdStr,
+          motivo: 'AUTO_CIERRE_FIN_JORNADA'
+        })
+      }
 
       return res.json({ activa: false, ficha: null, iniciadaAt: null })
     }

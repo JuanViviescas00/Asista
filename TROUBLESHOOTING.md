@@ -1,5 +1,34 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-23 23:10] Actualización de Reglas de Tardanza Escalonada y Auto-cierre al Fin de Jornada
+
+- **Fecha y Hora:** 2026-10-23 23:10:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario solicitó ajustar la escala de tiempos de tardanza:
+    * Mantener el tiempo de gracia en 10 minutos (Presente).
+    * Tardanza de 1 hora: desde el minuto 11 hasta los 60 minutos de haber iniciado la clase.
+    * Tardanza de 2 horas: desde el minuto 61 hasta los 120 minutos (2 horas) de haber iniciado la clase.
+    * Falta: marcaciones pasados los 120 minutos desde el inicio de clase.
+  - El auto-cierre de clase activa (que estaba fijado estáticamente en 3 horas) debe extenderse a la duración total de la jornada formativa (6 horas para jornadas diurnas/mixtas y 5 horas para jornada nocturna).
+- **Causa Raíz:**
+  - Los umbrales anteriores acumulaban el tiempo de gracia sobre las horas reloj (70 min y 130 min en backend, y 65/125 min en frontend), generando desfases con las horas académicas reales.
+  - El límite de 3 horas cerraba prematuramente clases activas en jornadas formativas completas de 5 o 6 horas.
+- **Solución Aplicada:**
+  1. *Unificación de Umbrales:* Configurado `TOLERANCIA_MINUTOS = 10`, `LIMITE_TARDANZA_1_HORA = 60` y `LIMITE_TARDANZA_2_HORAS = 120` tanto en `backend/services/asistenciaService.js` como en `frontend/src/utils/asistenciaTiempo.js`.
+  2. *Auto-cierre Dinámico por Jornada:* En `backend/services/cronService.js`, `backend/controllers/claseController.js` y `backend/services/socketService.js`, el límite de auto-cierre ahora se calcula dinámicamente con `topeHorasPorJornada(jornada)` (6 horas en el día, 5 horas en la noche), emitiendo motivo `AUTO_CIERRE_FIN_JORNADA`.
+- **Archivos Modificados:**
+  - `backend/services/asistenciaService.js`
+  - `frontend/src/utils/asistenciaTiempo.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/claseController.js`
+  - `backend/services/socketService.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis en Node.js (`node -c`).
+  - Compilación exitosa del frontend (`npm run build:prod`).
+
+---
+
 ## [2026-10-23 21:40] Desacoplamiento y Retiro Integral de SQLite y Dependencias de Compilación C++ (node-gyp / Python3)
 
 - **Fecha y Hora:** 2026-10-23 21:40:00 -05:00

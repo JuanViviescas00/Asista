@@ -62,12 +62,12 @@ export async function getFichaIdList(fichaId) {
 // Umbrales de tardanza medidos en MINUTOS desde la hora de inicio de la clase.
 // Regla del negocio:
 //   0 a 10 min  -> Presente (tolerancia oficial de 10 min tras inicio de clase)
-//   10 a 70 min -> Tardanza de 1 hora
-//   70 a 130 min -> Tardanza de 2 horas
-//   más de 130 min (2h tarde) -> Falta (asistencia fallida)
+//   11 a 60 min  -> Tardanza de 1 hora (hasta los 60 min de iniciada la clase)
+//   61 a 120 min -> Tardanza de 2 horas (hasta los 120 min de iniciada la clase)
+//   más de 120 min (>2h tarde) -> Falta (asistencia fallida)
 export const TOLERANCIA_MINUTOS = 10
-export const LIMITE_TARDANZA_1_HORA = 70
-export const LIMITE_TARDANZA_2_HORAS = 130
+export const LIMITE_TARDANZA_1_HORA = 60
+export const LIMITE_TARDANZA_2_HORAS = 120
 
 /**
  * Calcula el estado de una marcación (Presente / Tardanza / Falta) según los
