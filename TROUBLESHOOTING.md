@@ -1064,3 +1064,32 @@
   - Sintaxis de `backend/index.js` validada con `node -c` (código 0).
   - Script de prueba verificó que las 4 contraseñas existentes de Sofia Plus en MongoDB Atlas se descifran exitosamente tanto con `SOFIA_ENCRYPTION_KEY` como con el fallback de `JWT_SECRET`.
   - Despliegue sin push a repositorios remotos según las instrucciones del usuario.
+
+
+---
+
+## [2026-10-24 16:40] Parametrización Total de Orígenes Permitidos y Variables de Semilla (Seed) de Administrador
+
+- **Fecha y Hora:** 2026-10-24 16:40:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. En `huellero/src/main/config.js`, los valores de respaldo por defecto de `backendUrl` y `wsUrl` apuntaban de forma estática a una URL quemada de Render (`https://huelleroactualizado-1.onrender.com`).
+  2. La función de inicialización y sembrado de la cuenta de administrador en `backend/index.js` (`iniciarServidor()`) utilizaba credenciales quemadas en código (`senahuellero@gmail.com` y `sena2026ADSO`).
+  3. Soporte para múltiples nomenclaturas de variables para orígenes CORS (`CORS_ORIGIN`, `ALLOWED_ORIGINS`, `ORIGENES_PERMITIDOS`).
+- **Causa Raíz:**
+  Presencia de valores legados de Render quemados en código fuente y falta de desacoplamiento de las credenciales de semilla (seed) en el backend.
+- **Solución Aplicada:**
+  1. **Variables de Semilla en Backend:** Se parametrizaron `SEED_ADMIN_EMAIL` (`ADMIN_EMAIL`), `SEED_ADMIN_PASSWORD` (`ADMIN_PASSWORD`), `SEED_ADMIN_NAME` y `SEED_ADMIN_TELEFONO` en `backend/index.js`, manteniendo los valores institucionales históricos como valores de fallback.
+  2. **Flexibilidad en Orígenes CORS:** Se unificó la lectura de orígenes permitidos con fallback para `CORS_ORIGIN`, `ALLOWED_ORIGINS` y `ORIGENES_PERMITIDOS`.
+  3. **Limpieza de URLs de Render en Desktop:** En `huellero/src/main/config.js`, se sustituyeron los fallbacks estáticos de Render por `http://localhost:3000` y `ws://localhost:3000`, gobernados por `HUELLERO_BACKEND_URL` y `HUELLERO_WS_URL`.
+  4. **Documentación Oficial:** Se actualizaron `docker-compose.yml`, `backend/.env.example`, `backend/.env` y `README.md`.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `backend/.env`
+  - `backend/.env.example`
+  - `docker-compose.yml`
+  - `huellero/src/main/config.js`
+  - `README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis validada con `node -c` en `backend/index.js` y `huellero/src/main/config.js` (código 0).
+  - Verificación de ausencia de URLs quemadas de Render en el código fuente del proyecto.

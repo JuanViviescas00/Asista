@@ -123,7 +123,10 @@ El backend lee sus variables desde `backend/.env` (puedes basarte en la plantill
 | `CRON_TIMEZONE` | Zona horaria de los cron. |
 | `ENABLE_SOFIA_SYNC` | Habilita la sincronización con Sofia Plus. |
 | `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus (`0 0 * * 6` - Sábado 12:00 AM). |
-| `CORS_ORIGIN` | Control de orígenes permitidos (`*` por defecto, o lista separada por comas). |
+| `CORS_ORIGIN` | Control de orígenes permitidos (`*` por defecto, o lista separada por comas; alias `ALLOWED_ORIGINS`). |
+| `SEED_ADMIN_EMAIL` | Correo del administrador inicial si la base de datos está vacía (`senahuellero@gmail.com`). |
+| `SEED_ADMIN_PASSWORD` | Contraseña inicial en texto plano que se hasheará en bcrypt (`sena2026ADSO`). |
+| `SEED_ADMIN_NAME` | Nombre visible del administrador por defecto (`Administrador`). |
 | `ENABLE_RPA_ROBOT` | Dispara el Robot RPA de inasistencias tras encolar (`true` por defecto). |
 | `RPA_DRY_RUN` | Modo seguro sin guardar en Sofia Plus (`false` por defecto / modo real activo). |
 

@@ -29,8 +29,8 @@ function getConfigPath() {
 const DEFAULTS = {
   deviceId: null,
   token: null,
-  backendUrl: process.env.HUELLERO_BACKEND_URL || 'https://huelleroactualizado-1.onrender.com',
-  wsUrl:      process.env.HUELLERO_WS_URL       || 'wss://huelleroactualizado-1.onrender.com',
+  backendUrl: process.env.HUELLERO_BACKEND_URL || 'http://localhost:3000',
+  wsUrl:      process.env.HUELLERO_WS_URL       || 'ws://localhost:3000',
   BIOMETRIC_MATCH_THRESHOLD: 21474,
 }
 

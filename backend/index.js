@@ -41,9 +41,9 @@ app.use(helmet({
   frameguard: false, // Permite que suites de pruebas (TestSprite, Cypress) carguen la app en visor/iframe
 }))
 // Configuración dinámica de CORS:
-// Lee CORS_ORIGIN de las variables de entorno (* por defecto para acceso universal sin bloqueos,
+// Lee CORS_ORIGIN, ALLOWED_ORIGINS u ORIGENES_PERMITIDOS de las variables de entorno (* por defecto para acceso universal sin bloqueos,
 // o lista de dominios separados por comas para restringir en producción: ej. CORS_ORIGIN=https://asista.com,https://coolify.midominio.com).
-const orígenesPermitidos = (process.env.CORS_ORIGIN || '*')
+const orígenesPermitidos = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS || process.env.ORIGENES_PERMITIDOS || '*')
   .split(',')
   .map(o => o.trim())
   .filter(Boolean)
@@ -101,17 +101,23 @@ mongoose.connect(process.env.MONGODB_URI, MONGO_OPTS)
   })
 
 async function iniciarServidor() {
-  let admin = await Admin.findOne({ correo: 'senahuellero@gmail.com' })
+  // Configuración de semilla (Seed) inicial de Administrador parametrizable por entorno
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || process.env.ADMIN_EMAIL || 'senahuellero@gmail.com'
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || 'sena2026ADSO'
+  const adminNombre = process.env.SEED_ADMIN_NAME || process.env.ADMIN_NAME || 'Administrador'
+  const adminTelefono = process.env.SEED_ADMIN_TELEFONO || process.env.ADMIN_TELEFONO || ''
+
+  let admin = await Admin.findOne({ correo: adminEmail })
   if (!admin) {
-    const passwordHash = await hashPassword('sena2026ADSO')
+    const passwordHash = await hashPassword(adminPassword)
     admin = await new Admin({
-      nombre: 'Administrador',
+      nombre: adminNombre,
       rol: 'Administrador',
-      telefono: '',
-      correo: 'senahuellero@gmail.com',
+      telefono: adminTelefono,
+      correo: adminEmail,
       password: passwordHash,
     }).save()
-    console.log('Admin por defecto creado con contraseña cifrada en bcrypt.')
+    console.log(`Admin por defecto (${adminEmail}) creado con contraseña cifrada en bcrypt.`)
   } else if (!admin.password.startsWith('$2a$') && !admin.password.startsWith('$2b$')) {
     // Si la contraseña anterior estaba en texto plano, encriptarla automáticamente
     admin.password = await hashPassword(admin.password)
