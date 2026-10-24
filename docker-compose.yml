@@ -13,7 +13,12 @@ services:
       - TZ=America/Bogota
       - MONGODB_URI=${MONGODB_URI}
       - JWT_SECRET=${JWT_SECRET}
-      - SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY}
+      - SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY:-${JWT_SECRET}}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - GMAIL_USER=${GMAIL_USER:-}
+      - GMAIL_PASS=${GMAIL_PASS:-}
+      - ENABLE_SOFIA_SYNC=${ENABLE_SOFIA_SYNC:-true}
+      - ENABLE_RPA_ROBOT=${ENABLE_RPA_ROBOT:-true}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s

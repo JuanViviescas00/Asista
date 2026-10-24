@@ -40,19 +40,30 @@ app.use(helmet({
   contentSecurityPolicy: false,
   frameguard: false, // Permite que suites de pruebas (TestSprite, Cypress) carguen la app en visor/iframe
 }))
-const ORIGENES_PERMITIDOS = [
-  'https://huelleroactualizado-1.onrender.com',
-]
+// Configuración dinámica de CORS:
+// Lee CORS_ORIGIN de las variables de entorno (* por defecto para acceso universal sin bloqueos,
+// o lista de dominios separados por comas para restringir en producción: ej. CORS_ORIGIN=https://asista.com,https://coolify.midominio.com).
+const orígenesPermitidos = (process.env.CORS_ORIGIN || '*')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean)
 
 app.use(cors({
   origin(origin, callback) {
+    // 1. Peticiones sin cabecera origin (App escritorio Electron, RPA, Postman, curl o llamadas internas)
     if (!origin) return callback(null, true)
-    if (ORIGENES_PERMITIDOS.includes(origin)) return callback(null, true)
+
+    // 2. Comodín abierto por defecto (*): admite cualquier dominio sin fricción
+    if (orígenesPermitidos.includes('*')) return callback(null, true)
+
+    // 3. Orígenes explícitos configurados
+    if (orígenesPermitidos.includes(origin)) return callback(null, true)
+
+    // 4. Localhost y túneles de desarrollo comunes
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
     if (/^https?:\/\/[a-z0-9-]+-\d+\.(use\.devtunnels\.ms|app\.github\.dev|trycloudflare\.com)$/i.test(origin)) return callback(null, true)
-    if (/^https?:\/\/([a-z0-9-]+\.)?testsprite\.com$/i.test(origin)) return callback(null, true)
-    // Para suites de pruebas automatizadas y navegadores headless, permitir acceso
-    return callback(null, true)
+
+    return callback(new Error(`Origen CORS no permitido: ${origin}`))
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id', 'x-device-token'],

@@ -107,7 +107,7 @@ npm run dist        # genera el instalador (ver más abajo)
 
 ### Variables de entorno
 
-El backend lee sus variables desde `backend/.env` (el repositorio **no** incluye un `.env.example`; crea el archivo manualmente). Nombres de variables usadas por el código:
+El backend lee sus variables desde `backend/.env` (puedes basarte en la plantilla oficial `backend/.env.example`). Nombres de variables usadas por el código:
 
 | Variable | Descripción |
 | :--- | :--- |
@@ -122,7 +122,10 @@ El backend lee sus variables desde `backend/.env` (el repositorio **no** incluye
 | `CRON_SCHEDULE` | Programación del cron de exportación SQLite. |
 | `CRON_TIMEZONE` | Zona horaria de los cron. |
 | `ENABLE_SOFIA_SYNC` | Habilita la sincronización con Sofia Plus. |
-| `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus. |
+| `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus (`0 0 * * 6` - Sábado 12:00 AM). |
+| `CORS_ORIGIN` | Control de orígenes permitidos (`*` por defecto, o lista separada por comas). |
+| `ENABLE_RPA_ROBOT` | Dispara el Robot RPA de inasistencias tras encolar (`true` por defecto). |
+| `RPA_DRY_RUN` | Modo seguro sin guardar en Sofia Plus (`false` por defecto / modo real activo). |
 
 Variables opcionales de la app de escritorio (`huellero/`):
 

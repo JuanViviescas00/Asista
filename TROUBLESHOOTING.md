@@ -1037,3 +1037,30 @@
 - **Verificación:**
   - Validación de sintaxis con `node -c` en todos los archivos JS modificados (código 0).
   - Verificación del árbol de trabajo local sin realizar push a repositorios remotos según la instrucción del usuario.
+---
+
+## [2026-10-24 12:05] Estandarización de Variables de Entorno, Fallbacks Automáticos en Docker/Coolify y CORS Dinámico
+
+- **Fecha y Hora:** 2026-10-24 12:05:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. Al desplegar en plataformas PaaS como Coolify o Docker Compose, el sistema exigía la variable `SOFIA_ENCRYPTION_KEY`, generando dudas sobre su valor y riesgo de incompatibilidad con las contraseñas de Sofia Plus ya cifradas en MongoDB Atlas.
+  2. La política CORS en `backend/index.js` tenía URLs quemadas en código (`onrender.com`) en lugar de gobernarse de forma dinámica por variables de entorno.
+  3. Ausencia de un archivo de referencia oficial `backend/.env.example` que documentara exhaustivamente cada variable del sistema.
+- **Causa Raíz:**
+  Falta de valores de respaldo por defecto (*fallbacks*) en la configuración de `docker-compose.yml` y acoplamiento estático de orígenes CORS en el código fuente del backend.
+- **Solución Aplicada:**
+  1. **Fallback Inteligente en `docker-compose.yml`:** Se configuró `SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY:-${JWT_SECRET}}`. Si el usuario no define la variable en Coolify, Docker utiliza automáticamente el valor de `JWT_SECRET`, garantizando que las contraseñas previamente guardadas en la base de datos se descifren sin ningún error.
+  2. **CORS Dinámico con Variable `CORS_ORIGIN`:** En `backend/index.js`, se reemplazó el array estático por la lectura de `process.env.CORS_ORIGIN` (`*` por defecto para desarrollo/Coolify, o lista de dominios separados por comas para producción restringida), manteniendo siempre el acceso para la app de escritorio y llamadas internas sin cabecera origin.
+  3. **Creación de `backend/.env.example`:** Plantilla comentada y auto-explicativa con todas las variables de entorno del servidor (base de datos, JWT, AES, CORS, Nodemailer, cron y RPA).
+  4. **Alineación en `backend/.env` y `README.md`:** Se añadieron las variables con sus valores de referencia para desarrollo local y se actualizó la tabla de documentación.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `backend/.env`
+  - `backend/.env.example`
+  - `docker-compose.yml`
+  - `README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis de `backend/index.js` validada con `node -c` (código 0).
+  - Script de prueba verificó que las 4 contraseñas existentes de Sofia Plus en MongoDB Atlas se descifran exitosamente tanto con `SOFIA_ENCRYPTION_KEY` como con el fallback de `JWT_SECRET`.
+  - Despliegue sin push a repositorios remotos según las instrucciones del usuario.
