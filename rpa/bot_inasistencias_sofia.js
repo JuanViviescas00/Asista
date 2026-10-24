@@ -323,7 +323,22 @@ async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, brows
       await page.waitForSelector('#registradoBox1', { timeout: 25000 });
       const loginFrame = page.frameLocator('#registradoBox1');
 
-      await loginFrame.locator('#tipoId').waitFor({ state: 'visible', timeout: 15000 });
+      // Esperar formulario de login o detectar mensaje de mantenimiento/caída del SENA
+      try {
+        await loginFrame.locator('#tipoId').waitFor({ state: 'visible', timeout: 15000 });
+      } catch (errWaitTipoId) {
+        const cuerpoFrame = await loginFrame.locator('body').innerText().catch(() => '');
+        if (
+          cuerpoFrame.toLowerCase().includes('servidor no disponible') ||
+          cuerpoFrame.toLowerCase().includes('503') ||
+          cuerpoFrame.toLowerCase().includes('mantenimiento')
+        ) {
+          console.error(`\n🚨 [ALERTA SENA SOFIA PLUS]: El servidor de autenticación del SENA está temporalmente fuera de servicio ("${cuerpoFrame.trim().substring(0, 110)}...").`);
+          console.error('   El enlace es correcto, pero la plataforma de Sofia Plus se encuentra en mantenimiento o caída por parte del SENA.');
+          throw new Error('Servidor de Sofia Plus no disponible (HTTP 503 / En mantenimiento por el SENA)');
+        }
+        throw errWaitTipoId;
+      }
       await loginFrame.locator('#tipoId').selectOption(instructor.tipoDocumento || 'CC');
       await loginFrame.locator('#username').fill(instructor.numeroDocumento);
       await loginFrame.locator("input[name='josso_password']").fill(instructor.passwordSofiaPlus);
