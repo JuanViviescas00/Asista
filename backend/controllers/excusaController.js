@@ -4,7 +4,7 @@ import Inasistencia from '../models/Inasistencia.js'
 import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
-import { upsertAsistenciaSQLite } from '../services/sqliteExport.js'
+
 
 export async function getExcusas(req, res) {
   try {
@@ -95,27 +95,6 @@ export async function aprobarExcusa(req, res) {
     )
 
     await Estudiante.findByIdAndUpdate(excusa.estudianteId, { estadoAsistencia: 'Excusada' })
-
-    // 3. Sincronizar en SQLite
-    try {
-      if (estudianteDoc && fichaDoc) {
-        upsertAsistenciaSQLite({
-          fichaCodigo: fichaDoc.codigoFicha || String(excusa.fichaId),
-          nombrePrograma: fichaDoc.nombrePrograma || '',
-          jornada: fichaDoc.jornada || '',
-          documentoAprendiz: estudianteDoc.numeroDocumento || '',
-          nombreAprendiz: `${estudianteDoc.nombres || ''} ${estudianteDoc.apellidos || ''}`.trim(),
-          correoAprendiz: estudianteDoc.correo || '',
-          fecha: excusa.fechaInasistencia,
-          estado: 'Excusada',
-          hora: '—',
-          horasTardanza: 0,
-          tiempoTardanza: '0 horas'
-        })
-      }
-    } catch (sqliteErr) {
-      console.warn('[SQLite] Error al actualizar excusa en SQLite:', sqliteErr.message)
-    }
 
     res.json({ ok: true, excusa, inasistencia })
   } catch (err) {

@@ -19,18 +19,14 @@ COPY frontend/ ./
 RUN npm run build
 
 # ------------------------------------------------------------------------------
-# ETAPA 2: Servidor Backend de Producción (Node.js Express + SQLite + Socket.IO)
+# ETAPA 2: Servidor Backend de Producción (Node.js Express + Socket.IO)
 # ------------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
-# Instalar dependencias esenciales de compilación para módulos nativos (ej. better-sqlite3)
-# y curl para el healthcheck de Coolify / Docker
+# Instalar curl para el healthcheck de Coolify / Docker
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -44,8 +40,6 @@ COPY backend/ ./
 # Inyectar el frontend compilado en la carpeta de estáticos del backend
 COPY --from=frontend-builder /app/frontend/dist ./public
 
-# Directorio persistente para la base de datos relacional SQLite local
-RUN mkdir -p /app/data
 
 # Configuración de entorno
 ENV NODE_ENV=production

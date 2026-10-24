@@ -6,7 +6,7 @@ import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import Inasistencia from '../models/Inasistencia.js'
 import { obtenerTodasAsistenciasConsolidadas } from '../controllers/asistenciaController.js'
-import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
+
 import { getHoyString, finalizarClase } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 import { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA } from '../utils/diasHabiles.js'
@@ -138,12 +138,6 @@ export function iniciarCronJobs() {
       console.log(`[CRON] Estados de carga: ${estados.revisadas} revisadas, ${estados.actualizadas} pasaron a LISTO_PARA_SUBIR.`)
     } catch (err) {
       console.error('[CRON] Error actualizando estados de carga:', err.message)
-    }
-    try {
-      const resultado = await sincronizarSqlitePorDocente()
-      console.log(`[CRON] ✅ Proceso finalizado. Docentes: ${resultado.totalDocentes}, Clases/Registros: ${resultado.totalRegistros}, Elegibles subida: ${resultado.totalElegiblesSubida}`)
-    } catch (err) {
-      console.error('[CRON] ❌ Error en ejecución del Cron Job:', err.message)
     }
   }, {
     timezone

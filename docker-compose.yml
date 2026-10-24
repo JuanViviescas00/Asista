@@ -14,15 +14,9 @@ services:
       - MONGODB_URI=${MONGODB_URI}
       - JWT_SECRET=${JWT_SECRET}
       - SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY}
-    volumes:
-      - asista-data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
-
-volumes:
-  asista-data:
-    driver: local

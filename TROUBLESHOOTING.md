@@ -1,5 +1,38 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-23 21:40] Desacoplamiento y Retiro Integral de SQLite y Dependencias de Compilación C++ (node-gyp / Python3)
+
+- **Fecha y Hora:** 2026-10-23 21:40:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Se identificó que SQLite (`better-sqlite3`) y sus servicios asociados (`sqliteExport.js`) actuaban como un "espejo de solo escritura" sin lectura ni consumo en el frontend, kiosco o lógica del negocio.
+  - La presencia de `better-sqlite3` obligaba a instalar herramientas de compilación C++ (`python3`, `make`, `g++`) en el contenedor Docker mediante `node-gyp`, inflando la imagen en más de 200 MB y aumentando los tiempos de despliegue.
+  - Se solicitó retirar SQLite del backend y optimizar la imagen Docker, aplicando los cambios exclusivamente en la rama de trabajo `juan`.
+- **Causa Raíz:**
+  - Residuo arquitectónico de etapas tempranas donde se proyectaba almacenamiento local en SQLite por docente. En la arquitectura actual, MongoDB Atlas cubre el 100% de la persistencia institucional y el kiosco opera con colas JSON atómicas (`store.js`), mientras que las descargas de usuario se realizan en Excel (.xlsx) y PDF.
+- **Solución Aplicada:**
+  1. *Desinstalación de dependencias:* Removido `better-sqlite3` de `backend/package.json` y sincronizado `package-lock.json`.
+  2. *Retiro de servicio y sincronizadores:* Eliminado `backend/services/sqliteExport.js` y llamadas directas en `asistenciaController.js`, `diaFestivoController.js`, `excusaController.js` y `cronService.js`.
+  3. *Endpoints legados:* Los endpoints de descarga y sincronización SQLite en `asistenciaController.js` responden código HTTP 410 (Gone / Descontinuado) informando el uso de Excel/PDF.
+  4. *Optimización del Dockerfile:* Eliminada la instalación de `python3`, `make` y `g++`, manteniendo únicamente `curl` para el healthcheck; removida la creación de la carpeta local efímera `/app/data`.
+  5. *Ajuste de docker-compose.yml:* Eliminado el volumen local innecesario `asista-data:/app/data`.
+- **Archivos Modificados:**
+  - `backend/package.json`
+  - `package-lock.json`
+  - `backend/services/sqliteExport.js` (eliminado)
+  - `backend/controllers/asistenciaController.js`
+  - `backend/controllers/diaFestivoController.js`
+  - `backend/controllers/excusaController.js`
+  - `backend/services/cronService.js`
+  - `Dockerfile`
+  - `docker-compose.yml`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Verificación de sintaxis de todos los controladores y servicios (`node -c`).
+  - Compilación exitosa del monolito (`npm run build:prod`) sin errores.
+  - Comprobación de integridad del monorepo y empaquetado de producción.
+
+---
+
 ## [2026-10-22 21:55] Workflow de CI/CD para Unificación de Ramas (Backend/Frontend) y Compilación del Monolito
 
 - **Fecha y Hora:** 2026-10-22 21:55:00 -05:00

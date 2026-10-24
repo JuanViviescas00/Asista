@@ -9,18 +9,7 @@ import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
-import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada, formatearFechaColombia, formatearHoraColombia } from '../services/asistenciaService.js'
-import { emitirAsistenciaRegistrada } from '../services/socketService.js'
-import { topeHorasPorJornada, validarHorasInasistencia } from '../utils/jornadaUtils.js'
-import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
-import { asegurarJornada } from '../services/jornadaService.js'
-import {
-  upsertAsistenciaSQLite,
-  upsertAsistenciasBatchSQLite,
-  deleteAsistenciaSQLite,
-  getSqliteFilePath,
-  checkpointSQLite
-} from '../services/sqliteExport.js'
+
 
 // Shim de compatibilidad: expone la misma forma que el modelo Asistencia.
 function toAsistenciaShape(a) {
@@ -265,14 +254,6 @@ export async function createAsistencia(req, res) {
           }
         }
         await Estudiante.findByIdAndUpdate(estudianteId, { estadoAsistencia: 'Presente' })
-
-        if (fichaDoc) {
-          deleteAsistenciaSQLite({
-            fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
-            documentoAprendiz: estudiante.numeroDocumento || '',
-            fecha
-          })
-        }
       }
       return res.json({ ok: true, estado: 'Presente', eliminado: debeBorrar })
     }
@@ -321,27 +302,6 @@ export async function createAsistencia(req, res) {
       await asegurarJornada({ fichaId, fecha, instructorId: instructorFinal, origen: 'manual' })
     } catch (jornadaErr) {
       console.warn('[Jornada] Error asegurando jornada:', jornadaErr.message)
-    }
-
-    // 3. Sincronizar automáticamente con el archivo SQLite único
-    try {
-      if (fichaDoc) {
-        upsertAsistenciaSQLite({
-          fichaCodigo: fichaDoc.codigoFicha || String(fichaId),
-          nombrePrograma: fichaDoc.nombrePrograma || '',
-          jornada: fichaDoc.jornada || '',
-          documentoAprendiz: estudiante.numeroDocumento || '',
-          nombreAprendiz: `${estudiante.nombres || ''} ${estudiante.apellidos || ''}`.trim(),
-          correoAprendiz: estudiante.correo || '',
-          fecha: fecha,
-          estado: estado,
-          hora: hora || '—',
-          horasTardanza: estado === 'Tardanza' ? horas : 0,
-          tiempoTardanza: tiempoTardanza || '0 horas'
-        })
-      }
-    } catch (sqliteErr) {
-      console.warn('[SQLite] Error en sincronización individual:', sqliteErr.message)
     }
 
     // 4. Emitir evento por Socket.io para actualización en tiempo real en otros computadores
@@ -747,59 +707,17 @@ export async function obtenerTodasAsistenciasConsolidadas() {
 }
 
 export async function downloadSqlite(req, res) {
-  try {
-    const filePath = getSqliteFilePath()
-    const rows = await obtenerTodasAsistenciasConsolidadas()
-    upsertAsistenciasBatchSQLite(rows)
-    checkpointSQLite()
-
-    res.setHeader('Content-Type', 'application/vnd.sqlite3')
-    res.setHeader('Content-Disposition', 'attachment; filename="asistencias_institucion.sqlite"')
-    res.download(filePath, 'asistencias_institucion.sqlite')
-  } catch (err) {
-    console.error('[SQLite] Error en descarga:', err)
-    res.status(500).json({ error: err.message })
-  }
+  res.status(410).json({ error: 'Módulo SQLite descontinuado. Utilice la exportación oficial a Excel o PDF desde Reportes.' })
 }
 
 export async function syncAllSqlite(req, res) {
-  try {
-    const rows = await obtenerTodasAsistenciasConsolidadas()
-    const resultado = upsertAsistenciasBatchSQLite(rows)
-    res.json({ ok: true, total: rows.length, ...resultado })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
+  res.status(410).json({ error: 'Módulo SQLite descontinuado. La persistencia opera de forma nativa en MongoDB Atlas.' })
 }
 
-/**
- * Descarga el archivo .sqlite de un Docente específico
- */
 export async function downloadSqliteDocente(req, res) {
-  try {
-    const { identificador } = req.params
-    const { getDBDocente } = await import('../services/sqliteExport.js')
-    const { filePath, db } = getDBDocente(identificador)
-    try { db.close() } catch (e) {}
-
-    res.setHeader('Content-Type', 'application/vnd.sqlite3')
-    res.setHeader('Content-Disposition', `attachment; filename="asistencias_docente_${identificador}.sqlite"`)
-    res.download(filePath, `asistencias_docente_${identificador}.sqlite`)
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
+  res.status(410).json({ error: 'Módulo SQLite descontinuado. Utilice la exportación oficial a Excel o PDF desde Reportes.' })
 }
 
-/**
- * Ejecuta bajo demanda la sincronización y agrupamiento nocturno de asistencias por Docente
- */
 export async function ejecutarSincronizacionDocentes(req, res) {
-  try {
-    const { sincronizarSqlitePorDocente } = await import('../services/cronService.js')
-    const resultado = await sincronizarSqlitePorDocente()
-    res.json({ ok: true, mensaje: 'Sincronización por Docente (regla 5 días hábiles) ejecutada con éxito', ...resultado })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
+  res.status(410).json({ error: 'Módulo SQLite descontinuado. La persistencia opera de forma nativa en MongoDB Atlas.' })
 }
-
