@@ -6,6 +6,7 @@ import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
 import { verificarTokenJWT } from '../middlewares/auth.js'
+import { finalizarClase } from './asistenciaService.js'
 
 let io = null
 const sesionesActivas = new Map() // fichaId -> { activa: true, iniciadoPor, fecha, jornada, fichaCodigo, nombrePrograma }
@@ -260,20 +261,24 @@ export function initSocket(httpServer) {
             const LIMITE_3_HORAS_MS = 3 * 60 * 60 * 1000
             const tiempoTranscurrido = claseActiva.iniciadaAt ? (Date.now() - new Date(claseActiva.iniciadaAt).getTime()) : 0
             if (tiempoTranscurrido >= LIMITE_3_HORAS_MS) {
-              claseActiva.estado = 'Finalizada'
-              claseActiva.finalizadaAt = new Date()
-              await claseActiva.save()
+              // Cierre atómico + auto-cierre de inasistencias (ahora SÍ crea fallas).
+              const resultado = await finalizarClase(claseActiva._id, { motivo: 'AUTO_CIERRE_3_HORAS' })
+
+              // Siempre se limpia la clase fantasma local de este dispositivo.
               emitirDesactivacion(deviceId, {
                 type: 'DEACTIVATE',
                 fichaId: null,
                 instructorId: null,
                 motivo: 'AUTO_CIERRE_3_HORAS'
               })
-              emitirClaseDesactivada(String(claseActiva.fichaId), {
-                fichaId: String(claseActiva.fichaId),
-                motivo: 'AUTO_CIERRE_3_HORAS'
-              })
-              console.log(`[Socket.IO] Clase para ${deviceId} expiró (>3h) durante desconexión. Cerrada automáticamente.`)
+
+              if (!resultado.yaFinalizada) {
+                emitirClaseDesactivada(String(claseActiva.fichaId), {
+                  fichaId: String(claseActiva.fichaId),
+                  motivo: 'AUTO_CIERRE_3_HORAS'
+                })
+                console.log(`[Socket.IO] Clase para ${deviceId} expiró (>3h) durante desconexión. Cerrada automáticamente.`)
+              }
             } else {
               let codigoFicha = ''
               try {

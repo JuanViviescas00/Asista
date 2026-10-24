@@ -6,9 +6,11 @@ import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 import { useAsistenciaDraftStore } from '../stores/asistenciaDraft.js'
 import '../styles/panelInstructor.css'
+import iconoTomarAsistencia from '../assets/tomar-asistencia-icon.png'
 import iconoHistorial from '../assets/historial-icon.png'
-import iconoGestionarEstudiantes from '../assets/gestionar-estudiantes-icon.png'
 import iconoEquipoDocente from '../assets/equipo-docente-icon.png'
+
+const INTERVALO_COLA_OFFLINE_MS = 5000
 
 const draftStore = useAsistenciaDraftStore()
 
@@ -28,7 +30,7 @@ const vistaFicha = ref('asistencia')
 // Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
 const dispositivoOnline = ref(false)
-const feedEnVivoDocente = ref([])
+const finalizando = ref(false)
 const claseIniciadaAt = ref(null)
 
 // Toast notifications
@@ -40,9 +42,24 @@ function showToast(message, type = 'success') {
   setTimeout(() => { toast.show = false }, 3000)
 }
 
+const sincronizandoCola = ref(false)
+
+// Sincroniza la cola offline con guardia de reentrada (el timer y el evento
+// 'online' pueden dispararla a la vez). Devuelve el resultado o null si ya
+// hay una sincronización en curso.
+async function procesarColaOffline() {
+  if (sincronizandoCola.value) return null
+  sincronizandoCola.value = true
+  try {
+    return await draftStore.sincronizarColaOffline(api)
+  } finally {
+    sincronizandoCola.value = false
+  }
+}
+
 async function onConexionRecuperada() {
-  const res = await draftStore.sincronizarColaOffline(api)
-  if (res.totalSincronizados > 0) {
+  const res = await procesarColaOffline()
+  if (res && res.totalSincronizados > 0) {
     showToast(`Conexión recuperada: ${res.totalSincronizados} asistencias sincronizadas automáticamente.`, 'success')
     if (fichaSeleccionada.value?._id) {
       await cargarDatosFicha(fichaSeleccionada.value._id)
@@ -50,11 +67,22 @@ async function onConexionRecuperada() {
   }
 }
 
+let timerColaOffline = null
+function iniciarTimerColaOffline() {
+  if (timerColaOffline) return
+  timerColaOffline = setInterval(() => {
+    if (navigator.onLine && draftStore.pendientesOfflineCount > 0) {
+      procesarColaOffline()
+    }
+  }, INTERVALO_COLA_OFFLINE_MS)
+}
+
 onMounted(async () => {
   window.addEventListener('online', onConexionRecuperada)
   await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
+  iniciarTimerColaOffline()
   if (draftStore.pendientesOfflineCount > 0) {
     onConexionRecuperada()
   }
@@ -62,34 +90,17 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.removeEventListener('online', onConexionRecuperada)
+  cancelarTodosDebounceHoras()
+  if (timerColaOffline) {
+    clearInterval(timerColaOffline)
+    timerColaOffline = null
+  }
   if (fichaSeleccionada.value?._id) {
     salirDeSalaFicha(fichaSeleccionada.value._id)
   }
 })
 
 function iniciarSocketDocente() {
-  socket.on('ATTENDANCE_REGISTERED', (data) => {
-    if (!data || !data.estudianteId) return
-    if (asistenciaDia.value[data.estudianteId]) {
-      asistenciaDia.value[data.estudianteId].estado = data.estado
-      asistenciaDia.value[data.estudianteId].horaMarcacion = data.hora
-      asistenciaDia.value[data.estudianteId].excusa = false
-      asistenciaDia.value[data.estudianteId].previo = null
-      asistenciaDia.value[data.estudianteId].horasFallidas = horasAuto(asistenciaDia.value[data.estudianteId])
-      autoGuardarBorrador()
-    }
-    feedEnVivoDocente.value.unshift({
-      id: data.estudianteId,
-      nombre: `${data.nombres} ${data.apellidos}`,
-      hora: data.hora,
-      estado: data.estado,
-    })
-    if (feedEnVivoDocente.value.length > 8) {
-      feedEnVivoDocente.value.pop()
-    }
-    showToast(`${data.nombres} ${data.apellidos} marcó ${data.estado} (${data.hora})`, data.estado === 'Tardanza' ? 'warning' : 'success')
-  })
-
   socket.on('CLASS_ACTIVATED', (data) => {
     if (!data || !data.fichaId) return
     if (fichaSeleccionada.value && String(fichaSeleccionada.value._id) === String(data.fichaId)) {
@@ -101,6 +112,9 @@ function iniciarSocketDocente() {
     if (!data || !data.fichaId) return
     if (fichaSeleccionada.value && String(fichaSeleccionada.value._id) === String(data.fichaId)) {
       sesionRemotaActiva.value = false
+      if (!finalizando.value) {
+        cargarDatosFicha(fichaSeleccionada.value._id)
+      }
     }
   })
 
@@ -157,7 +171,8 @@ async function iniciarSesionRemotaDocente() {
 }
 
 async function detenerSesionRemotaDocente() {
-  if (!fichaSeleccionada.value) return
+  if (!fichaSeleccionada.value || finalizando.value) return
+  finalizando.value = true
   try {
     await api.clases.finalizar({
       fichaId: fichaSeleccionada.value._id,
@@ -166,8 +181,11 @@ async function detenerSesionRemotaDocente() {
     sesionRemotaActiva.value = false
     claseIniciadaAt.value = null
     showToast('Clase finalizada.', 'info')
+    await cargarDatosFicha(fichaSeleccionada.value._id)
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
+  } finally {
+    finalizando.value = false
   }
 }
 
@@ -206,7 +224,6 @@ async function seleccionarFicha(ficha) {
   }
   fichaSeleccionada.value = ficha
   vistaFicha.value = 'asistencia'
-  feedEnVivoDocente.value = []
   if (ficha?._id) {
     unirseASalaFicha(ficha._id, 'docente')
   }
@@ -222,7 +239,11 @@ async function cargarDatosFicha(fichaId) {
     const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
 
     estudiantesFicha.value = Array.isArray(estRes) ? estRes : []
-    asistenciasFicha.value = Array.isArray(asisRes) ? asisRes : []
+    const sFichaId = String(fichaId)
+    asistenciasFicha.value = (Array.isArray(asisRes) ? asisRes : []).filter(a => {
+      const aFicha = String(a.fichaId?._id || a.fichaId)
+      return aFicha === sFichaId
+    })
     memoriaBiometricaRAM.value = Array.isArray(bioRes) ? bioRes : []
     inicializarAsistenciaDia()
   } catch (err) {
@@ -244,7 +265,6 @@ function getHoyLocalISO() {
 const fechaHoyMax = computed(() => getHoyLocalISO())
 const fechaAsistencia = ref(getHoyLocalISO())
 const asistenciaDia = ref({})
-const guardandoAsistencia = ref(false)
 
 const esFechaActualOHoy = computed(() => {
   return fechaAsistencia.value >= fechaHoyMax.value
@@ -301,6 +321,70 @@ const motivoInhabilitacionDia = computed(() => {
   }
   const reg = asistenciasFicha.value.find(a => a.fecha === hoy && a.estado === 'Inhabilitada')
   return reg?.motivoInhabilitacion || 'Jornada no impartida'
+})
+
+const docenteResponsableDia = computed(() => {
+  const hoy = fechaAsistencia.value
+  const currentFichaId = fichaSeleccionada.value ? String(fichaSeleccionada.value._id) : null
+  const reg = asistenciasFicha.value.find(
+    a => a.fecha === hoy &&
+         (!currentFichaId || String(a.fichaId?._id || a.fichaId) === currentFichaId) &&
+         a.instructorId
+  )
+  if (!reg || !reg.instructorId) return null
+
+  if (typeof reg.instructorId === 'object' && reg.instructorId.nombres) {
+    return {
+      id: String(reg.instructorId._id || reg.instructorId),
+      nombreCompleto: `${reg.instructorId.nombres} ${reg.instructorId.apellidos || ''}`.trim(),
+      correo: reg.instructorId.correo || '',
+      especialidad: reg.instructorId.especialidad || ''
+    }
+  }
+
+  const instIdStr = String(reg.instructorId._id || reg.instructorId)
+  if (usuario.value && String(usuario.value.id) === instIdStr) {
+    return {
+      id: instIdStr,
+      nombreCompleto: (usuario.value.nombre || 'Instructor'),
+      correo: usuario.value.correo || '',
+      especialidad: usuario.value.especialidad || ''
+    }
+  }
+
+  const lider = fichaSeleccionada.value?.instructorLiderId
+  if (lider && String(lider._id || lider) === instIdStr) {
+    return {
+      id: instIdStr,
+      nombreCompleto: `${lider.nombres || ''} ${lider.apellidos || ''}`.trim() || 'Docente Líder',
+      correo: lider.correo || '',
+      especialidad: lider.especialidad || ''
+    }
+  }
+
+  const deFicha = (fichaSeleccionada.value?.instructores || []).find(i => String(i._id || i) === instIdStr)
+  if (deFicha && typeof deFicha === 'object' && deFicha.nombres) {
+    return {
+      id: instIdStr,
+      nombreCompleto: `${deFicha.nombres} ${deFicha.apellidos || ''}`.trim(),
+      correo: deFicha.correo || '',
+      especialidad: deFicha.especialidad || ''
+    }
+  }
+
+  return {
+    id: instIdStr,
+    nombreCompleto: 'Docente a cargo',
+    correo: '',
+    especialidad: ''
+  }
+})
+
+const jornadaEsDeOtroDocente = computed(() => {
+  if (usuario.value?.rol === 'Administrador') return false
+  if (!docenteResponsableDia.value) return false
+  const currentUserId = usuario.value?.id ? String(usuario.value.id) : null
+  return currentUserId ? String(docenteResponsableDia.value.id) !== currentUserId : false
 })
 
 function cambiarFechaDia(delta) {
@@ -450,12 +534,6 @@ function calcularHorasTardanza(horaMarcacionStr, jornada) {
   }
 }
 
-function autoGuardarBorrador() {
-  if (fichaSeleccionada.value?._id && fechaAsistencia.value) {
-    draftStore.guardarBorrador(fichaSeleccionada.value._id, fechaAsistencia.value, asistenciaDia.value)
-  }
-}
-
 // Horas de clase por día según la jornada de la ficha (mismo criterio del módulo Reportes:
 // Noche = 5 horas, Mañana / Tarde = 6 horas).
 const horasClaseFicha = computed(() => {
@@ -480,42 +558,134 @@ function bloquearNoEnteros(ev) {
   if (['.', ',', 'e', 'E', '+', '-'].includes(ev.key)) ev.preventDefault()
 }
 
-// Mientras escribe: se limita al rango 0..máximo de la jornada
-function onHorasInput(estId, ev) {
-  const reg = asistenciaDia.value[estId]
-  if (!reg || jornadaInhabilitada.value) return
-  const n = parseInt(ev.target.value, 10)
-  if (Number.isNaN(n)) return // campo vacío mientras escribe
-  const limitado = Math.min(Math.max(n, 0), horasClaseFicha.value)
+function actualizarEstadoPorHoras(reg, n) {
+  if (!reg) return
+  const max = horasClaseFicha.value
+  const limitado = Math.min(Math.max(n, 0), max)
   reg.horasFallidas = limitado
-  if (limitado !== n) ev.target.value = limitado
-  autoGuardarBorrador()
+
+  if (reg.excusa) {
+    reg.estado = 'Excusada'
+    if (limitado > 0 && limitado < max) {
+      reg.horasTardanza = limitado
+      reg.tiempoTardanza = `${limitado} ${limitado === 1 ? 'hora' : 'horas'}`
+    } else {
+      reg.horasTardanza = 0
+      reg.tiempoTardanza = '0 horas'
+    }
+    return
+  }
+
+  if (limitado === 0) {
+    reg.estado = 'Presente'
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+    if (!reg.horaMarcacion || reg.horaMarcacion === '—') {
+      reg.horaMarcacion = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    }
+  } else if (limitado < max) {
+    reg.estado = 'Tardanza'
+    reg.horasTardanza = limitado
+    reg.tiempoTardanza = `${limitado} ${limitado === 1 ? 'hora' : 'horas'}`
+    if (!reg.horaMarcacion || reg.horaMarcacion === '—') {
+      reg.horaMarcacion = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    }
+  } else {
+    reg.estado = 'Falta'
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+    reg.horaMarcacion = '—'
+  }
 }
 
-// Al salir del campo: si quedó vacío o inválido, se restaura el valor guardado
-function onHorasChange(estId, ev) {
+// Debounce de envío por aprendiz (~800 ms tras la última tecla).
+const debounceHoras = new Map()
+
+function programarDebounceHoras(estId) {
+  const prev = debounceHoras.get(estId)
+  if (prev) clearTimeout(prev)
+  const t = setTimeout(() => {
+    debounceHoras.delete(estId)
+    sincronizarCambioNube(estId)
+  }, 800)
+  debounceHoras.set(estId, t)
+}
+
+function cancelarDebounceHoras(estId) {
+  const t = debounceHoras.get(estId)
+  if (t) {
+    clearTimeout(t)
+    debounceHoras.delete(estId)
+  }
+}
+
+function cancelarTodosDebounceHoras() {
+  for (const t of debounceHoras.values()) clearTimeout(t)
+  debounceHoras.clear()
+}
+
+// Mientras escribe: se actualiza el estado (Tardanza/Falta/Presente) y los chips en vivo
+function onHorasInput(estId, ev) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg || !reg.esMio || jornadaInhabilitada.value) return
+  const n = parseInt(ev.target.value, 10)
+  if (Number.isNaN(n)) return // campo vacío mientras escribe
+  actualizarEstadoPorHoras(reg, n)
+  programarDebounceHoras(estId)
+}
+
+// Al salir del campo: se asegura el rango válido y sincroniza en la nube
+async function onHorasChange(estId, ev) {
+  cancelarDebounceHoras(estId)
   const reg = asistenciaDia.value[estId]
   if (!reg) return
+  if (!reg.esMio) {
+    showToast(`Solo de lectura: Registrado por Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    ev.target.value = reg.horasFallidas || 0
+    return
+  }
   const n = parseInt(ev.target.value, 10)
-  const limitado = Number.isNaN(n) ? (reg.horasFallidas || 0) : Math.min(Math.max(n, 0), horasClaseFicha.value)
-  reg.horasFallidas = limitado
-  ev.target.value = limitado
-  autoGuardarBorrador()
+  const valorFinal = Number.isNaN(n) ? (reg.horasFallidas || 0) : n
+  actualizarEstadoPorHoras(reg, valorFinal)
+  ev.target.value = reg.horasFallidas
+  await sincronizarCambioNube(estId)
 }
 
 function inicializarAsistenciaDia() {
+  limpiarEstadosFila()
+  cancelarTodosDebounceHoras()
   const hoy = fechaAsistencia.value
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
+  const currentFichaId = fichaSeleccionada.value ? String(fichaSeleccionada.value._id) : null
+  const currentUserId = usuario.value?.id ? String(usuario.value.id) : null
+  const esAdmin = usuario.value?.rol === 'Administrador'
   const registros = {}
+
   for (const est of estudiantesFicha.value) {
     const existente = asistenciasFicha.value.find(
-      a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === hoy
+      a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) &&
+           a.fecha === hoy &&
+           (!currentFichaId || String(a.fichaId?._id || a.fichaId) === currentFichaId)
     )
-    const estado = existente ? existente.estado : 'Ninguno'
-    const hora = existente ? (existente.hora || '') : ''
+    const estado = existente ? existente.estado : 'Presente'
+    const hora = existente ? (existente.hora || '') : (new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
       : { horas: 0, texto: '0 horas' }
+
+    // Verificación de propiedad docente (Solo lectura para otros docentes)
+    const instructorAsignado = existente?.instructorId
+    const instructorAsignadoId = instructorAsignado ? String(instructorAsignado._id || instructorAsignado) : null
+    const esMio = !existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId)
+
+    let nombreDocenteCreador = ''
+    if (!esMio && instructorAsignado) {
+      if (typeof instructorAsignado === 'object' && instructorAsignado.nombres) {
+        nombreDocenteCreador = `${instructorAsignado.nombres} ${instructorAsignado.apellidos || ''}`.trim()
+      } else {
+        nombreDocenteCreador = 'otro docente'
+      }
+    }
 
     registros[est._id] = {
       estado,
@@ -524,32 +694,197 @@ function inicializarAsistenciaDia() {
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
       subidoSofia: existente ? !!existente.subidoSofia : false,
+      previo: null,
+      esMio,
+      nombreDocenteCreador,
     }
     registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
 
-  // Comprobar si existe un borrador no guardado en Pinia / LocalStorage
-  const borrador = draftStore.obtenerBorrador(fichaSeleccionada.value?._id, hoy)
-  if (borrador && borrador.registros) {
-    let restaurados = 0
-    for (const estId in borrador.registros) {
-      if (registros[estId]) {
-        // Solo restauramos si no está bloqueado por Sofia Plus y tiene cambios
-        if (!registros[estId].subidoSofia && (borrador.registros[estId].estado !== 'Ninguno' || borrador.registros[estId].excusa)) {
-          registros[estId] = { ...registros[estId], ...borrador.registros[estId] }
-          restaurados++
-        }
-      }
+  // Superponer los items pendientes de la cola offline de esta ficha y fecha,
+  // para que una recarga sin conexión siga mostrando las marcas pendientes.
+  const sFichaId = String(fichaSeleccionada.value?._id || '')
+  const itemsCola = draftStore.colaOffline
+    .flatMap((lote) => (Array.isArray(lote.items) ? lote.items : []))
+    .filter((it) => String(it.fichaId) === sFichaId && it.fecha === hoy)
+
+  for (const item of itemsCola) {
+    const estId = String(item.estudianteId)
+    const reg = registros[estId]
+    if (!reg) continue
+    // subidoSofia y esMio salen SIEMPRE del servidor. Si el servidor ya marcó
+    // la fila como subida a Sofía Plus, se ignora el item y se quita de la cola.
+    if (reg.subidoSofia) {
+      draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, item.fecha)
+      continue
     }
-    if (restaurados > 0) {
-      showToast(`Borrador temporal restaurado: se recuperaron ${restaurados} cambios no guardados.`, 'info')
-    }
+    reg.estado = item.estado
+    reg.excusa = item.estado === 'Excusada'
+    reg.horaMarcacion = item.hora || '—'
+    reg.horasTardanza = item.horasTardanza || 0
+    reg.tiempoTardanza = item.tiempoTardanza || '0 horas'
+    reg.horasFallidas = horasAuto(reg)
   }
 
   asistenciaDia.value = registros
 }
 
-function marcarPresente(estId) {
+// Estado visual por fila: 'guardando' | 'guardado' | 'error'
+const estadoFilaSync = ref({})
+const timersGuardado = new Map()
+// Serialización por aprendiz: a lo sumo una petición en vuelo + un estado pendiente.
+const syncEnVuelo = new Map()
+
+function dormir(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function setEstadoFila(estId, estado, detalle = '') {
+  const prev = timersGuardado.get(estId)
+  if (prev) {
+    clearTimeout(prev)
+    timersGuardado.delete(estId)
+  }
+  estadoFilaSync.value[estId] = { estado, detalle }
+  if (estado === 'guardado') {
+    timersGuardado.set(estId, setTimeout(() => {
+      if (estadoFilaSync.value[estId]?.estado === 'guardado') {
+        delete estadoFilaSync.value[estId]
+      }
+      timersGuardado.delete(estId)
+    }, 2000))
+  }
+}
+
+function limpiarEstadosFila() {
+  for (const t of timersGuardado.values()) clearTimeout(t)
+  timersGuardado.clear()
+  estadoFilaSync.value = {}
+}
+
+// Construye el payload a partir del estado ACTUAL del aprendiz (en el momento del envío).
+function construirItem(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return null
+
+  const horaActual = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+  let estadoFinal = reg.excusa ? 'Excusada' : reg.estado
+  let horaMarcada = reg.horaMarcacion || horaActual
+  let hTardanza = reg.horasTardanza || 0
+  let tTardanza = reg.tiempoTardanza || '0 horas'
+
+  if (estadoFinal === 'Falta') {
+    horaMarcada = '—'
+    hTardanza = 0
+    tTardanza = '0 horas'
+  } else if (estadoFinal === 'Tardanza') {
+    hTardanza = reg.horasTardanza || reg.horasFallidas || 1
+    tTardanza = `${hTardanza} ${hTardanza === 1 ? 'hora' : 'horas'}`
+  }
+
+  return {
+    estudianteId: estId,
+    fichaId: fichaSeleccionada.value._id,
+    estado: estadoFinal,
+    fecha: fechaAsistencia.value,
+    hora: horaMarcada,
+    horasTardanza: hTardanza,
+    tiempoTardanza: tTardanza,
+    instructorId: usuario.value.id || null,
+    metodo: 'MANUAL',
+  }
+}
+
+async function enviarEstado(estId) {
+  const esperas = [1000, 3000, 8000]
+  for (let intento = 0; ; intento++) {
+    const item = construirItem(estId)
+    if (!item) return
+    const fecha = item.fecha
+    const sFichaId = String(item.fichaId)
+
+    setEstadoFila(estId, 'guardando')
+    try {
+      const res = await api.asistencias.create(item)
+      if (res?.eliminado) {
+        asistenciasFicha.value = asistenciasFicha.value.filter(a =>
+          !(String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
+            a.fecha === fecha &&
+            String(a.fichaId?._id || a.fichaId) === sFichaId)
+        )
+      } else if (res?._id) {
+        const idx = asistenciasFicha.value.findIndex(a =>
+          String(a.estudianteId?._id || a.estudianteId) === String(estId) &&
+          a.fecha === fecha &&
+          String(a.fichaId?._id || a.fichaId) === sFichaId
+        )
+        if (idx >= 0) {
+          asistenciasFicha.value[idx] = res
+        } else {
+          asistenciasFicha.value.push(res)
+        }
+      }
+      draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, fecha)
+      setEstadoFila(estId, 'guardado')
+      return
+    } catch (err) {
+      if (err.status === 409) {
+        showToast(err.message, 'error')
+        await cargarDatosFicha(item.fichaId)
+        delete estadoFilaSync.value[estId]
+        return
+      }
+      if (err.status && err.status >= 400 && err.status < 500) {
+        setEstadoFila(estId, 'error', err.message)
+        return
+      }
+      console.warn(`[Sync Nube] Reintento ${intento + 1} para ${estId}:`, err.message)
+      if (intento >= esperas.length) {
+        draftStore.encolarOffline([item])
+        setEstadoFila(estId, 'error', `${err.message} — se guardó localmente y se reintentará`)
+        return
+      }
+      await dormir(esperas[intento])
+    }
+  }
+}
+
+async function procesarColaSync(estId, entrada, fichaId, fecha) {
+  try {
+    do {
+      entrada.pendiente = false
+      if (String(fichaSeleccionada.value?._id) !== String(fichaId) || fechaAsistencia.value !== fecha) {
+        console.warn(`[Sync Nube] Se cambió de fecha/ficha durante la sincronización de ${estId}; se omite el estado pendiente.`)
+        break
+      }
+      await enviarEstado(estId)
+    } while (entrada.pendiente && asistenciaDia.value[estId])
+  } finally {
+    syncEnVuelo.delete(estId)
+  }
+}
+
+function sincronizarCambioNube(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return
+  if (fechaAsistencia.value > fechaHoyMax.value) return
+
+  const fichaId = fichaSeleccionada.value._id
+  const fecha = fechaAsistencia.value
+
+  const entrada = syncEnVuelo.get(estId)
+  if (entrada?.enVuelo) {
+    entrada.pendiente = true
+    return
+  }
+
+  const nueva = { enVuelo: true, pendiente: false }
+  syncEnVuelo.set(estId, nueva)
+  void procesarColaSync(estId, nueva, fichaId, fecha)
+}
+
+async function marcarFalta(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para tomar asistencia.', 'warning')
     return
@@ -557,41 +892,56 @@ function marcarPresente(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
 
+  if (!reg.esMio) {
+    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    return
+  }
+
   if (reg.subidoSofia) {
     showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
     return
   }
 
-  if (reg.estado === 'Presente' || reg.estado === 'Tardanza') {
-    // Desmarcar al hacer clic de nuevo
-    reg.estado = 'Ninguno'
-    reg.horaMarcacion = ''
+  if (reg.estado === 'Falta') {
+    // Desmarcar la falla: vuelve a estar Presente
+    const previo = reg.previo
+    reg.estado = previo?.estado || 'Presente'
+    reg.horaMarcacion = previo?.horaMarcacion || new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    reg.horasTardanza = previo?.horasTardanza || 0
+    reg.tiempoTardanza = previo?.tiempoTardanza || '0 horas'
+    reg.excusa = false
+    reg.previo = null
+  } else {
+    // Marcar falla
+    reg.previo = {
+      estado: reg.estado,
+      horaMarcacion: reg.horaMarcacion,
+      horasTardanza: reg.horasTardanza,
+      tiempoTardanza: reg.tiempoTardanza,
+    }
+    reg.estado = 'Falta'
+    reg.horaMarcacion = '—'
     reg.horasTardanza = 0
     reg.tiempoTardanza = '0 horas'
-  } else {
-    const ahora = new Date()
-    const horaFormateada = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    const ahoraMs = ahora.getTime()
-    const minutos = calcularMinutosTranscurridos(claseIniciadaAt.value || ahoraMs, ahoraMs)
-    const tardanzaInfo = calcularEstadoPorTiempo(minutos)
-
-    reg.estado = tardanzaInfo.estado
-    reg.horaMarcacion = horaFormateada
-    reg.horasTardanza = tardanzaInfo.horasTardanza
-    reg.tiempoTardanza = tardanzaInfo.tiempoTardanza
     reg.excusa = false
   }
   reg.horasFallidas = horasAuto(reg)
-  autoGuardarBorrador()
+
+  await sincronizarCambioNube(estId)
 }
 
-function toggleExcusa(estId) {
+async function toggleExcusa(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para registrar excusas.', 'warning')
     return
   }
   const reg = asistenciaDia.value[estId]
   if (!reg) return
+
+  if (!reg.esMio) {
+    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    return
+  }
 
   if (reg.subidoSofia) {
     showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
@@ -602,90 +952,11 @@ function toggleExcusa(estId) {
   if (reg.excusa) {
     reg.estado = 'Excusada'
   } else {
-    reg.estado = 'Ninguno'
-    reg.horaMarcacion = ''
-    reg.horasTardanza = 0
-    reg.tiempoTardanza = '0 horas'
+    reg.estado = reg.previo ? 'Falta' : 'Presente'
   }
+  reg.horasFallidas = horasAuto(reg)
 
-  autoGuardarBorrador()
-}
-
-
-async function guardarAsistenciaDia() {
-  if (jornadaInhabilitada.value) {
-    showToast('Esta sesión ya se encuentra guardada como inhabilitada.', 'info')
-    return
-  }
-  if (fechaAsistencia.value > fechaHoyMax.value) {
-    showToast('No es posible registrar ni finalizar asistencias en fechas futuras.', 'warning')
-    return
-  }
-  guardandoAsistencia.value = true
-  const hoy = fechaAsistencia.value
-  const horaActual = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
-  let exitosos = 0
-  let errores = 0
-  const fallidosParaOffline = []
-
-  for (const est of estudiantesFicha.value) {
-    const reg = asistenciaDia.value[est._id]
-    let estadoFinal = 'Falta'
-    let horaMarcada = horaActual
-    let hTardanza = 0
-    let tTardanza = '0 horas'
-
-    if (reg) {
-      if (reg.excusa) {
-        estadoFinal = 'Excusada'
-        horaMarcada = reg.horaMarcacion || horaActual
-      } else if (['Presente', 'Tardanza', 'Excusada'].includes(reg.estado)) {
-        estadoFinal = reg.estado
-        horaMarcada = reg.horaMarcacion || horaActual
-        if (estadoFinal === 'Tardanza') {
-          const calc = calcularHorasTardanza(horaMarcada, jornadaFicha)
-          hTardanza = reg.horasTardanza || calc.horas
-          tTardanza = reg.tiempoTardanza || calc.texto
-        }
-      }
-    }
-
-    const itemAsistencia = {
-      estudianteId: est._id,
-      fichaId: fichaSeleccionada.value._id,
-      estado: estadoFinal,
-      fecha: hoy,
-      hora: horaMarcada,
-      horasTardanza: hTardanza,
-      tiempoTardanza: tTardanza,
-      instructorId: usuario.value.id || null,
-    }
-
-    try {
-      await api.asistencias.create(itemAsistencia)
-      exitosos++
-    } catch (err) {
-      errores++
-      fallidosParaOffline.push(itemAsistencia)
-      console.error(`Error asistencia ${est.nombres}:`, err.message)
-    }
-  }
-
-  if (errores === 0) {
-    draftStore.limpiarBorrador(fichaSeleccionada.value._id, hoy)
-    await cargarDatosFicha(fichaSeleccionada.value._id)
-    showToast(`Jornada finalizada. Asistencias guardadas exitosamente.`)
-  } else {
-    // Si hubo errores (ej: fallo de conexión/internet), encolar en Pinia offline
-    draftStore.encolarOffline(fallidosParaOffline)
-    showToast(
-      `${exitosos} guardados. ${errores} guardados localmente por corte de conexión (se enviarán automáticamente al reconectar).`,
-      'warning'
-    )
-  }
-
-  guardandoAsistencia.value = false
+  await sincronizarCambioNube(estId)
 }
 
 // Contadores de asistencia del día
@@ -697,14 +968,17 @@ const conteoAsistencia = computed(() => {
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
     if (reg) {
-      const estado = reg.excusa ? 'Excusada' : reg.estado
-      if (['Presente', 'Tardanza', 'Excusada'].includes(estado)) {
-        conteo[estado]++
+      if (reg.excusa || reg.estado === 'Excusada') {
+        conteo.Excusada++
+      } else if (reg.estado === 'Falta') {
+        conteo.Falta++
+      } else if (reg.estado === 'Tardanza') {
+        conteo.Tardanza++
       } else {
-        conteo.Falta++ // Los no marcados cuentan como Falta automática
+        conteo.Presente++
       }
     } else {
-      conteo.Falta++
+      conteo.Presente++
     }
   }
   return conteo
@@ -712,59 +986,6 @@ const conteoAsistencia = computed(() => {
 
 
 
-
-// =============================================
-// GESTIONAR ESTUDIANTES (Solo Líder)
-// =============================================
-const showEditEstudianteModal = ref(false)
-const estudianteEditando = ref(null)
-const editForm = reactive({
-  nombres: '',
-  apellidos: '',
-  tipoDocumento: 'CC',
-  numeroDocumento: '',
-  correo: '',
-  telefono: '',
-  genero: '',
-  estado: 'Activo',
-})
-const guardandoEstudiante = ref(false)
-
-function abrirEditarEstudiante(est) {
-  estudianteEditando.value = est
-  editForm.nombres = est.nombres
-  editForm.apellidos = est.apellidos
-  editForm.tipoDocumento = est.tipoDocumento || 'CC'
-  editForm.numeroDocumento = est.numeroDocumento
-  editForm.correo = est.correo
-  editForm.telefono = est.telefono
-  editForm.genero = est.genero || ''
-  editForm.estado = est.estado || 'Activo'
-  showEditEstudianteModal.value = true
-}
-
-async function guardarEstudiante() {
-  guardandoEstudiante.value = true
-  try {
-    await api.estudiantes.update(estudianteEditando.value._id, {
-      nombres: editForm.nombres,
-      apellidos: editForm.apellidos,
-      tipoDocumento: editForm.tipoDocumento,
-      numeroDocumento: editForm.numeroDocumento,
-      correo: editForm.correo,
-      telefono: editForm.telefono,
-      genero: editForm.genero,
-      estado: editForm.estado,
-    })
-    await cargarDatosFicha(fichaSeleccionada.value._id)
-    showEditEstudianteModal.value = false
-    showToast('Datos del aprendiz actualizados correctamente')
-  } catch (err) {
-    showToast('Error al actualizar: ' + err.message, 'error')
-  } finally {
-    guardandoEstudiante.value = false
-  }
-}
 
 // =============================================
 // EXPORTAR A EXCEL
@@ -791,7 +1012,7 @@ function exportarAsistenciaDia() {
       'Observación / Motivo': jornadaInhabilitada.value ? motivoInhabilitacionDia.value : ''
     }
   })
-  descargarExcel(data, `Asistencia_${fichaSeleccionada.value.codigoFicha}_${hoy}`)
+  descargarDatos(data, `Asistencia_${fichaSeleccionada.value.codigoFicha}_${hoy}`, `Asistencia del día ${hoy}`)
 }
 
 function exportarHistorial() {
@@ -800,6 +1021,7 @@ function exportarHistorial() {
     const est = estudiantesFicha.value.find(e => String(e._id) === String(asis.estudianteId?._id || asis.estudianteId))
     const nombreEst = est ? `${est.nombres} ${est.apellidos}` : (asis.estudianteId?.nombres ? `${asis.estudianteId.nombres} ${asis.estudianteId.apellidos}` : 'Aprendiz')
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
+    const nombreDocente = asis.instructorId?.nombres ? `${asis.instructorId.nombres} ${asis.instructorId.apellidos || ''}`.trim() : 'Sistema / Lector'
     let tardanzaStr = '0 horas'
     if (asis.estado === 'Tardanza') {
       tardanzaStr = asis.tiempoTardanza || calcularHorasTardanza(asis.hora, jornadaFicha).texto
@@ -809,42 +1031,62 @@ function exportarHistorial() {
       'Hora': asis.hora || '—',
       'Aprendiz': nombreEst,
       'Documento': docEst,
+      'Docente Responsable': nombreDocente,
       'Estado': asis.estado,
       'Tiempo de Tardanza': tardanzaStr,
       'Motivo Inhabilitación': asis.motivoInhabilitacion || '—',
     }
   })
-  descargarExcel(data, `Historial_${fichaSeleccionada.value.codigoFicha}`)
+  descargarDatos(data, `Historial_${fichaSeleccionada.value.codigoFicha}`, 'Historial de asistencias')
 }
 
-function exportarListaEstudiantes() {
-  const data = estudiantesFicha.value.map(est => ({
-    'Nombres': est.nombres,
-    'Apellidos': est.apellidos,
-    'Tipo Doc.': est.tipoDocumento,
-    'Documento': est.numeroDocumento,
-    'Correo': est.correo,
-    'Teléfono': est.telefono,
-    'Género': est.genero || '',
-    'Estado': est.estado,
-    'Huella Enrolada': est.huellaEnrolada ? 'Sí' : 'No',
-  }))
-  descargarExcel(data, `Estudiantes_${fichaSeleccionada.value.codigoFicha}`)
+// Formato elegido para descargar ('excel' | 'pdf')
+const formatoDescarga = ref('excel')
+
+async function descargarDatos(data, nombreArchivo, titulo) {
+  if (formatoDescarga.value === 'pdf') {
+    await descargarPDF(data, nombreArchivo, titulo)
+  } else {
+    descargarExcel(data, nombreArchivo)
+  }
 }
 
-function descargarSQLite() {
+async function descargarPDF(data, nombreArchivo, titulo) {
+  if (data.length === 0) {
+    showToast('No hay datos para exportar', 'warning')
+    return
+  }
   try {
-    const url = api.asistencias.downloadSqliteUrl()
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'asistencias_institucion.sqlite'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    showToast('Descargando base de datos SQLite institucional...', 'success')
+    const [{ jsPDF }, autoTableModule] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
+    const autoTable = autoTableModule.default || autoTableModule.autoTable
+    const limpiar = v => String(v ?? '').replace(/[—–]/g, '-')
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+    const ficha = fichaSeleccionada.value
+    doc.setFontSize(14)
+    doc.text(limpiar(titulo), 40, 40)
+    doc.setFontSize(10)
+    doc.setTextColor(100)
+    doc.text(limpiar(`Ficha ${ficha.codigoFicha} - ${ficha.nombrePrograma} | Jornada: ${ficha.jornada || ''}`), 40, 58)
+
+    const columnas = Object.keys(data[0])
+    autoTable(doc, {
+      startY: 72,
+      head: [columnas.map(limpiar)],
+      body: data.map(row => columnas.map(c => limpiar(row[c]))),
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [57, 169, 0], textColor: 255 },
+      alternateRowStyles: { fillColor: [242, 249, 237] },
+    })
+
+    doc.save(`${nombreArchivo}.pdf`)
+    showToast(`Archivo "${nombreArchivo}.pdf" descargado`)
   } catch (err) {
-    console.error('Error al descargar SQLite:', err)
-    showToast('Error al descargar SQLite: ' + err.message, 'error')
+    console.error('Error al generar PDF:', err)
+    showToast('Error al generar el PDF: ' + err.message, 'error')
   }
 }
 
@@ -949,7 +1191,7 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'asistencia'"
               title="Tomar Asistencia"
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              <img :src="iconoTomarAsistencia" alt="Tomar Asistencia" class="tab-icon-img" width="16" height="16" />
             </button>
             <button
               class="tab-btn"
@@ -958,15 +1200,6 @@ function descargarExcel(data, nombreArchivo) {
               title="Historial"
             >
               <img :src="iconoHistorial" alt="Historial" class="tab-icon-img" width="16" height="16" />
-            </button>
-            <!-- BOTÓN GESTIONAR ESTUDIANTES -->
-            <button
-              class="tab-btn"
-              :class="{ active: vistaFicha === 'gestionar_estudiantes' }"
-              @click="vistaFicha = 'gestionar_estudiantes'"
-              title="Gestionar Estudiantes"
-            >
-              <img :src="iconoGestionarEstudiantes" alt="Gestionar Estudiantes" class="tab-icon-img" width="16" height="16" />
             </button>
             <button
               class="tab-btn"
@@ -1016,31 +1249,12 @@ function descargarExcel(data, nombreArchivo) {
                   type="button"
                   class="btn-remote-stop"
                   @click="detenerSesionRemotaDocente"
+                  :disabled="finalizando"
                   title="Finalizar pase de lista"
                 >
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                 </button>
 
-              </div>
-            </div>
-
-            <!-- Feed en Vivo si la sesión remota está activa o hay marcaciones recientes -->
-            <div v-if="feedEnVivoDocente.length > 0" class="remote-live-feed">
-              <div class="live-feed-title">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M8 9a6 6 0 0 1 8 0"/><path d="M5 6a10.5 10.5 0 0 1 14 0"/></svg>
-                <span>Marcaciones Recientes en Tiempo Real</span>
-              </div>
-              <div class="live-feed-chips">
-                <div
-                  v-for="item in feedEnVivoDocente"
-                  :key="item.id + item.hora"
-                  class="live-feed-chip"
-                  :class="item.estado === 'Tardanza' ? 'feed-tardanza' : 'feed-presente'"
-                >
-                  <span class="feed-dot"></span>
-                  <strong>{{ item.nombre }}</strong>
-                  <span class="feed-time">{{ item.hora }} ({{ item.estado }})</span>
-                </div>
               </div>
             </div>
           </div>
@@ -1171,6 +1385,57 @@ function descargarExcel(data, nombreArchivo) {
             </button>
           </div>
 
+          <!-- BANNER SUPERIOR: DOCENTE RESPONSABLE DE LA JORNADA -->
+          <div
+            v-if="!jornadaInhabilitada"
+            class="docente-jornada-banner"
+            :class="{
+              'banner-docente-ajeno': jornadaEsDeOtroDocente,
+              'banner-docente-propio': !jornadaEsDeOtroDocente && docenteResponsableDia,
+              'banner-docente-nuevo': !docenteResponsableDia
+            }"
+          >
+            <div class="docente-jornada-icon-wrap">
+              <svg v-if="jornadaEsDeOtroDocente" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+            <div class="docente-jornada-body">
+              <div class="docente-jornada-header-line">
+                <span class="docente-jornada-pre">Docente a cargo de la jornada:</span>
+                <strong class="docente-jornada-nombre">
+                  Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : (usuario?.nombre || `${usuario?.nombres || ''} ${usuario?.apellidos || ''}`.trim() || 'Instructor') }}
+                </strong>
+                <span v-if="jornadaEsDeOtroDocente" class="badge-solo-lectura-tag">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Modo solo lectura (No modificable)
+                </span>
+                <span v-else-if="docenteResponsableDia" class="badge-tu-jornada-tag">
+                  (Tú registraste esta jornada)
+                </span>
+                <span v-else class="badge-pendiente-tag">
+                  (Pendiente por registrar)
+                </span>
+              </div>
+              <p class="docente-jornada-desc">
+                <template v-if="jornadaEsDeOtroDocente">
+                  Esta sesión fue registrada por otro docente. Puedes visualizarla pero los controles están bloqueados para proteger el registro del instructor titular.
+                </template>
+                <template v-else-if="docenteResponsableDia">
+                  Tienes permisos de edición completos sobre esta jornada registrada.
+                </template>
+                <template v-else>
+                  Jornada sin registro previo. Los cambios que efectúes quedarán vinculados a tu usuario como docente a cargo del día.
+                </template>
+              </p>
+            </div>
+          </div>
+
           <!-- Contadores rápidos -->
           <div class="conteo-row">
             <div v-if="jornadaInhabilitada" class="conteo-chip" style="background: #ffedd5; color: #9a3412; border: 1.5px solid #fdba74; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
@@ -1202,7 +1467,7 @@ function descargarExcel(data, nombreArchivo) {
                 <tr>
                   <th>Aprendiz</th>
                   <th>Documento</th>
-                  <th>Marcar Presente</th>
+                  <th>Marcar Falla</th>
                   <th>Excusa (F2F)</th>
                   <th>Hora Marcación</th>
                   <th>Estado Asignado</th>
@@ -1212,25 +1477,32 @@ function descargarExcel(data, nombreArchivo) {
               <tbody>
                 <tr v-for="est in estudiantesFicha" :key="est._id"
                     :class="{ 'row-excusada': asistenciaDia[est._id]?.excusa, 'row-disabled': jornadaInhabilitada }">
-                  <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
+                  <td>
+                    <strong>{{ est.nombres }} {{ est.apellidos }}</strong>
+                    <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
+                      <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
+                      <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
+                      <template v-else>error</template>
+                    </span>
+                  </td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
-                        :checked="asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza'"
-                        :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
-                        @change="marcarPresente(est._id)"
+                        :checked="asistenciaDia[est._id]?.estado === 'Falta'"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
+                        @change="marcarFalta(est._id)"
                       />
-                      <span class="checkbox-custom radio-presente"></span>
+                      <span class="checkbox-custom checkbox-falta"></span>
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia) ? 'cursor: not-allowed; opacity: 0.5;' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
-                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                        :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                         @change="toggleExcusa(est._id)"
                       />
                       <span class="checkbox-custom"></span>
@@ -1252,17 +1524,17 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                       Excusada
                     </span>
-                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge badge-success">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
-                      Presente (A tiempo)
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge badge-danger">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+                      Falta
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge badge-warning">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
                       Tardanza ({{ asistenciaDia[est._id]?.tiempoTardanza || '1 hora' }})
                     </span>
-                    <span v-else class="badge badge-danger">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
-                      Falta (Automática)
+                    <span v-else class="badge badge-success">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
+                      Presente (A tiempo)
                     </span>
                   </td>
                   <td class="td-horas">
@@ -1276,8 +1548,8 @@ function descargarExcel(data, nombreArchivo) {
                         step="1"
                         inputmode="numeric"
                         :value="asistenciaDia[est._id]?.horasFallidas || 0"
-                        :disabled="jornadaInhabilitada"
-                        :title="`Horas fallidas (máximo ${horasClaseFicha})`"
+                        :disabled="jornadaInhabilitada || !asistenciaDia[est._id]?.esMio"
+                        :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: registrada por otro docente' : (`Horas fallidas (máximo ${horasClaseFicha})`)"
                         @keydown="bloquearNoEnteros"
                         @input="onHorasInput(est._id, $event)"
                         @change="onHorasChange(est._id, $event)"
@@ -1310,16 +1582,23 @@ function descargarExcel(data, nombreArchivo) {
                     {{ (est.nombres?.[0] || 'A') + (est.apellidos?.[0] || '') }}
                   </div>
                   <div class="mob-info">
-                    <strong class="mob-name">{{ est.nombres }} {{ est.apellidos }}</strong>
+                    <strong class="mob-name">
+                      {{ est.nombres }} {{ est.apellidos }}
+                      <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
+                        <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
+                        <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
+                        <template v-else>error</template>
+                      </span>
+                    </strong>
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
                   </div>
                   <div class="mob-status-badge">
                     <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
                     <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
                     <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge-mob-pres">Presente</span>
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
-                    <span v-else class="badge-mob-falta">Falta</span>
+                    <span v-else class="badge-mob-pres">Presente</span>
                   </div>
                 </div>
                 <div class="mob-card-footer">
@@ -1336,7 +1615,7 @@ function descargarExcel(data, nombreArchivo) {
                       step="1"
                       inputmode="numeric"
                       :value="asistenciaDia[est._id]?.horasFallidas || 0"
-                      :disabled="jornadaInhabilitada"
+                      :disabled="jornadaInhabilitada || !asistenciaDia[est._id]?.esMio"
                       @keydown="bloquearNoEnteros"
                       @input="onHorasInput(est._id, $event)"
                       @change="onHorasChange(est._id, $event)"
@@ -1345,16 +1624,16 @@ function descargarExcel(data, nombreArchivo) {
                   </div>
 
                   <div class="mob-actions-row">
-                    <!-- Botón Marcar Asistencia Táctil -->
+                    <!-- Botón Marcar Falla Táctil -->
                     <button
                       type="button"
-                      class="btn-mob-presente"
-                      :class="{ 'btn-mob-active': asistenciaDia[est._id]?.estado === 'Presente' || asistenciaDia[est._id]?.estado === 'Tardanza' }"
-                      :disabled="asistenciaDia[est._id]?.excusa || jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
-                      @click="marcarPresente(est._id)"
-                      title="Marcar presente"
+                      class="btn-mob-falta"
+                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
+                      @click="marcarFalta(est._id)"
+                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Marcar falla'"
                     >
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
 
                     <!-- Botón Excusa Táctil -->
@@ -1362,9 +1641,9 @@ function descargarExcel(data, nombreArchivo) {
                       type="button"
                       class="btn-mob-excusa"
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
-                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia"
+                      :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="toggleExcusa(est._id)"
-                      title="Registrar excusa"
+                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Registrar excusa'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </button>
@@ -1390,25 +1669,14 @@ function descargarExcel(data, nombreArchivo) {
               <span>{{ draftStore.pendientesOfflineCount }} offline (Reintentar envío)</span>
             </button>
 
-            <button class="btn-export" @click="exportarAsistenciaDia" title="Exportar a Excel">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            </button>
-            <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+            <select v-model="formatoDescarga" class="form-input" title="Formato de descarga" style="width: auto; height: 38px; padding: 0 10px; font-size: 13px; cursor: pointer;"><option value="excel">Excel</option><option value="pdf">PDF</option></select>
+            <button class="btn-export" @click="exportarAsistenciaDia" :title="formatoDescarga === 'pdf' ? 'Descargar PDF' : 'Descargar Excel'">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </button>
             <div v-if="jornadaInhabilitada" style="display: flex; align-items: center; gap: 8px; color: #c2410c; font-weight: 700; font-size: 13px; background: #fff7ed; border: 1px solid #fdba74; padding: 8px 14px; border-radius: 8px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
               Sesión Inhabilitada — Guardada en MongoDB y SQLite
             </div>
-            <button
-              v-else
-              class="btn btn-primary btn-guardar"
-              @click="guardarAsistenciaDia"
-              :disabled="guardandoAsistencia"
-              title="Guardar"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            </button>
           </div>
         </div>
 
@@ -1422,12 +1690,12 @@ function descargarExcel(data, nombreArchivo) {
               <p class="section-desc">Registros de asistencia de esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn-export" @click="descargarSQLite" title="Descargar SQLite">
+              <template v-if="asistenciasFicha.length > 0">
+                <select v-model="formatoDescarga" class="form-input" title="Formato de descarga" style="width: auto; height: 38px; padding: 0 10px; font-size: 13px; cursor: pointer;"><option value="excel">Excel</option><option value="pdf">PDF</option></select>
+                <button class="btn-export" @click="exportarHistorial" :title="formatoDescarga === 'pdf' ? 'Descargar PDF' : 'Descargar Excel'">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </button>
-              <button class="btn-export" @click="exportarHistorial" v-if="asistenciasFicha.length > 0" title="Exportar historial a Excel">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </button>
+              </template>
             </div>
           </div>
 
@@ -1437,6 +1705,7 @@ function descargarExcel(data, nombreArchivo) {
               <tr>
                 <th>Fecha / Hora</th>
                 <th>Aprendiz</th>
+                <th>Docente</th>
                 <th>Estado</th>
                 <th>Tiempo Tardanza</th>
               </tr>
@@ -1445,6 +1714,12 @@ function descargarExcel(data, nombreArchivo) {
               <tr v-for="asis in asistenciasFicha" :key="asis._id">
                 <td>{{ asis.fecha }} {{ asis.hora }}</td>
                 <td>{{ asis.estudianteId?.nombres || '' }} {{ asis.estudianteId?.apellidos || '' }}</td>
+                <td>
+                  <span v-if="asis.instructorId?.nombres" style="font-size: 12px; font-weight: 600; color: #4338ca;">
+                    {{ asis.instructorId.nombres }} {{ asis.instructorId.apellidos || '' }}
+                  </span>
+                  <span v-else style="font-size: 12px; color: #94a3b8;">Sistema / Lector</span>
+                </td>
                 <td>
                   <span class="status-pill" :class="'status-' + (asis.estado || asis.tipo || '').toLowerCase()">
                     {{ asis.estado || asis.tipo }}
@@ -1455,67 +1730,10 @@ function descargarExcel(data, nombreArchivo) {
                 </td>
               </tr>
               <tr v-if="asistenciasFicha.length === 0">
-                <td colspan="4" class="empty-cell">No hay registros de asistencias pasadas.</td>
+                <td colspan="5" class="empty-cell">No hay registros de asistencias pasadas.</td>
               </tr>
             </tbody>
           </table>
-          </div>
-        </div>
-
-        <!-- ========================================= -->
-        <!-- VISTA 4: GESTIONAR ESTUDIANTES            -->
-        <!-- ========================================= -->
-        <div v-if="vistaFicha === 'gestionar_estudiantes'" class="section-body">
-          <div>
-            <div class="section-header-row">
-              <div>
-                <h4 style="display: flex; align-items: center; gap: 8px;">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="15" y2="16"/></svg>
-                  Gestionar Datos de Aprendices
-                </h4>
-                <p class="section-desc">Información y edición de los aprendices de la Ficha {{ fichaSeleccionada.codigoFicha }}:</p>
-              </div>
-              <button class="btn-export" @click="exportarListaEstudiantes" v-if="estudiantesFicha.length > 0" title="Exportar lista a Excel">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              </button>
-            </div>
-
-            <div class="table-scroll">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Aprendiz</th>
-                  <th>Documento</th>
-                  <th>Correo</th>
-                  <th>Teléfono</th>
-                  <th>Estado</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="est in estudiantesFicha" :key="est._id">
-                  <td><strong>{{ est.nombres }} {{ est.apellidos }}</strong></td>
-                  <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
-                  <td>{{ est.correo }}</td>
-                  <td>{{ est.telefono }}</td>
-                  <td>
-                    <span class="status-pill" :class="'status-' + (est.estado || '').toLowerCase()">
-                      {{ est.estado }}
-                    </span>
-                  </td>
-                  <td>
-                    <button v-if="fichaSeleccionada && fichaSeleccionada.esLider" class="btn-sm btn-edit" @click="abrirEditarEstudiante(est)" title="Editar estudiante">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                    </button>
-                    <span v-else style="font-size: 12px; color: #94a3b8;">Solo líder</span>
-                  </td>
-                </tr>
-                <tr v-if="estudiantesFicha.length === 0">
-                  <td colspan="6" class="empty-cell">No hay aprendices registrados en esta ficha.</td>
-                </tr>
-              </tbody>
-            </table>
-            </div>
           </div>
         </div>
 
@@ -1597,80 +1815,6 @@ function descargarExcel(data, nombreArchivo) {
       </div>
     </div>
 
-    <!-- ========================================= -->
-    <!-- MODAL EDITAR ESTUDIANTE (LÍDER)           -->
-    <!-- ========================================= -->
-    <div v-if="showEditEstudianteModal" class="modal-overlay" @click.self="showEditEstudianteModal = false">
-      <div class="modal modal-edit">
-        <h3 style="display: flex; align-items: center; gap: 9px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z"/></svg>
-          Editar Datos del Aprendiz
-        </h3>
-        <div class="modal-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Nombres</label>
-              <input v-model="editForm.nombres" type="text" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Apellidos</label>
-              <input v-model="editForm.apellidos" type="text" class="form-input" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group" style="flex: 0.4;">
-              <label>Tipo Doc.</label>
-              <select v-model="editForm.tipoDocumento" class="form-input">
-                <option value="CC">CC</option>
-                <option value="CE">CE</option>
-                <option value="PEP">PEP</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Número de Documento</label>
-              <input v-model="editForm.numeroDocumento" type="text" class="form-input" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Correo Electrónico</label>
-              <input v-model="editForm.correo" type="email" class="form-input" />
-            </div>
-            <div class="form-group">
-              <label>Teléfono</label>
-              <input v-model="editForm.telefono" type="text" class="form-input" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Género</label>
-              <select v-model="editForm.genero" class="form-input">
-                <option value="">Sin especificar</option>
-                <option value="Masculino">Masculino</option>
-                <option value="Femenino">Femenino</option>
-                <option value="Otro">Otro</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Estado</label>
-              <select v-model="editForm.estado" class="form-input">
-                <option value="Activo">Activo</option>
-                <option value="Inactivo">Inactivo</option>
-                <option value="Retirado">Retirado</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-outline" @click="showEditEstudianteModal = false" title="Cancelar">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-          <button class="btn btn-primary" @click="guardarEstudiante" :disabled="guardandoEstudiante" title="Guardar">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
     <!-- ========================================= -->
     <!-- MODAL INHABILITAR JORNADA                 -->
     <!-- ========================================= -->

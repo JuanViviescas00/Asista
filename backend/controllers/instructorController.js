@@ -1,11 +1,14 @@
 import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
+import Estudiante from '../models/Estudiante.js'
 import Asistencia from '../models/Asistencia.js'
+import Inasistencia from '../models/Inasistencia.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
+import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -51,6 +54,12 @@ export async function getInstructores(req, res) {
 export async function createInstructor(req, res) {
   try {
     const data = { ...req.body }
+    if (data.nombres) data.nombres = capitalizarTexto(data.nombres)
+    if (data.apellidos) data.apellidos = capitalizarTexto(data.apellidos)
+    if (data.tipoDocumento) data.tipoDocumento = normalizarTipoDocumento(data.tipoDocumento)
+    if (data.numeroDocumento) data.numeroDocumento = normalizarNumeroDocumento(data.numeroDocumento)
+    if (data.correo) data.correo = String(data.correo).trim().toLowerCase()
+    if (data.especialidad) data.especialidad = capitalizarTexto(data.especialidad)
     const clavePlana = data.password || claveInicialInstructor(data.numeroDocumento)
     if (String(clavePlana).length < 6) {
       return res.status(400).json({ error: 'La contraseña inicial no es válida: el número de documento normalizado debe tener al menos 6 caracteres. Asigna una contraseña manual.' })
@@ -93,6 +102,13 @@ export async function updateInstructor(req, res) {
     }
 
     const data = { ...req.body }
+    if (data.nombres) data.nombres = capitalizarTexto(data.nombres)
+    if (data.apellidos) data.apellidos = capitalizarTexto(data.apellidos)
+    if (data.tipoDocumento) data.tipoDocumento = normalizarTipoDocumento(data.tipoDocumento)
+    if (data.numeroDocumento) data.numeroDocumento = normalizarNumeroDocumento(data.numeroDocumento)
+    if (data.correo) data.correo = String(data.correo).trim().toLowerCase()
+    if (data.especialidad) data.especialidad = capitalizarTexto(data.especialidad)
+
     if (data.password) {
       data.password = await hashPassword(data.password)
     } else {
@@ -182,6 +198,12 @@ export async function importarInstructores(req, res) {
     for (const inst of instructores) {
       try {
         const { fichaId, fichas, esLider, password, ...rest } = inst
+        if (rest.nombres) rest.nombres = capitalizarTexto(rest.nombres)
+        if (rest.apellidos) rest.apellidos = capitalizarTexto(rest.apellidos)
+        if (rest.tipoDocumento) rest.tipoDocumento = normalizarTipoDocumento(rest.tipoDocumento)
+        if (rest.numeroDocumento) rest.numeroDocumento = normalizarNumeroDocumento(rest.numeroDocumento)
+        if (rest.correo) rest.correo = String(rest.correo).trim().toLowerCase()
+        if (rest.especialidad) rest.especialidad = capitalizarTexto(rest.especialidad)
         if (!rest.rol) rest.rol = 'Instructor'
 
         const existe = await Instructor.findOne({
@@ -318,66 +340,51 @@ export async function getInasistenciasParaRPA(req, res) {
       return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
     }
 
-    // Fichas donde el instructor es líder o instructor de apoyo
-    const fichas = await Ficha.find({
-      $or: [
-        { instructorLiderId: instructor._id },
-        { instructores: instructor._id }
-      ]
-    })
-    const fichaIds = fichas.map(f => f._id)
-
-    let targetFichaIds = fichaIds
-    if (fichaId) {
-      const fichaDoc = await resolverFicha(fichaId)
-      targetFichaIds = fichaDoc ? [fichaDoc._id] : []
+    // Filtrar estrictamente las inasistencias que fueron dictadas / registradas por este instructor
+    const filter = {
+      instructorId: instructor._id,
+      tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
+      estadoCarga: 'LISTO_PARA_SUBIR'
     }
 
-    const filter = {
-      fichaId: { $in: targetFichaIds },
-      estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
-      subidoSofia: { $ne: true }
+    if (fichaId) {
+      const fichaDoc = await resolverFicha(fichaId)
+      if (fichaDoc) filter.fichaId = fichaDoc._id
     }
     if (fecha) filter.fecha = fecha
 
-    const asistencias = await Asistencia.find(filter)
+    const inasistenciasDocs = await Inasistencia.find(filter)
       .populate('estudianteId')
       .populate('fichaId')
       .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
 
-    const inasistencias = asistencias
+    const inasistencias = inasistenciasDocs
       .filter(a => a.estudianteId && a.fichaId)
-      .map(a => {
-        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
-        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
-        const horasJornada = esNoche ? 5 : 6
-        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
-        return {
-          asistenciaId: a._id,
-          fecha: a.fecha,
-          estado: a.estado,
-          horas,
-          ficha: {
-            id: a.fichaId._id,
-            codigo: a.fichaId.codigoFicha || '',
-            nombre: a.fichaId.nombre || '',
-            jornada: a.fichaId.jornada || ''
-          },
-          aprendiz: {
-            id: a.estudianteId._id,
-            tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
-            numeroDocumento: a.estudianteId.numeroDocumento || '',
-            nombres: a.estudianteId.nombres || '',
-            apellidos: a.estudianteId.apellidos || '',
-            nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
-          },
-          justificacion: a.estado === 'Excusada'
-            ? 'Falla justificada'
-            : (a.estado === 'Falta'
-                ? 'Falla injustificada'
-                : 'Tardanza injustificada')
-        }
-      })
+      .map(a => ({
+        asistenciaId: String(a._id),
+        fecha: a.fecha,
+        estado: a.tipo,
+        horas: a.horas,
+        ficha: {
+          id: a.fichaId._id,
+          codigo: a.fichaId.codigoFicha || '',
+          nombre: a.fichaId.nombrePrograma || a.fichaId.nombre || '',
+          jornada: a.fichaId.jornada || ''
+        },
+        aprendiz: {
+          id: a.estudianteId._id,
+          tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
+          numeroDocumento: a.estudianteId.numeroDocumento || '',
+          nombres: a.estudianteId.nombres || '',
+          apellidos: a.estudianteId.apellidos || '',
+          nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
+        },
+        justificacion: a.tipo === 'Excusada'
+          ? 'Falla justificada'
+          : (a.tipo === 'Falta'
+              ? 'Falla injustificada'
+              : 'Tardanza injustificada')
+      }))
 
     res.json({
       ok: true,
@@ -419,31 +426,19 @@ export async function getTodosInasistenciasParaRPA(req, res) {
     let granTotalInasistencias = 0
 
     for (const inst of instructores) {
-      // Fichas donde el instructor es líder o instructor de apoyo
-      const fichas = await Ficha.find({
-        $or: [
-          { instructorLiderId: inst._id },
-          { instructores: inst._id }
-        ]
-      })
-
-      if (!fichas || fichas.length === 0) continue
-
-      const fichaIds = fichas.map(f => f._id)
-
+      // Filtrar estrictamente las inasistencias de este instructor
       const filter = {
-        fichaId: { $in: fichaIds },
-        estado: { $in: ['Falta', 'Tardanza', 'Excusada'] },
-        subidoSofia: { $ne: true }
+        instructorId: inst._id,
+        tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
+        estadoCarga: 'LISTO_PARA_SUBIR'
       }
       if (fecha) filter.fecha = fecha
 
-      const asistencias = await Asistencia.find(filter)
+      const inasistenciasValidas = (await Inasistencia.find(filter)
         .populate('estudianteId')
         .populate('fichaId')
-        .sort({ fecha: -1, 'fichaId.codigoFicha': 1 })
-
-      const inasistenciasValidas = asistencias.filter(a => a.estudianteId && a.fichaId)
+        .sort({ fecha: -1, 'fichaId.codigoFicha': 1 }))
+        .filter(a => a.estudianteId && a.fichaId)
 
       if (inasistenciasValidas.length === 0) continue
 
@@ -455,21 +450,17 @@ export async function getTodosInasistenciasParaRPA(req, res) {
           fichasMap.set(fCodigo, {
             id: a.fichaId._id,
             codigo: fCodigo,
-            nombre: a.fichaId.nombre || '',
+            nombre: a.fichaId.nombrePrograma || a.fichaId.nombre || '',
             jornada: a.fichaId.jornada || '',
             aprendices: []
           })
         }
 
-        const jNorm = String(a.fichaId?.jornada || '').toLowerCase()
-        const esNoche = jNorm.includes('noche') || jNorm.includes('nocturn')
-        const horasJornada = esNoche ? 5 : 6
-        const horas = a.horasTardanza || (a.estado === 'Falta' || a.estado === 'Excusada' ? horasJornada : 1)
         fichasMap.get(fCodigo).aprendices.push({
-          asistenciaId: a._id,
+          asistenciaId: String(a._id),
           fecha: a.fecha,
-          estado: a.estado,
-          horas,
+          estado: a.tipo,
+          horas: a.horas,
           aprendiz: {
             id: a.estudianteId._id,
             tipoDocumento: a.estudianteId.tipoDocumento || 'CC',
@@ -478,9 +469,9 @@ export async function getTodosInasistenciasParaRPA(req, res) {
             apellidos: a.estudianteId.apellidos || '',
             nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
           },
-          justificacion: a.estado === 'Excusada'
+          justificacion: a.tipo === 'Excusada'
             ? 'Falla justificada'
-            : (a.estado === 'Falta'
+            : (a.tipo === 'Falta'
                 ? 'Falla injustificada'
                 : 'Tardanza injustificada')
         })
@@ -516,39 +507,43 @@ export async function getTodosInasistenciasParaRPA(req, res) {
 // Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus
 export async function confirmarSubidaSofia(req, res) {
   try {
-    const { asistenciaId, estudianteId, fichaId, fecha } = req.body
+    const { asistenciaId, inasistenciaId, estudianteId, fichaId, fecha } = req.body
 
-    if (!asistenciaId && (!estudianteId || !fecha)) {
+    const idBuscado = inasistenciaId || asistenciaId
+    if (!idBuscado && (!estudianteId || !fecha)) {
       return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId o (estudianteId y fecha)' })
     }
 
-    const query = asistenciaId ? { _id: asistenciaId } : { estudianteId, fecha }
+    const query = idBuscado ? { _id: idBuscado } : { estudianteId, fecha }
     if (fichaId) query.fichaId = fichaId
 
-    const asistenciaActualizada = await Asistencia.findOneAndUpdate(
+    // Actualizar Inasistencia marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
+    // Idempotente: doble confirmación no falla ni duplica
+    const inasistenciaActualizada = await Inasistencia.findOneAndUpdate(
       query,
-      { subidoSofia: true, fechaSubidaSofia: new Date() },
+      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } },
       { new: true }
     )
 
-    if (!asistenciaActualizada) {
-      return res.status(404).json({ ok: false, error: 'Registro de asistencia no encontrado' })
+    if (!inasistenciaActualizada) {
+      return res.status(404).json({ ok: false, error: 'Registro de inasistencia no encontrado' })
     }
 
     // Actualizar o marcar en la colección SofiaPlusSync si existe
     await SofiaPlusSync.findOneAndUpdate(
-      { asistenciaId: asistenciaActualizada._id },
-      { estadoSync: 'subido', fechaSubida: new Date() },
+      { $or: [{ inasistenciaId: inasistenciaActualizada._id }, { asistenciaId: inasistenciaActualizada._id }] },
+      { $set: { estadoSync: 'subido', fechaSubida: new Date(), inasistenciaId: inasistenciaActualizada._id } },
       { upsert: false }
     )
 
     res.json({
       ok: true,
-      mensaje: 'Asistencia marcada como subida a Sofia Plus correctamente',
+      mensaje: 'Inasistencia confirmada y sincronizada con Sofia Plus exitosamente',
       asistencia: {
-        id: asistenciaActualizada._id,
-        subidoSofia: asistenciaActualizada.subidoSofia,
-        fechaSubidaSofia: asistenciaActualizada.fechaSubidaSofia
+        id: inasistenciaActualizada._id,
+        fecha: inasistenciaActualizada.fecha,
+        subidoSofia: inasistenciaActualizada.estadoCarga === 'SUBIDA',
+        fechaSubidaSofia: inasistenciaActualizada.fechaSubidaSofia
       }
     })
   } catch (err) {

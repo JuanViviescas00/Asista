@@ -14,11 +14,13 @@ import instructoresRoutes from './routes/instructores.js'
 import fichasRoutes from './routes/fichas.js'
 import estudiantesRoutes from './routes/estudiantes.js'
 import asistenciasRoutes from './routes/asistencias.js'
+import jornadasRoutes from './routes/jornadas.js'
 import diasFestivosRoutes from './routes/diasFestivos.js'
 import excusasRoutes from './routes/excusas.js'
 import clasesRoutes from './routes/clases.js'
 import enrolamientoRoutes from './routes/enrolamiento.js'
 import dispositivosRoutes from './routes/dispositivos.js'
+import programasRoutes from './routes/programas.js'
 import { initSocket } from './services/socketService.js'
 import { hashPassword } from './services/passwordService.js'
 import { iniciarCronJobs } from './services/cronService.js'
@@ -112,16 +114,28 @@ async function iniciarServidor() {
   })
 }
 
+// Health check endpoint para monitorización, Docker y Coolify
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    servicio: 'asista-backend',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  })
+})
+
 app.use('/api/auth', authRoutes)
 app.use('/api/instructores', instructoresRoutes)
 app.use('/api/fichas', fichasRoutes)
 app.use('/api/estudiantes', estudiantesRoutes)
 app.use('/api/asistencias', asistenciasRoutes)
+app.use('/api/jornadas', jornadasRoutes)
 app.use('/api/dias-festivos', diasFestivosRoutes)
 app.use('/api/excusas', excusasRoutes)
 app.use('/api/clases', clasesRoutes)
 app.use('/api/enrolamiento', enrolamientoRoutes)
 app.use('/api/dispositivos', dispositivosRoutes)
+app.use('/api/programas', programasRoutes)
 
 // Servir estáticos del frontend compilado (Single Service para Render)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

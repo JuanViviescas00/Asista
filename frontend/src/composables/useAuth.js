@@ -27,6 +27,12 @@ const usuario = ref((() => {
 
 let inactividadTimer = null
 
+function actualizarUsuario(nuevosDatos) {
+  if (!nuevosDatos) return
+  usuario.value = { ...(usuario.value || {}), ...nuevosDatos }
+  sessionStorage.setItem('user_data', JSON.stringify(usuario.value))
+}
+
 function onLoginSuccess(userData) {
   autenticado.value = true
   sessionStorage.setItem('admin_auth', 'true')
@@ -114,6 +120,7 @@ export function useAuth() {
     headerTitulo,
     headerSubtitulo,
     onLoginSuccess,
+    actualizarUsuario,
     cerrarSesion,
   }
 }

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { nombreProgramaLimpio, truncar, formatearNumeroDocumento } from '../utils/textos.js'
+import { nombreProgramaLimpio, truncar, formatearNumeroDocumento, capitalizarTexto, TIPOS_DOCUMENTO, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
@@ -153,7 +153,15 @@ async function guardarEstudiante() {
   }
   loading.value = true
   try {
-    const body = { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, fichaId }
+    const body = {
+      nombres: capitalizarTexto(nombres),
+      apellidos: capitalizarTexto(apellidos),
+      tipoDocumento: normalizarTipoDocumento(tipoDocumento),
+      numeroDocumento: normalizarNumeroDocumento(numeroDocumento),
+      correo: String(correo).trim().toLowerCase(),
+      telefono: String(telefono).trim(),
+      fichaId
+    }
     if (editingId.value) {
       await api.estudiantes.update(editingId.value, body)
       showToastFn('Estudiante actualizado correctamente')
@@ -331,6 +339,10 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         <select v-model="filtroEstado" class="filtro-select">
           <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
         </select>
+        <select v-if="esInstructor" v-model="busqueda.fichaId" class="filtro-select" title="Filtrar por ficha">
+          <option :value="null">Todas las fichas</option>
+          <option v-for="f in fichasList" :key="f._id" :value="f._id">Ficha {{ f.codigoFicha }}{{ f.esLider ? ' (Líder)' : '' }}</option>
+        </select>
       </div>
       <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
@@ -413,7 +425,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div class="form-grid">
         <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del estudiante" /></div>
         <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del estudiante" /></div>
-        <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option value="CC">CC</option><option value="CE">CE</option><option value="TI">TI</option><option value="PEP">PEP</option></select></div>
+        <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option v-for="t in TIPOS_DOCUMENTO" :key="t.codigo" :value="t.codigo">{{ t.descripcion }}</option></select></div>
         <div class="form-group"><label>Numero de Documento</label><input v-model="estudianteForm.numeroDocumento" type="text" placeholder="Numero de documento" /></div>
         <div class="form-group"><label>Correo Electronico</label><input v-model="estudianteForm.correo" type="email" placeholder="correo@ejemplo.com" /></div>
         <div class="form-group"><label>Telefono</label><input v-model="estudianteForm.telefono" type="tel" placeholder="+57 300 000 0000" /></div>

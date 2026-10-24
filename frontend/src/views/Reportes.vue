@@ -2,6 +2,12 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import api from '../services/index.js'
 import StatCard from '../components/StatCard.vue'
+import {
+  analizarInasistenciasGraves,
+  LIMITE_DIAS_CONSECUTIVOS,
+  LIMITE_DIAS_NO_CONSECUTIVOS,
+  rachaMaximaConsecutiva,
+} from '../utils/inasistencias.js'
 
 // Parámetros principales de búsqueda
 const filtroFicha = ref(null)
@@ -23,16 +29,23 @@ const todasAsistencias = ref([])
 const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : { id: '', rol: 'Administrador' })
 
-const fichasLideradas = computed(() => {
-  if (usuario.value.rol === 'Administrador') {
-    return fichasList.value
-  }
-  // Para instructor: solo las fichas que lidera
-  return fichasList.value.filter(f => {
+const esInstructor = computed(() => usuario.value?.rol === 'Instructor')
+
+// Fichas disponibles: todas (Admin) o todas en las que el docente dicta clase (Líder o de Apoyo).
+const fichasDisponibles = computed(() => {
+  if (!esInstructor.value) return fichasList.value
+  const miId = String(usuario.value?.id || '')
+  return fichasList.value.filter((f) => {
     const liderId = f.instructorLiderId?._id || f.instructorLiderId
-    return String(liderId) === String(usuario.value.id)
+    const esLider = String(liderId) === miId
+    const esDocente = Array.isArray(f.instructores) && f.instructores.some((inst) => {
+      const instId = inst?._id || inst
+      return String(instId) === miId
+    })
+    return f.esLider || esLider || esDocente
   })
 })
+const fichasLideradas = fichasDisponibles
 
 onMounted(async () => {
   try {
@@ -51,7 +64,7 @@ onMounted(async () => {
   }
 })
 
-const fichaSeleccionada = computed(() => fichasList.value.find(f => f._id === filtroFicha.value))
+const fichaSeleccionada = computed(() => fichasList.value.find(f => String(f._id) === String(filtroFicha.value)))
 
 const horasPorJornada = computed(() => {
   const j = (fichaSeleccionada.value?.jornada || '').toLowerCase()
@@ -61,14 +74,14 @@ const horasPorJornada = computed(() => {
 
 const estudiantesFicha = computed(() => {
   if (!filtroFicha.value) return []
-  return todosEstudiantes.value.filter(e => e.fichaId === filtroFicha.value)
+  return todosEstudiantes.value.filter(e => String(e.fichaId?._id || e.fichaId) === String(filtroFicha.value))
 })
 
 // Asistencias filtradas por Ficha, Rango de Fecha y Opcionalmente por Instructor
 const asistenciasFichaFiltradas = computed(() => {
   if (!filtroFicha.value) return []
   return todasAsistencias.value.filter(a => {
-    if (a.fichaId !== filtroFicha.value) return false
+    if (String(a.fichaId?._id || a.fichaId) !== String(filtroFicha.value)) return false
     if (fechaDesde.value && a.fecha < fechaDesde.value) return false
     if (fechaHasta.value && a.fecha > fechaHasta.value) return false
 
@@ -85,7 +98,7 @@ const instructoresDeLaFicha = computed(() => {
   if (!filtroFicha.value) return []
   const instIds = new Set()
   todasAsistencias.value
-    .filter(a => a.fichaId === filtroFicha.value)
+    .filter(a => String(a.fichaId?._id || a.fichaId) === String(filtroFicha.value))
     .forEach(a => {
       const id = a.instructorId?._id || a.instructorId
       if (id) instIds.add(String(id))
@@ -119,7 +132,7 @@ const datosReporteAprendices = computed(() => {
     const detallesInasistencias = []
 
     fechasUnicas.value.forEach(fecha => {
-      const reg = asistenciasFichaFiltradas.value.find(a => a.estudianteId === est._id && a.fecha === fecha)
+      const reg = asistenciasFichaFiltradas.value.find(a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === fecha)
       if (reg) {
         const docenteNombre = getNombreInstructor(reg)
         if (reg.estado === 'Presente') {
@@ -156,6 +169,13 @@ const datosReporteAprendices = computed(() => {
     const horasConExcusa = fallasConExcusa * hDia
     const horasTotalesFalladas = horasSinExcusa + horasConExcusa
 
+    // Cálculo de criticidad y riesgo de deserción
+    const fechasFallasSinExcusa = detallesInasistencias.filter(d => d.tipo === 'Injustificada').map(d => d.fecha).sort()
+    const rachaMaxima = rachaMaximaConsecutiva(fechasFallasSinExcusa)
+    const consecutivoGrave = rachaMaxima >= LIMITE_DIAS_CONSECUTIVOS
+    const noConsecutivoGrave = fallasSinExcusa >= LIMITE_DIAS_NO_CONSECUTIVOS
+    const nivelRiesgo = consecutivoGrave ? 'Crítico (3+ consecutivos)' : (noConsecutivoGrave ? 'Alerta (5+ acumulados)' : 'Bajo control')
+
     return {
       estudiante: est,
       presentes,
@@ -168,7 +188,11 @@ const datosReporteAprendices = computed(() => {
       horasTotalesFalladas,
       detallesInasistencias,
       totalDias,
-      porcentaje
+      porcentaje,
+      rachaMaxima,
+      consecutivoGrave,
+      noConsecutivoGrave,
+      nivelRiesgo,
     }
   })
 })
@@ -182,11 +206,15 @@ const datosReporteAprendicesFiltrados = computed(() => {
     lista = lista.filter(r => String(r.estudiante._id) === String(filtroEstudiante.value))
   }
 
-  // Filtro por tipo de inasistencia (horas)
+  // Filtro por tipo de inasistencia (horas y criticidad)
   if (filtroTipoInasistencia.value === 'sin_excusa') {
     lista = lista.filter(r => r.horasSinExcusa > 0)
   } else if (filtroTipoInasistencia.value === 'con_excusa') {
     lista = lista.filter(r => r.horasConExcusa > 0)
+  } else if (filtroTipoInasistencia.value === 'consecutivos_criticos') {
+    lista = lista.filter(r => r.consecutivoGrave)
+  } else if (filtroTipoInasistencia.value === 'acumulados_graves') {
+    lista = lista.filter(r => r.noConsecutivoGrave)
   }
 
   // Búsqueda de texto libre (Nombre del estudiante, documento, o nombre del profesor)
@@ -325,6 +353,8 @@ const resumenReporte = computed(() => {
     totalDocentesActivos: datosReporteDocentes.value.length,
     totalSesionesDictadas: fechasUnicas.value.length,
     porcentajeGeneral: d.length > 0 ? Math.round(d.reduce((s, r) => s + r.porcentaje, 0) / d.length) : 0,
+    totalCriticosConsecutivos: d.filter(r => r.consecutivoGrave).length,
+    totalAlertasAcumuladas: d.filter(r => r.noConsecutivoGrave && !r.consecutivoGrave).length,
   }
 })
 
@@ -384,10 +414,18 @@ function aplicarAtajo(dias) {
 
 const opcionesHoras = [
   { valor: 'todas', texto: 'Todas', icono: 'eye' },
+  { valor: 'consecutivos_criticos', texto: 'Crítico (3+ consecutivos)', icono: 'x' },
+  { valor: 'acumulados_graves', texto: 'Alerta (5+ acumuladas)', icono: 'x' },
   { valor: 'sin_excusa', texto: 'Sin excusa', icono: 'x' },
   { valor: 'con_excusa', texto: 'Con excusa', icono: 'check' }
 ]
-const textoHoras = { todas: 'Todas las horas', sin_excusa: 'Solo sin excusa', con_excusa: 'Solo con excusa' }
+const textoHoras = {
+  todas: 'Todas las horas',
+  consecutivos_criticos: 'Solo riesgo crítico (3+ consecutivos)',
+  acumulados_graves: 'Solo alerta grave (5+ acumuladas)',
+  sin_excusa: 'Solo sin excusa',
+  con_excusa: 'Solo con excusa'
+}
 const textoFormato = { pdf: 'PDF', xlsx: 'Excel (CSV)' }
 
 // Resumen en vivo de la búsqueda
@@ -457,10 +495,10 @@ function descargarXLSX() {
       csv += `"${d.nombre}","${d.especialidad}",${d.clasesDictadas},${d.horasDictadas} hrs,${d.totalPresentes},${d.totalTardanzas},${d.horasSinExcusa} hrs,${d.horasConExcusa} hrs,${d.porcentaje}%\n`
     })
   } else {
-    csv += 'Tipo_Doc,Num_Doc,Aprendiz,Presentes,Tardanzas,Hrs_Total_Falladas,Hrs_Sin_Excusa,Hrs_Con_Excusa,% Asistencia,Detalle_Inasistencias_Docentes\n'
+    csv += 'Tipo_Doc,Num_Doc,Aprendiz,Riesgo_Deserción,Racha_Consecutiva,Faltas_Sin_Excusa,Presentes,Tardanzas,Hrs_Total_Falladas,Hrs_Sin_Excusa,Hrs_Con_Excusa,% Asistencia,Detalle_Inasistencias_Docentes\n'
     datosReporteAprendicesFiltrados.value.forEach(r => {
       const detalleStr = `"${r.detallesInasistencias.map(d => `${d.fecha} (${d.docente}: ${d.tipo} - ${d.motivo})`).join('; ')}"`
-      csv += `${r.estudiante.tipoDocumento},${r.estudiante.numeroDocumento},"${r.estudiante.nombres} ${r.estudiante.apellidos}",${r.presentes},${r.tardanzas},${r.horasTotalesFalladas} hrs,${r.horasSinExcusa} hrs,${r.horasConExcusa} hrs,${r.porcentaje}%,${detalleStr}\n`
+      csv += `${r.estudiante.tipoDocumento},${r.estudiante.numeroDocumento},"${r.estudiante.nombres} ${r.estudiante.apellidos}","${r.nivelRiesgo}",${r.rachaMaxima},${r.fallasSinExcusa},${r.presentes},${r.tardanzas},${r.horasTotalesFalladas} hrs,${r.horasSinExcusa} hrs,${r.horasConExcusa} hrs,${r.porcentaje}%,${detalleStr}\n`
     })
   }
 
@@ -495,8 +533,8 @@ function limpiar() {
     <p>Consulta y exporta el historial de asistencias filtrando simultáneamente por Aprendiz, Docente y Rango de Fechas</p>
   </div>
 
-  <div v-if="usuario.rol === 'Instructor' && fichasLideradas.length === 0" class="card" style="background: #fff1f2; border-color: #fecdd3; color: #9f1239; padding: 20px;">
-    <strong> Acceso Restringido a Reportes:</strong> Como Docente Común no tienes asignada ninguna Ficha bajo tu liderazgo. La generación de reportes está reservada para el Administrador o Docente Líder de Ficha.
+  <div v-if="usuario.rol === 'Instructor' && fichasDisponibles.length === 0" class="card" style="background: #fff1f2; border-color: #fecdd3; color: #9f1239; padding: 20px;">
+    <strong> Acceso a Reportes:</strong> Actualmente no tienes asignada ninguna Ficha de formación. La generación de reportes está disponible para los instructores asignados a cada ficha (Líder o de Apoyo) o Administradores.
   </div>
 
   <form v-else class="rf-panel" novalidate @submit.prevent="generarReporte">
@@ -720,6 +758,7 @@ function limpiar() {
         <div class="reporte-info-item"><strong>Ficha:</strong> {{ fichaSeleccionada.codigoFicha }} - {{ fichaSeleccionada.nombrePrograma }}</div>
         <div class="reporte-info-item"><strong>Jornada:</strong> {{ fichaSeleccionada.jornada }} ({{ horasPorJornada }} horas/sesión)</div>
         <div class="reporte-info-item"><strong>Aula:</strong> {{ fichaSeleccionada.aulaAsignada }}</div>
+        <div class="reporte-info-item"><strong>Docentes en Ficha:</strong> {{ datosReporteDocentes.map(d => d.nombre).join(', ') || 'No asignados' }}</div>
         <div class="reporte-info-item"><strong>Filtro Docente:</strong> {{ filtroInstructor === 'todos' ? 'Todos los Profesores' : (todosInstructores.find(i => String(i._id) === String(filtroInstructor))?.nombres || 'Docente') }}</div>
         <div class="reporte-info-item"><strong>Filtro Aprendiz:</strong> {{ filtroEstudiante === 'todos' ? 'Todos los Aprendices' : (todosEstudiantes.find(e => String(e._id) === String(filtroEstudiante))?.nombres || 'Aprendiz') }}</div>
         <div class="reporte-info-item"><strong>Periodo Consultado:</strong> {{ fechaDesde || 'Inicio' }} al {{ fechaHasta || 'Fin' }}</div>
@@ -729,11 +768,31 @@ function limpiar() {
       <!-- MÉTRICAS CONSOLIDADAS DE HORAS Y DOCENTES -->
       <div class="stats-row" style="margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;">
         <StatCard icon="percent" label="Asistencia General" :value="`${resumenReporte.porcentajeGeneral}%`" variant="verde" />
-        <StatCard icon="clock" label="Total Horas Ausente" :value="`${resumenReporte.totalHorasFalladas}h`" variant="indigo" />
         <StatCard icon="x-circle" label="Sin Excusa" :value="`${resumenReporte.totalHorasSinExcusa}h`" variant="rojo" />
+        <StatCard icon="x-circle" label="Riesgo Crítico (3+ consec.)" :value="`${resumenReporte.totalCriticosConsecutivos}`" variant="rojo" />
+        <StatCard icon="clock" label="Alerta (5+ acumuladas)" :value="`${resumenReporte.totalAlertasAcumuladas}`" variant="ambar" />
         <StatCard icon="file-text" label="Con Excusa" :value="`${resumenReporte.totalHorasConExcusa}h`" variant="azul" />
-        <StatCard icon="user-check" label="Docentes Registrados" :value="resumenReporte.totalDocentesActivos" variant="morado" />
-        <StatCard icon="calendar" label="Sesiones de Clase" :value="resumenReporte.totalSesionesDictadas" variant="ambar" />
+        <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenReporte.totalDocentesActivos" variant="morado" />
+        <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenReporte.totalSesionesDictadas" variant="indigo" />
+      </div>
+
+      <!-- RESUMEN SUPERIOR: DOCENTES A CARGO DE LAS JORNADAS (UN DOCENTE POR DÍA) -->
+      <div v-if="datosReporteDocentes.length > 0" class="reporte-docentes-superior">
+        <div class="reporte-docentes-titulo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>Docentes responsables de las jornadas registradas en este periodo:</span>
+        </div>
+        <div class="reporte-docentes-chips">
+          <div v-for="d in datosReporteDocentes" :key="d.id" class="docente-chip-superior">
+            <strong class="docente-chip-nombre">Prof. {{ d.nombre }}</strong>
+            <span class="docente-chip-meta">{{ d.clasesDictadas }} {{ d.clasesDictadas === 1 ? 'jornada' : 'jornadas' }} ({{ d.horasDictadas }}h) • {{ d.especialidad }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- ============================================= -->
@@ -751,12 +810,13 @@ function limpiar() {
                 <th>#</th>
                 <th>Aprendiz</th>
                 <th>Documento</th>
+                <th>Riesgo Deserción</th>
                 <th>Presentes</th>
                 <th>Tardanzas</th>
-                <th>Horas Totales Ausente</th>
-                <th> Sin Excusa</th>
-                <th> Con Excusa</th>
-                <th>Inasistencias por Fecha y Docente a Cargo</th>
+                <th>Horas Ausente</th>
+                <th>Sin Excusa</th>
+                <th>Con Excusa</th>
+                <th>Inasistencias por Fecha</th>
                 <th>% Asistencia</th>
               </tr>
             </thead>
@@ -765,6 +825,17 @@ function limpiar() {
                 <td>{{ idx + 1 }}</td>
                 <td><strong>{{ r.estudiante.nombres }} {{ r.estudiante.apellidos }}</strong></td>
                 <td>{{ r.estudiante.tipoDocumento }} {{ r.estudiante.numeroDocumento }}</td>
+                <td>
+                  <span v-if="r.consecutivoGrave" class="badge badge-danger" style="font-size: 11px; white-space: nowrap;">
+                    ⚠️ Crítico ({{ r.rachaMaxima }} d consec.)
+                  </span>
+                  <span v-else-if="r.noConsecutivoGrave" class="badge badge-warning" style="font-size: 11px; white-space: nowrap;">
+                    ⚡ Alerta ({{ r.fallasSinExcusa }} d acum.)
+                  </span>
+                  <span v-else class="badge badge-success" style="font-size: 11px;">
+                    Normal
+                  </span>
+                </td>
                 <td><span class="badge badge-success">{{ r.presentes }} d</span></td>
                 <td><span class="badge badge-warning">{{ r.tardanzas }}</span></td>
                 <td>
@@ -784,20 +855,22 @@ function limpiar() {
                   <span v-else style="color: #94a3b8; font-size: 12px;">—</span>
                 </td>
                 <td>
-                  <div v-if="r.detallesInasistencias.length > 0" style="font-size: 11px; max-width: 340px;">
+                  <div v-if="r.detallesInasistencias.length > 0" class="inasistencias-cell-lista">
                     <div
                       v-for="(det, detIdx) in r.detallesInasistencias"
                       :key="detIdx"
-                      style="margin-bottom: 4px; padding: 4px 6px; border-radius: 4px; background: #f8fafc; border-left: 3px solid;"
-                      :style="{ borderColor: det.tipo === 'Excusada' ? '#0284c7' : '#ef4444' }"
+                      class="inasistencia-chip-item"
+                      :class="{ 'chip-excusada': det.tipo === 'Excusada', 'chip-injustificada': det.tipo !== 'Excusada' }"
+                      :title="`Sesión a cargo de: Prof. ${det.docente}`"
                     >
-                      <strong>{{ det.fecha }} ({{ det.horas }}h)</strong> - ‍ {{ det.docente }}:
-                      <span :style="{ color: det.tipo === 'Excusada' ? '#0369a1' : '#dc2626' }">
-                        {{ det.tipo === 'Excusada' ? ` ${det.motivo}` : ' Injustificada' }}
+                      <span class="inasistencia-chip-fecha">{{ det.fecha }} ({{ det.horas }}h)</span>
+                      <span class="inasistencia-chip-sep">—</span>
+                      <span class="inasistencia-chip-tipo">
+                        {{ det.tipo === 'Excusada' ? `Excusada (${det.motivo})` : 'Injustificada' }}
                       </span>
                     </div>
                   </div>
-                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;"> Sin inasistencias</span>
+                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;">Sin inasistencias</span>
                 </td>
                 <td>
                   <strong :style="{ color: r.porcentaje >= 80 ? '#22c55e' : r.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
@@ -1129,5 +1202,109 @@ function limpiar() {
 @media (prefers-reduced-motion: reduce) {
   .rf-panel * { transition: none !important; }
   .rf-entra-enter-active { animation: none; }
+}
+
+/* ====== Resumen Superior de Docentes (Un docente por jornada) ====== */
+.reporte-docentes-superior {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.reporte-docentes-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 10px;
+}
+
+.reporte-docentes-titulo svg {
+  color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.reporte-docentes-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.docente-chip-superior {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.docente-chip-nombre {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.docente-chip-meta {
+  font-size: 12px;
+  color: #64748b;
+  border-left: 1px solid #e2e8f0;
+  padding-left: 8px;
+}
+
+/* ====== Lista de Inasistencias en Celdas ====== */
+.inasistencias-cell-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 340px;
+}
+
+.inasistencia-chip-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border-left: 3px solid;
+  line-height: 1.3;
+}
+
+.inasistencia-chip-item.chip-injustificada {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.inasistencia-chip-item.chip-excusada {
+  border-left-color: #0284c7;
+  background: #f0f9ff;
+}
+
+.inasistencia-chip-fecha {
+  font-weight: 700;
+  color: #1e293b;
+  white-space: nowrap;
+}
+
+.inasistencia-chip-sep {
+  color: #94a3b8;
+}
+
+.chip-injustificada .inasistencia-chip-tipo {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.chip-excusada .inasistencia-chip-tipo {
+  color: #0369a1;
+  font-weight: 600;
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useQuasar } from 'quasar'
 import { useAuth } from '../composables/useAuth.js'
 import { useSistemaEstado } from '../composables/useSistemaEstado.js'
@@ -8,6 +8,7 @@ import senaLogo from '../assets/sena-logo.png'
 import instructorAvatar from '../assets/instructor-avatar.png'
 import iconoEstudiantesMenu from '../assets/estudiantes-menu-icon.png'
 import iconoInstructoresMenu from '../assets/instructores-menu-icon.png'
+import ModalPrimerLoginInstructor from '../components/ModalPrimerLoginInstructor.vue'
 
 const $q = useQuasar()
 const { usuario, headerTitulo, headerSubtitulo, cerrarSesion } = useAuth()
@@ -16,7 +17,16 @@ const { estadoSistema, textoEstado, colorEstadoClass } = useSistemaEstado()
 // Drawer de Quasar: `drawerOpen` controla la visibilidad en móvil (overlay),
 // `drawerMini` controla el modo colapsado/desplegado en escritorio.
 const drawerOpen = ref(false)
-const drawerMini = ref(false)
+
+// El estado (desplegado / contraído) se recuerda entre sesiones, como en Claude.
+const CLAVE_SIDEBAR = 'sidebar_mini'
+function leerMiniGuardado() {
+  try { return localStorage.getItem(CLAVE_SIDEBAR) === '1' } catch { return false }
+}
+const drawerMini = ref(leerMiniGuardado())
+watch(drawerMini, (v) => {
+  try { localStorage.setItem(CLAVE_SIDEBAR, v ? '1' : '0') } catch { /* sin almacenamiento */ }
+})
 
 const currentView = getCurrentView()
 
@@ -38,6 +48,12 @@ const tienePerfil = computed(() => !!vistasDelRol.value.perfil)
 const esMovil = computed(() => $q.screen.lt.md)
 const miniEfectivo = computed(() => drawerMini.value && !esMovil.value)
 const currentComponent = computed(() => currentComponentFor(usuario.value?.rol || 'Administrador'))
+
+// Modal obligatorio para cambio de contraseña y clave Sofía Plus en primer ingreso
+const debePrimerLogin = computed(() => {
+  return usuario.value?.rol === 'Instructor' && Boolean(usuario.value?.primerLogin)
+})
+
 
 // Ícono (Material Icons, vía Quasar) asociado a cada vista del menú.
 const iconosPorVista = {
@@ -90,25 +106,13 @@ function abrirPerfil() {
   }
 }
 
-// Clic dentro del sidebar: si está contraído (mini) lo expande; si ya está
-// expandido no hace nada (ya no se cierra al presionarlo por dentro).
+// Clic en una zona vacía del sidebar contraído: lo despliega (igual que en Claude).
+// Ya no se contrae al hacer clic fuera: solo con el botón de contraer/desplegar.
 function onSidebarClick() {
   if (!esMovil.value && drawerMini.value) {
     drawerMini.value = false
   }
 }
-
-// Clic fuera del menú: lo cierra.
-// - Escritorio: lo contrae al modo mini.
-// - Móvil: el overlay de Quasar ya se cierra al tocar el fondo oscuro.
-function onClickFuera(e) {
-  if (esMovil.value || drawerMini.value) return
-  if (e.target.closest?.('.app-sidebar')) return
-  drawerMini.value = true
-}
-
-onMounted(() => document.addEventListener('click', onClickFuera))
-onBeforeUnmount(() => document.removeEventListener('click', onClickFuera))
 
 function irA(key) {
   navigate(key)
@@ -126,7 +130,6 @@ function irA(key) {
       v-model="drawerOpen"
       :mini="miniEfectivo"
       show-if-above
-      mini-to-overlay
       :width="272"
       :mini-width="88"
       class="app-sidebar"
@@ -148,6 +151,24 @@ function irA(key) {
                 class="sidebar-avatar-img"
               />
               <img v-else :src="senaLogo" alt="Logo SENA" />
+            </button>
+
+            <!-- Botón para contraer / desplegar el menú (solo escritorio) -->
+            <button
+              v-if="!esMovil"
+              type="button"
+              class="sidebar-toggle-btn"
+              :title="miniEfectivo ? 'Desplegar menú' : 'Contraer menú'"
+              :aria-label="miniEfectivo ? 'Desplegar menú' : 'Contraer menú'"
+              :aria-expanded="!miniEfectivo"
+              @click.stop="toggleMini"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="3" />
+                <line x1="9" y1="4" x2="9" y2="20" />
+                <polyline v-if="!miniEfectivo" points="16 9.5 13.5 12 16 14.5" />
+                <polyline v-else points="13.5 9.5 16 12 13.5 14.5" />
+              </svg>
             </button>
           </div>
 
@@ -215,6 +236,12 @@ function irA(key) {
         <component :is="currentComponent" />
       </main>
     </q-page-container>
+      <!-- Modal bloqueante obligatorio para instructores en su primer login -->
+    <ModalPrimerLoginInstructor
+      v-if="debePrimerLogin"
+      :usuario="usuario"
+      @cerrar-sesion="cerrarSesion"
+    />
   </q-layout>
 </template>
 

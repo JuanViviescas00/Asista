@@ -3,7 +3,7 @@ import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
 import Dispositivo from '../models/Dispositivo.js'
 import { emitirActivacion, emitirDesactivacion, emitirClaseActivada, emitirClaseDesactivada } from '../services/socketService.js'
-import { cerrarInasistenciasFicha, getHoyString } from '../services/asistenciaService.js'
+import { finalizarClase } from '../services/asistenciaService.js'
 
 export async function activar(req, res) {
   const { fichaId, instructorId } = req.body
@@ -107,26 +107,21 @@ export async function finalizar(req, res) {
       return res.status(404).json({ success: false, error: 'No hay clase activa que finalizar para esa ficha e instructor' })
     }
 
-    clase.estado = 'Finalizada'
-    clase.finalizadaAt = new Date()
-    await clase.save()
+    // Finalización atómica + auto-cierre de inasistencias (antes de emitir).
+    const resultado = await finalizarClase(clase._id)
+    const claseFinalizada = resultado.clase || Object.assign(clase, { estado: 'Finalizada' })
 
-    // Auto-completar inasistencias ('Falta') para aprendices activos que no pusieron huella
-    cerrarInasistenciasFicha(clase.fichaId, getHoyString(), clase.instructorId).catch(err => {
-      console.error('[claseController] Error en auto-cierre de inasistencias:', err.message)
-    })
-
-    const enviado = emitirDesactivacion(clase.deviceId, {
+    const enviado = emitirDesactivacion(claseFinalizada.deviceId, {
       type: 'DEACTIVATE',
-      fichaId: String(clase.fichaId),
-      instructorId: String(clase.instructorId),
+      fichaId: String(claseFinalizada.fichaId),
+      instructorId: String(claseFinalizada.instructorId),
     })
 
-    emitirClaseDesactivada(String(clase.fichaId), {
-      fichaId: String(clase.fichaId),
+    emitirClaseDesactivada(String(claseFinalizada.fichaId), {
+      fichaId: String(claseFinalizada.fichaId),
     })
 
-    res.json({ success: true, clase, enviadoPorWebSocket: enviado })
+    res.json({ success: true, clase: claseFinalizada, enviadoPorWebSocket: enviado })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

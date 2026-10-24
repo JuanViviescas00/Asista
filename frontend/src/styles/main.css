@@ -136,12 +136,44 @@ body {
 .sidebar-header-top {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   margin-bottom: 14px;
 }
 
 .q-drawer--mini .sidebar-header-top {
+  flex-direction: column;
   justify-content: center;
+  gap: 10px;
+}
+
+/* Con el menú contraído, el botón de desplegar va primero (arriba del logo) */
+.q-drawer--mini .sidebar-toggle-btn {
+  order: -1;
+}
+
+/* Botón contraer / desplegar menú */
+.sidebar-toggle-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--texto-suave);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background .16s var(--ease), color .16s var(--ease);
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--verde-tenue);
+  color: var(--verde-hover);
+}
+
+.sidebar-toggle-btn:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: 2px;
 }
 
 .sidebar-logo-btn {

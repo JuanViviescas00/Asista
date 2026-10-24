@@ -1,5 +1,7 @@
 import Excusa from '../models/Excusa.js'
 import Asistencia from '../models/Asistencia.js'
+import Inasistencia from '../models/Inasistencia.js'
+import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import { upsertAsistenciaSQLite } from '../services/sqliteExport.js'
@@ -45,35 +47,57 @@ export async function aprobarExcusa(req, res) {
     excusa.estado = 'Aprobada'
     await excusa.save()
 
-    let asistencia = await Asistencia.findOne({
-      estudianteId: excusa.estudianteId,
-      fecha: excusa.fechaInasistencia,
-      fichaId: excusa.fichaId,
-    })
+    const [estudianteDoc, fichaDoc] = await Promise.all([
+      Estudiante.findById(excusa.estudianteId),
+      Ficha.findById(excusa.fichaId)
+    ])
 
-    if (asistencia) {
-      asistencia.estado = 'Excusada'
-      await asistencia.save()
-    } else {
-      asistencia = new Asistencia({
+    const tope = topeHorasPorJornada(fichaDoc?.jornada || '')
+
+    // 1. Actualizar o crear Inasistencia con tipo 'Excusada' y estadoCarga 'LISTO_PARA_SUBIR'
+    const inasistencia = await Inasistencia.findOneAndUpdate(
+      {
         estudianteId: excusa.estudianteId,
-        fichaId: excusa.fichaId,
         fecha: excusa.fechaInasistencia,
-        estado: 'Excusada',
-        hora: '—',
-      })
-      await asistencia.save()
-    }
+        fichaId: excusa.fichaId
+      },
+      {
+        $set: {
+          tipo: 'Excusada',
+          horas: tope,
+          hora: '—',
+          tiempoTardanza: '0 horas',
+          estadoCarga: 'LISTO_PARA_SUBIR'
+        },
+        $setOnInsert: {
+          origen: 'manual'
+        }
+      },
+      { upsert: true, new: true }
+    )
+
+    // 2. Compatibilidad legacy con Asistencia
+    await Asistencia.findOneAndUpdate(
+      {
+        estudianteId: excusa.estudianteId,
+        fecha: excusa.fechaInasistencia,
+        fichaId: excusa.fichaId
+      },
+      {
+        $set: {
+          estado: 'Excusada',
+          hora: '—',
+          horasTardanza: 0,
+          tiempoTardanza: '0 horas'
+        }
+      },
+      { upsert: true }
+    )
 
     await Estudiante.findByIdAndUpdate(excusa.estudianteId, { estadoAsistencia: 'Excusada' })
 
-    // Sincronizar actualización en SQLite
+    // 3. Sincronizar en SQLite
     try {
-      const [estudianteDoc, fichaDoc] = await Promise.all([
-        Estudiante.findById(excusa.estudianteId),
-        Ficha.findById(excusa.fichaId)
-      ])
-
       if (estudianteDoc && fichaDoc) {
         upsertAsistenciaSQLite({
           fichaCodigo: fichaDoc.codigoFicha || String(excusa.fichaId),
@@ -84,7 +108,7 @@ export async function aprobarExcusa(req, res) {
           correoAprendiz: estudianteDoc.correo || '',
           fecha: excusa.fechaInasistencia,
           estado: 'Excusada',
-          hora: asistencia?.hora || '—',
+          hora: '—',
           horasTardanza: 0,
           tiempoTardanza: '0 horas'
         })
@@ -93,7 +117,7 @@ export async function aprobarExcusa(req, res) {
       console.warn('[SQLite] Error al actualizar excusa en SQLite:', sqliteErr.message)
     }
 
-    res.json({ ok: true, excusa })
+    res.json({ ok: true, excusa, inasistencia })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

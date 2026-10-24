@@ -28,6 +28,17 @@ const perfil = reactive({
 const esLiderCalculado = ref(false)
 
 // Estado del Modal de Cambio de Contraseña
+// Estado del Modal de Clave Sofía Plus
+const showModalSofia = ref(false)
+const sofiaForm = reactive({
+  password: '',
+  confirmar: ''
+})
+const sofiaError = ref('')
+const sofiaLoading = ref(false)
+const showSofiaPass = ref(false)
+const tieneSofiaCalculado = ref(false)
+
 const showModalPassword = ref(false)
 const passForm = reactive({
   actual: '',
@@ -71,6 +82,7 @@ onMounted(async () => {
 
         const esLiderEnFicha = misFichas.some(f => f.esLider || String(f.instructorLiderId?._id || f.instructorLiderId) === String(inst._id))
         esLiderCalculado.value = !!(inst.esLider || esLiderEnFicha || usuarioSesion.value?.esLider)
+        tieneSofiaCalculado.value = !!(inst.tienePasswordSofia || usuarioSesion.value?.tienePasswordSofia)
       }
     } catch (e) {
       console.error('Error al cargar datos del instructor:', e)
@@ -149,6 +161,45 @@ function abrirModalPassword() {
 function cerrarModalPassword() {
   showModalPassword.value = false
   passError.value = ''
+}
+
+function abrirModalSofia() {
+  sofiaForm.password = ''
+  sofiaForm.confirmar = ''
+  sofiaError.value = ''
+  showSofiaPass.value = false
+  showModalSofia.value = true
+}
+
+function cerrarModalSofia() {
+  showModalSofia.value = false
+  sofiaError.value = ''
+}
+
+async function procesarCambioSofia() {
+  sofiaError.value = ''
+  if (!sofiaForm.password || sofiaForm.password.trim().length < 4) {
+    sofiaError.value = 'Ingresa una contraseña válida de Sofía Plus.'
+    return
+  }
+  if (sofiaForm.password !== sofiaForm.confirmar) {
+    sofiaError.value = 'Las contraseñas de Sofía Plus no coinciden.'
+    return
+  }
+
+  sofiaLoading.value = true
+  try {
+    await api.instructores.update(perfil.id, { passwordSofiaPlus: sofiaForm.password.trim() })
+    tieneSofiaCalculado.value = true
+    const updatedUser = { ...usuarioSesion.value, tienePasswordSofia: true }
+    sessionStorage.setItem('user_data', JSON.stringify(updatedUser))
+    showToast('Clave de Sofía Plus actualizada correctamente', 'success')
+    cerrarModalSofia()
+  } catch (err) {
+    sofiaError.value = err.message || 'Error al actualizar clave de Sofía Plus'
+  } finally {
+    sofiaLoading.value = false
+  }
 }
 
 async function procesarCambioPassword() {
@@ -243,6 +294,7 @@ async function procesarCambioPassword() {
     <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
       <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading" title="Guardar Cambios"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
       <button class="admin-profile-button admin-profile-button-security" @click="abrirModalPassword" title="Cambiar Contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
+      <button class="admin-profile-button admin-profile-button-sofia" @click="abrirModalSofia" title="Clave Sofía Plus (RPA)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
     </div>
   </div>
 
@@ -289,6 +341,14 @@ async function procesarCambioPassword() {
         <label>Documento de Identidad</label>
         <div class="admin-profile-value">{{ perfil.tipoDocumento }} {{ perfil.numeroDocumento || '—' }}</div>
       </div>
+      <div class="admin-profile-field" v-if="esInstructor">
+        <label>Robot Sofía Plus</label>
+        <div class="admin-profile-value">
+          <span class="admin-profile-badge" :class="tieneSofiaCalculado ? 'admin-profile-badge-primary' : 'admin-profile-badge-neutral'">
+            {{ tieneSofiaCalculado ? 'Clave Configurada' : 'Pendiente' }}
+          </span>
+        </div>
+      </div>
       <div class="admin-profile-field">
         <label>Rol en la Institución</label>
         <div class="admin-profile-value">
@@ -317,7 +377,65 @@ async function procesarCambioPassword() {
     </div>
   </div>
 
-  <!-- MODAL DE CAMBIO DE CONTRASEÑA -->
+  <!-- MODAL DE CLAVE SOFÍA PLUS -->
+  <div v-if="showModalSofia" class="password-modal-backdrop" @click.self="cerrarModalSofia">
+    <div class="password-modal-card">
+      <div class="password-modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <div>
+            <h3 style="margin: 0; font-size: 18px; color: #1e293b;">Clave de Sofía Plus (RPA)</h3>
+            <p style="margin: 2px 0 0 0; font-size: 12px; color: #64748b;">Para la sincronización automática de inasistencias</p>
+          </div>
+        </div>
+        <button class="password-modal-close-btn" @click="cerrarModalSofia" title="Cerrar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+
+      <div v-if="sofiaError" class="password-modal-error">
+        {{ sofiaError }}
+      </div>
+
+      <form class="password-modal-body" @submit.prevent="procesarCambioSofia">
+        <div class="password-input-group">
+          <label>Nueva Contraseña de Sofía Plus <span style="color: #ef4444;">*</span></label>
+          <div class="password-input-wrapper">
+            <input
+              v-model="sofiaForm.password"
+              :type="showSofiaPass ? 'text' : 'password'"
+              placeholder="Contraseña senasofiaplus.edu.co"
+              required
+            />
+            <button type="button" class="password-toggle-btn" @click="showSofiaPass = !showSofiaPass" title="Mostrar/Ocultar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+        </div>
+
+        <div class="password-input-group">
+          <label>Confirmar Contraseña <span style="color: #ef4444;">*</span></label>
+          <div class="password-input-wrapper">
+            <input
+              v-model="sofiaForm.confirmar"
+              :type="showSofiaPass ? 'text' : 'password'"
+              placeholder="Repite la contraseña de Sofía Plus"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="password-modal-actions">
+          <button type="button" class="btn btn-outline" @click="cerrarModalSofia" :disabled="sofiaLoading" title="Cancelar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <button type="submit" class="btn btn-primary" :disabled="sofiaLoading" title="Guardar Clave Sofía">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+    <!-- MODAL DE CAMBIO DE CONTRASEÑA -->
   <div v-if="showModalPassword" class="password-modal-backdrop" @click.self="cerrarModalPassword">
     <div class="password-modal-card">
       <div class="password-modal-header">
@@ -396,6 +514,13 @@ async function procesarCambioPassword() {
 </template>
 
 <style scoped>
+.admin-profile-button-sofia {
+  background: #047857;
+  color: #ffffff;
+}
+.admin-profile-button-sofia:hover {
+  background: #065f46;
+}
 .admin-profile-button-security {
   background: #4A5344;
   color: #ffffff;

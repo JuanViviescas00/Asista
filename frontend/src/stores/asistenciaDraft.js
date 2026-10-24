@@ -1,8 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-const PREFIX_DRAFT = 'asista_draft_'
 const KEY_COLA_OFFLINE = 'asista_cola_offline_asistencias'
+const PREFIX_DRAFT_LEGACY = 'asista_draft_'
+
+// Al arrancar la app se eliminan las claves de borradores legacy (el sistema de
+// borradores ya no se usa). Se conserva intacta la clave de la cola offline.
+function limpiarBorradoresLegacy() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return
+    const claves = []
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i)
+      if (key && key.startsWith(PREFIX_DRAFT_LEGACY)) claves.push(key)
+    }
+    for (const key of claves) window.localStorage.removeItem(key)
+  } catch (e) {
+    console.warn('[DraftStore] Error al limpiar borradores legacy:', e)
+  }
+}
+limpiarBorradoresLegacy()
 
 export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
   const isOnline = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -17,10 +34,6 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     window.addEventListener('offline', () => {
       isOnline.value = false
     })
-  }
-
-  function generarClave(fichaId, fecha) {
-    return `${PREFIX_DRAFT}${fichaId}_${fecha}`
   }
 
   function cargarColaOffline() {
@@ -41,59 +54,37 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     }
   }
 
-  /**
-   * Guarda un borrador local de la asistencia de una ficha y fecha específica.
-   */
-  function guardarBorrador(fichaId, fecha, registros) {
-    if (!fichaId || !fecha || !registros) return
-    const key = generarClave(fichaId, fecha)
-    try {
-      const payload = {
-        fichaId,
-        fecha,
-        registros,
-        updatedAt: Date.now()
-      }
-      localStorage.setItem(key, JSON.stringify(payload))
-    } catch (e) {
-      console.warn('[DraftStore] No se pudo guardar borrador local:', e)
-    }
+  function claveItem(item) {
+    return `${String(item.estudianteId)}|${String(item.fichaId)}|${item.fecha}`
   }
 
   /**
-   * Obtiene el borrador guardado para una ficha y fecha, si existe.
+   * Elimina de la cola offline cualquier item con la misma clave (aprendiz + ficha + fecha).
    */
-  function obtenerBorrador(fichaId, fecha) {
-    if (!fichaId || !fecha) return null
-    const key = generarClave(fichaId, fecha)
-    try {
-      const data = localStorage.getItem(key)
-      if (!data) return null
-      return JSON.parse(data)
-    } catch (e) {
-      console.warn('[DraftStore] Error al recuperar borrador:', e)
-      return null
+  function quitarDeColaOffline(estudianteId, fichaId, fecha) {
+    if (!estudianteId || !fichaId || !fecha) return
+    const clave = `${String(estudianteId)}|${String(fichaId)}|${fecha}`
+    let cambiado = false
+    for (const lote of colaOffline.value) {
+      const antes = lote.items.length
+      lote.items = lote.items.filter(it => claveItem(it) !== clave)
+      if (lote.items.length !== antes) cambiado = true
     }
-  }
-
-  /**
-   * Elimina el borrador una vez guardado exitosamente en el backend.
-   */
-  function limpiarBorrador(fichaId, fecha) {
-    if (!fichaId || !fecha) return
-    const key = generarClave(fichaId, fecha)
-    try {
-      localStorage.removeItem(key)
-    } catch (e) {
-      console.warn('[DraftStore] Error al limpiar borrador:', e)
-    }
+    colaOffline.value = colaOffline.value.filter(lote => lote.items.length > 0)
+    if (cambiado) persistirColaOffline()
   }
 
   /**
    * Encola un lote de asistencias que no pudieron enviarse por caída de internet.
+   * Reemplaza cualquier item previo con la misma clave (aprendiz + ficha + fecha).
    */
   function encolarOffline(loteAsistencias) {
     if (!Array.isArray(loteAsistencias) || loteAsistencias.length === 0) return
+    const claves = new Set(loteAsistencias.map(claveItem))
+    for (const lote of colaOffline.value) {
+      lote.items = lote.items.filter(it => !claves.has(claveItem(it)))
+    }
+    colaOffline.value = colaOffline.value.filter(lote => lote.items.length > 0)
     colaOffline.value.push({
       id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       timestamp: Date.now(),
@@ -116,13 +107,18 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
 
     for (const lote of colaOffline.value) {
       let loteCompletado = true
-      for (const item of lote.items) {
+      for (let i = 0; i < lote.items.length; i++) {
+        const item = lote.items[i]
         try {
           await apiService.asistencias.create(item)
           procesadosExitosos++
         } catch (err) {
+          if (err.status === 409) {
+            continue
+          }
           console.error('[DraftStore] Error al sincronizar asistencia offline:', err)
           loteCompletado = false
+          lote.items = lote.items.slice(i)
           break
         }
       }
@@ -150,9 +146,7 @@ export const useAsistenciaDraftStore = defineStore('asistenciaDraft', () => {
     sincronizando,
     colaOffline,
     pendientesOfflineCount,
-    guardarBorrador,
-    obtenerBorrador,
-    limpiarBorrador,
+    quitarDeColaOffline,
     encolarOffline,
     sincronizarColaOffline
   }

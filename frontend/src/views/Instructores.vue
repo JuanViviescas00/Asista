@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
-import { truncar, formatearNumeroDocumento } from '../utils/textos.js'
+import { truncar, formatearNumeroDocumento, capitalizarTexto, TIPOS_DOCUMENTO, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
 
 const toast = ref({ show: false, message: '', type: '' })
@@ -133,7 +133,13 @@ async function guardarInstructor() {
   loading.value = true
   try {
     const body = {
-      nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad
+      nombres: capitalizarTexto(nombres),
+      apellidos: capitalizarTexto(apellidos),
+      tipoDocumento: normalizarTipoDocumento(tipoDocumento),
+      numeroDocumento: normalizarNumeroDocumento(numeroDocumento),
+      correo: String(correo).trim().toLowerCase(),
+      telefono: String(telefono).trim(),
+      especialidad: capitalizarTexto(especialidad)
     }
     if (editingId.value) {
       await api.instructores.update(editingId.value, body)
@@ -403,9 +409,7 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
         <div class="form-group">
           <label>Tipo de Documento</label>
           <select v-model="instructorForm.tipoDocumento">
-            <option value="CC">CC - Cedula de Ciudadania</option>
-            <option value="CE">CE - Cedula de Extranjeria</option>
-            <option value="PEP">PEP - Permiso Especial</option>
+            <option v-for="t in TIPOS_DOCUMENTO" :key="t.codigo" :value="t.codigo">{{ t.descripcion }}</option>
           </select>
         </div>
         <div class="form-group"><label>Numero de Documento</label><input v-model="instructorForm.numeroDocumento" type="text" placeholder="Numero de documento" /></div>
