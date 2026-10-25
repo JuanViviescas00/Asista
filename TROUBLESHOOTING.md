@@ -1,5 +1,27 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-25 11:40] Configuración de Git LFS y Publicación del Instalador Ejecutable Asista (.exe)
+
+- **Fecha y Hora:** 2026-10-25 11:40:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Se requería almacenar y publicar el instalador ejecutable de la aplicación de escritorio (`Asista-Setup-1.0.0.exe`) en el repositorio remoto `asista` (`JuanViviescas00/Asista`).
+  - El instalador compilado pesa **144.9 MB**, excediendo el límite estricto de 100 MB que impone GitHub para commits regulares de Git.
+- **Causa Raíz:**
+  - GitHub rechaza cualquier archivo binario superior a 100 MB en commits tradicionales (`GH001: Large files detected`). Además, `.gitignore` excluía por defecto la carpeta `huellero/release-app/`.
+- **Solución Aplicada:**
+  1. *Inicialización de Git LFS:* Se inicializó Git LFS en el repositorio y se configuró `.gitattributes` para interceptar y versionar `huellero/release-app/*.exe`.
+  2. *Excepción en `.gitignore`:* Se actualizó la regla de ignorados para excluir los artefactos temporales de build pero permitir el seguimiento del ejecutable `!huellero/release-app/Asista-Setup-*.exe`.
+  3. *Publicación:* Se realizó commit y push exitoso del instalador mediante Git LFS al repositorio `asista` (`https://github.com/JuanViviescas00/Asista.git`).
+- **Archivos Modificados:**
+  - `.gitattributes`
+  - `.gitignore`
+  - `huellero/release-app/Asista-Setup-1.0.0.exe` (puntero LFS)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Carga al 100% del objeto LFS (145 MB) a GitHub LFS Storage a 20 MB/s con código de salida 0.
+
+---
+
 ## [2026-10-24 23:25] Corrección del Modal de Asignar Instructores y Rediseño Espacioso de Filtros de Estudiantes
 
 - **Fecha y Hora:** 2026-10-24 23:25:00 -05:00
