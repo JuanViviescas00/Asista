@@ -96,13 +96,17 @@ export async function updateInstructor(req, res) {
       if (String(req.usuario.id) !== String(req.params.id)) {
         return res.status(403).json({ error: 'Solo puedes actualizar tu propio perfil de instructor' })
       }
-      delete req.body.esLider
-      delete req.body.rol
-      delete req.body.fichas
-      delete req.body.activo
     }
 
-    const data = { ...req.body }
+    // Un instructor solo puede editar datos de contacto y su clave de Sofía Plus.
+    const CAMPOS_AUTOEDICION = ['nombres', 'apellidos', 'telefono', 'correo', 'especialidad', 'passwordSofiaPlus']
+    const data = {}
+    for (const [campo, valor] of Object.entries(req.body)) {
+      if (esAdmin || CAMPOS_AUTOEDICION.includes(campo)) data[campo] = valor
+    }
+    delete data.codigoRecuperacion
+    delete data.expiraCodigoRecuperacion
+    delete data.intentosCodigoRecuperacion
     if (data.nombres) data.nombres = capitalizarTexto(data.nombres)
     if (data.apellidos) data.apellidos = capitalizarTexto(data.apellidos)
     if (data.tipoDocumento) data.tipoDocumento = normalizarTipoDocumento(data.tipoDocumento)
@@ -274,9 +278,22 @@ export async function importarInstructores(req, res) {
 }
 
 // Obtener credenciales para bot RPA de Sofia Plus por ID
+function puedeVerCredenciales(req, instructor) {
+  return req.usuario?.rol === 'Administrador' || String(req.usuario?.id) === String(instructor._id)
+}
+
 export async function getCredencialesSofia(req, res) {
   try {
+    if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) {
+      return res.status(400).json({ ok: false, error: 'ID inválido' })
+    }
     const instructor = await Instructor.findById(req.params.id)
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado' })
+    }
+    if (!puedeVerCredenciales(req, instructor)) {
+      return res.status(403).json({ ok: false, error: 'Solo puedes acceder a tus propios datos' })
+    }
     if (!instructor) {
       return res.status(404).json({ ok: false, error: 'Instructor no encontrado' })
     }
@@ -308,6 +325,9 @@ export async function getCredencialesSofiaPorDocumento(req, res) {
     const instructor = await Instructor.findOne({ numeroDocumento: String(documento).trim() })
     if (!instructor) {
       return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
+    }
+    if (!puedeVerCredenciales(req, instructor)) {
+      return res.status(403).json({ ok: false, error: 'Solo puedes acceder a tus propios datos' })
     }
 
     if (!instructor.passwordSofiaPlus) {

@@ -49,7 +49,13 @@ async function upsertInasistencia(filter, update) {
 
 export async function getAsistencias(req, res) {
   try {
-    const { fichaId, estudianteId, fecha, fechaDesde, fechaHasta } = req.query
+    const { fecha, fechaDesde, fechaHasta } = req.query
+    let { fichaId, estudianteId } = req.query
+    // Un aprendiz solo puede ver sus propias asistencias
+    if (req.usuario?.rol === 'Estudiante') {
+      estudianteId = String(req.usuario.estudianteId || req.usuario.id)
+      fichaId = undefined
+    }
     const filter = {}
     const jornadaFilter = {}
     const jornadaInhabFilter = { inhabilitada: true }

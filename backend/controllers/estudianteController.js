@@ -33,6 +33,14 @@ function escapeRegex(text) {
 
 export async function getEstudiantes(req, res) {
   try {
+    // Un aprendiz solo puede consultar su propio registro
+    if (req.usuario?.rol === 'Estudiante') {
+      const propioId = req.usuario.estudianteId || req.usuario.id
+      if (!mongoose.Types.ObjectId.isValid(String(propioId))) return res.json([])
+      const propio = await Estudiante.find({ _id: propioId }).select('-huellaTemplate -huellaTemplate2')
+      return res.json(propio)
+    }
+
     const { fichaId, documento, nombres, estado, instructorId } = req.query
     const filter = {}
 
@@ -120,6 +128,9 @@ export async function getAsistenciaResumen(req, res) {
     const { id } = req.params
     if (!mongoose.Types.ObjectId.isValid(String(id))) {
       return res.status(400).json({ error: 'ID de estudiante inválido' })
+    }
+    if (req.usuario?.rol === 'Estudiante' && String(req.usuario.estudianteId || req.usuario.id) !== String(id)) {
+      return res.status(403).json({ error: 'Solo puedes consultar tu propia asistencia' })
     }
     const resumen = await calcularResumenAsistencia(id)
     res.json({ success: true, estudianteId: String(id), ...resumen })

@@ -1,6 +1,12 @@
 node_modules
 npm-debug.log
+*.log
 .git
 .gitignore
 dll
-data/*.sqlite*
+data
+public
+.env
+.env.*
+!.env.example
+*.sqlite*

@@ -1,7 +1,29 @@
+import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
+import bcryptjs from 'bcryptjs'
+import Dispositivo from '../models/Dispositivo.js'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'sena_jwt_super_secret_key_2026_biometria_adso'
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h'
+const JWT_ALGORITHM = 'HS256'
+
+/**
+ * El secreto JWT es obligatorio en producción (mínimo 32 caracteres).
+ * En desarrollo, si falta, se genera uno aleatorio por arranque (las sesiones
+ * se invalidan al reiniciar) en lugar de usar un valor fijo publicado en el repo.
+ */
+function resolverSecretoJWT() {
+  const secreto = process.env.JWT_SECRET
+  if (secreto && secreto.length >= 32) return secreto
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[Seguridad] JWT_SECRET no definido o con menos de 32 caracteres. Abortando arranque.')
+    process.exit(1)
+  }
+  console.warn('[Seguridad] JWT_SECRET ausente o débil: usando un secreto aleatorio temporal (solo desarrollo).')
+  return crypto.randomBytes(48).toString('hex')
+}
+
+const JWT_SECRET = resolverSecretoJWT()
+const VERIFY_OPTS = { algorithms: [JWT_ALGORITHM] }
 
 /**
  * Genera un token JWT firmado para la sesión del usuario
@@ -9,7 +31,7 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h'
  * @returns {string} Token JWT
  */
 export function generarToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN, algorithm: JWT_ALGORITHM })
 }
 
 /**
@@ -19,7 +41,7 @@ export function generarToken(payload) {
  */
 export function verificarTokenJWT(token) {
   try {
-    return jwt.verify(token, JWT_SECRET)
+    return jwt.verify(token, JWT_SECRET, VERIFY_OPTS)
   } catch (_) {
     return null
   }
@@ -41,7 +63,7 @@ export function autenticarJWT(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET)
+    const decoded = jwt.verify(token, JWT_SECRET, VERIFY_OPTS)
     req.usuario = decoded
     next()
   } catch (err) {
@@ -130,10 +152,59 @@ export function autenticarOpcional(req, res, next) {
 
   if (token) {
     try {
-      req.usuario = jwt.verify(token, JWT_SECRET)
+      req.usuario = jwt.verify(token, JWT_SECRET, VERIFY_OPTS)
     } catch (_) {
       // Ignorar error para permitir acceso no autenticado si aplica
     }
   }
   next()
+}
+
+/**
+ * Verifica las credenciales de un dispositivo huellero (deviceId + token)
+ * contra el tokenHash guardado. Devuelve el documento si es válido y está activo.
+ */
+export async function verificarCredencialesDispositivo(deviceId, token) {
+  if (!deviceId || !token || typeof deviceId !== 'string' || typeof token !== 'string') return null
+  try {
+    const dispositivo = await Dispositivo.findOne({ deviceId })
+    if (!dispositivo || dispositivo.activo !== true || !dispositivo.tokenHash) return null
+    const ok = await bcryptjs.compare(token, dispositivo.tokenHash)
+    return ok ? dispositivo : null
+  } catch (_) {
+    return null
+  }
+}
+
+/**
+ * Permite el acceso con JWT de Administrador/Instructor o con credenciales
+ * de un dispositivo huellero aprobado (cabeceras x-device-id / x-device-token).
+ * Si hay JWT válido de otro rol (p. ej. Estudiante) también se adjunta a
+ * req.usuario para que el controlador restrinja los datos a su propio registro.
+ */
+export function autenticarJWTODispositivo(rolesPermitidos = ['Administrador', 'Instructor', 'Estudiante']) {
+  return async (req, res, next) => {
+    const authHeader = req.headers['authorization']
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET, VERIFY_OPTS)
+        if (rolesPermitidos.includes(decoded.rol)) {
+          req.usuario = decoded
+          return next()
+        }
+      } catch (_) { /* se intenta con credenciales de dispositivo */ }
+    }
+
+    const dispositivo = await verificarCredencialesDispositivo(req.headers['x-device-id'], req.headers['x-device-token'])
+    if (dispositivo) {
+      req.dispositivo = dispositivo
+      return next()
+    }
+
+    return res.status(401).json({
+      error: 'Acceso no autorizado. Se requiere un token de sesión válido.',
+      code: 'TOKEN_MISSING'
+    })
+  }
 }

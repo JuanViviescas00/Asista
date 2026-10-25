@@ -68,8 +68,8 @@ function avanzarAPaso2() {
     return
   }
 
-  if (form.nuevaPassword.length < 6) {
-    errorMensaje.value = 'La nueva contraseña debe tener al menos 6 caracteres.'
+  if (form.nuevaPassword.length < 8) {
+    errorMensaje.value = 'La nueva contraseña debe tener al menos 8 caracteres.'
     return
   }
 
@@ -250,7 +250,7 @@ function handleCerrarSesion() {
             <input
               v-model="form.nuevaPassword"
               :type="show.nueva ? 'text' : 'password'"
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               autocomplete="new-password"
             />
             <button

@@ -6,7 +6,7 @@ import { autenticarJWT, verificarRol, autenticarOpcional } from '../middlewares/
 const router = Router()
 
 // Consulta de Jornadas (permitido para Kiosco de Aula y paneles autenticados)
-router.get('/', autenticarOpcional, validarFecha('desde'), validarFecha('hasta'), jornadaController.getJornadas)
+router.get('/', autenticarJWT, verificarRol(['Administrador', 'Instructor']), validarFecha('desde'), validarFecha('hasta'), jornadaController.getJornadas)
 // Creación/aseguramiento de Jornada (Administrador o Instructor)
 router.post('/',
   autenticarJWT,

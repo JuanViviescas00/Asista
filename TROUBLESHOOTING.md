@@ -1296,3 +1296,78 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
   - Consulta HTTP con token JWT de instructor hacia `http://localhost:3000/api/fichas/6ab1c00a31d01b2c49e68ce8/plantillas-biometricas` devolvió exitosamente `Status 200 OK` con el array de 24 registros biométricos de aprendices.
   - Compilación de frontend con `npm run build:prod` completada sin errores en 649ms.
   - Sin push a ramas remotas.
+
+
+---
+
+## [2026-10-25 00:25] Integración Completa de Parches de Seguridad desde Rama fix/security
+
+- **Fecha y Hora:** 2026-10-25 00:25:00 -05:00
+- **Descripción del Problema / Bug:**
+  Integración exhaustiva del endurecimiento de seguridad perimetral, prevención de ataques NoSQL injection, mitigación de Broken Access Control (IDOR), control estricto de roles en WebSockets y seguridad en contenedores Docker provenientes de los commits remotos de la rama `fix/security` (`1c4b580` y `5b210db`), preservando al 100% las funcionalidades frontend recientes, la configuración de líderes/docentes en fichas y el uso nativo de MongoDB.
+- **Causa Raíz:**
+  La rama remota `origin/fix/security` introdujo parches de seguridad indispensables contra inyecciones y accesos cruzados, pero un `git merge` estándar habría sobrescrito cambios del frontend, rutas de endpoints de líderes y configuraciones locales. Se requería una integración selectiva, precisa y verificada.
+- **Solución Aplicada:**
+  1. *Sanitización NoSQL y Prototipos:* Creación de `backend/middlewares/sanitize.js` contra operadores Mongo (`$gt`, `$ne`, etc.) y claves maliciosas (`__proto__`, `constructor`).
+  2. *Control de Orígenes CORS y WebSockets:* Creación de `backend/utils/corsOrigins.js` para validación dinámica de dominios e integración en handshake de Socket.IO con validación de pertenencia a salas (`ficha_<id>`).
+  3. *Autenticación y Permisos:*
+     - Generación segura de secretos JWT (`resolverSecretoJWT` con mínimo 32 caracteres) y firma `HS256`.
+     - Endurecimiento de `cambiarPassword` tomando identidad exclusivamente de `req.usuario.id`.
+     - Límite de 5 intentos fallidos y códigos de recuperación con `crypto.randomInt` sin exponer PIN en respuestas.
+     - Aislamiento de perfiles (aprendices solo consultan sus asistencias/excusas; docentes solo acceden a sus fichas).
+     - Validación de credenciales para endpoints de enrolamiento y dispositivos biométricos.
+  4. *Cifrado de Credenciales:* `backend/services/cryptoService.js` con AES-256-GCM estricto (falla segura sin exponer texto plano) y fallback a `LEGACY_SECRET`.
+  5. *Seguridad en Docker:*
+     - Multi-stage build con `USER node` (sin privilegios root) y healthcheck nativo con `fetch`.
+     - `docker-compose.yml` endurecido con `read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `no-new-privileges:true` y mapeo de puertos local activo (`3000:3000`).
+     - Actualización de `.dockerignore`, `.gitignore`, `.env.example`, `frontend/Dockerfile` y `frontend/nginx.conf`.
+  6. *Corrección de Sintaxis:* Reparación de bloque `try` duplicado en `backend/controllers/instructorController.js` detectado durante la auditoría de módulos.
+- **Archivos Modificados:**
+  - `.dockerignore`
+  - `.env.example`
+  - `.gitignore`
+  - `Dockerfile`
+  - `backend/.dockerignore`
+  - `backend/Dockerfile`
+  - `backend/controllers/adminController.js`
+  - `backend/controllers/asistenciaController.js`
+  - `backend/controllers/authController.js`
+  - `backend/controllers/enrolamientoController.js`
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/excusaController.js`
+  - `backend/controllers/fichaController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/permisoDatosController.js`
+  - `backend/index.js`
+  - `backend/middlewares/auth.js`
+  - `backend/middlewares/rateLimiter.js`
+  - `backend/middlewares/sanitize.js`
+  - `backend/models/Admin.js`
+  - `backend/models/Instructor.js`
+  - `backend/routes/asistencias.js`
+  - `backend/routes/auth.js`
+  - `backend/routes/clases.js`
+  - `backend/routes/dispositivos.js`
+  - `backend/routes/enrolamiento.js`
+  - `backend/routes/estudiantes.js`
+  - `backend/routes/excusas.js`
+  - `backend/routes/fichas.js`
+  - `backend/routes/instructores.js`
+  - `backend/routes/jornadas.js`
+  - `backend/services/cryptoService.js`
+  - `backend/services/emailService.js`
+  - `backend/services/socketService.js`
+  - `backend/utils/corsOrigins.js`
+  - `docker-compose.yml`
+  - `frontend/.dockerignore`
+  - `frontend/Dockerfile`
+  - `frontend/nginx.conf`
+  - `frontend/src/components/ModalPrimerLoginInstructor.vue`
+  - `frontend/src/views/AdminPerfil.vue`
+  - `huellero/src/main/engine.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Verificación sintáctica y de importación de todos los módulos backend (41 archivos validados exitosamente con Node ESM).
+  - Compilación de producción con `npm run build:prod` completada en 597ms sin errores.
+  - Validación de arranque de servidor y middleware de seguridad perimetral.
+  - Ningún push remoto realizado (todo conservado en commits locales de la rama `juan`).

@@ -6,7 +6,7 @@ import { autenticarJWT, verificarRol, verificarRolOLider, autenticarOpcional } f
 const router = Router()
 
 // Lectura de instructores (requiere autenticación)
-router.get('/', autenticarJWT, instructorController.getInstructores)
+router.get('/', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getInstructores)
 
 // Mutaciones de instructores (restringidas a Administrador)
 router.post('/',

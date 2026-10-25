@@ -36,6 +36,9 @@ export async function createConsentimientoDatos(req, res) {
     if (!instructorId || !versionTerminos) {
       return res.status(400).json({ error: 'instructorId y versionTerminos son requeridos' })
     }
+    if (req.usuario?.rol === 'Instructor' && String(instructorId) !== String(req.usuario.id)) {
+      return res.status(403).json({ error: 'El consentimiento debe registrarse a tu nombre' })
+    }
     if (!esObjectIdValido(instructorId)) {
       return res.status(400).json({ error: 'instructorId inválido' })
     }

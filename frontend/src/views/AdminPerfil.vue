@@ -213,8 +213,8 @@ async function procesarCambioPassword() {
     passError.value = 'Debes ingresar la nueva contraseña.'
     return
   }
-  if (passForm.nueva.length < 6) {
-    passError.value = 'La nueva contraseña debe tener al menos 6 caracteres.'
+  if (passForm.nueva.length < 8) {
+    passError.value = 'La nueva contraseña debe tener al menos 8 caracteres.'
     return
   }
   if (passForm.nueva !== passForm.confirmar) {
@@ -476,13 +476,13 @@ async function procesarCambioPassword() {
             <input
               v-model="passForm.nueva"
               :type="showPass.nueva ? 'text' : 'password'"
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               required
               autocomplete="new-password"
             />
             <button type="button" class="password-toggle-btn" @click="showPass.nueva = !showPass.nueva" title="Mostrar/Ocultar contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           </div>
-          <small style="color: #64748b; font-size: 11px;">Mínimo 6 caracteres alfanuméricos.</small>
+          <small style="color: #64748b; font-size: 11px;">Mínimo 8 caracteres alfanuméricos.</small>
         </div>
 
         <!-- Confirmar Nueva Contraseña -->

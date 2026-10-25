@@ -13,7 +13,7 @@ router.post('/',
   excusaController.createExcusa
 )
 
-router.put('/:id', autenticarJWT, excusaController.updateExcusa)
+router.put('/:id', autenticarJWT, verificarRol(['Administrador']), excusaController.updateExcusa)
 
 // Aprobación o Rechazo de excusas (restringido a Docente Líder o Administrador)
 router.put('/:id/aprobar',

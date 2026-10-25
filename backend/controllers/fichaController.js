@@ -15,6 +15,15 @@ export async function getFichas(req, res) {
   try {
     const { instructorId } = req.query
     const filter = {}
+    // Un aprendiz solo ve la ficha a la que pertenece
+    if (req.usuario?.rol === 'Estudiante') {
+      const Estudiante = (await import('../models/Estudiante.js')).default
+      const est = await Estudiante.findById(req.usuario.estudianteId || req.usuario.id).select('fichaId')
+      if (!est?.fichaId) return res.json([])
+      const q = [{ codigoFicha: String(est.fichaId) }]
+      if (mongoose.Types.ObjectId.isValid(String(est.fichaId))) q.push({ _id: est.fichaId })
+      filter.$or = q
+    }
     if (instructorId) {
       filter.$or = [
         { instructorLiderId: instructorId },
@@ -34,6 +43,12 @@ export async function getFichas(req, res) {
 export async function getMisFichas(req, res) {
   try {
     const { instructorId } = req.params
+    if (req.usuario?.rol !== 'Administrador' && String(req.usuario?.id) !== String(instructorId)) {
+      return res.status(403).json({ error: 'Solo puedes consultar tus propias fichas' })
+    }
+    if (!mongoose.Types.ObjectId.isValid(String(instructorId))) {
+      return res.status(400).json({ error: 'instructorId inválido' })
+    }
     const fichas = await Ficha.find({
       $or: [
         { instructorLiderId: instructorId },
