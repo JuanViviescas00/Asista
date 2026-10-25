@@ -1,3 +1,4 @@
+import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import cron from 'node-cron'
 import Asistencia from '../models/Asistencia.js'
 import Instructor from '../models/Instructor.js'
@@ -6,43 +7,50 @@ import Clase from '../models/Clase.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import Inasistencia from '../models/Inasistencia.js'
 import { obtenerTodasAsistenciasConsolidadas } from '../controllers/asistenciaController.js'
-import { getDBDocente, upsertAsistenciasBatchSQLite } from './sqliteExport.js'
+
 import { getHoyString, finalizarClase } from './asistenciaService.js'
 import { emitirDesactivacion, emitirClaseDesactivada, emitirAlertaSofiaPlus } from './socketService.js'
 import { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA } from '../utils/diasHabiles.js'
 import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { ejecutarRPAInasistencias } from './rpaService.js'
 
 // Reexportados para no romper a quienes ya importaban estas utilidades desde cronService.
-export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA }
+export { calcularDiasHabilesTranscurridos, DIAS_HABILES_VENTANA_EXCUSA, ejecutarRPAInasistencias }
 
 /**
- * Cierra automáticamente las clases que lleven más de 3 horas activas.
+ * Cierra automáticamente las clases al finalizar la jornada académica (6 horas diurna, 5 horas nocturna).
  * Si el docente olvidó finalizar la clase, el sistema la finaliza de forma automática,
- * actualiza el estado en MongoDB ('Finalizada') y emite DEACTIVATE al lector físico y al frontend.
+ * actualiza el estado en MongoDB ('Finalizada'), genera las faltas de los ausentes
+ * y emite DEACTIVATE al lector físico y al frontend.
  */
 export async function cerrarClasesExpiradas() {
-  const LIMITE_HORAS = 3
-  const limiteMs = LIMITE_HORAS * 60 * 60 * 1000
   const ahora = new Date()
-  const fechaLimite = new Date(ahora.getTime() - limiteMs)
 
   try {
-    const clasesExpiradas = await Clase.find({
-      estado: 'Activa',
-      iniciadaAt: { $lte: fechaLimite }
+    const clasesActivas = await Clase.find({
+      estado: 'Activa'
     }).populate('fichaId')
 
-    if (!clasesExpiradas || clasesExpiradas.length === 0) {
+    if (!clasesActivas || clasesActivas.length === 0) {
       return { cerradas: 0 }
     }
 
     let cerradas = 0
-    for (const clase of clasesExpiradas) {
+    for (const clase of clasesActivas) {
+      const jornada = clase.fichaId?.jornada || ''
+      const duracionHoras = topeHorasPorJornada(jornada)
+      const duracionMs = duracionHoras * 60 * 60 * 1000
+      const tiempoTranscurrido = clase.iniciadaAt ? (ahora.getTime() - new Date(clase.iniciadaAt).getTime()) : 0
+
+      if (tiempoTranscurrido < duracionMs) {
+        continue
+      }
+
       const fichaIdStr = String(clase.fichaId?._id || clase.fichaId)
       const instructorIdStr = String(clase.instructorId)
 
       // Cierre atómico + auto-cierre de inasistencias (antes de emitir).
-      const resultado = await finalizarClase(clase._id, { motivo: 'AUTO_CIERRE_3_HORAS' })
+      const resultado = await finalizarClase(clase._id, { motivo: 'AUTO_CIERRE_FIN_JORNADA' })
 
       if (resultado.yaFinalizada) {
         // Ya se cerró en otro camino: no se vuelve a emitir.
@@ -55,19 +63,19 @@ export async function cerrarClasesExpiradas() {
           type: 'DEACTIVATE',
           fichaId: fichaIdStr,
           instructorId: instructorIdStr,
-          motivo: 'AUTO_CIERRE_3_HORAS'
+          motivo: 'AUTO_CIERRE_FIN_JORNADA'
         })
       }
 
       // 2. Notificar a las salas del frontend/dashboard
       emitirClaseDesactivada(fichaIdStr, {
         fichaId: fichaIdStr,
-        motivo: 'AUTO_CIERRE_3_HORAS'
+        motivo: 'AUTO_CIERRE_FIN_JORNADA'
       })
 
       cerradas++
       const codFicha = clase.fichaId?.codigoFicha || fichaIdStr
-      console.log(`[AutoCierre] ⏱ Clase de la ficha ${codFicha} finalizada automáticamente (superó las ${LIMITE_HORAS} horas).`)
+      console.log(`[AutoCierre] ⏱ Clase de la ficha ${codFicha} (${jornada || 'Diurna'}) finalizada automáticamente (superó las ${duracionHoras} horas de jornada).`)
     }
 
     return { cerradas }
@@ -128,7 +136,7 @@ export function iniciarCronJobs() {
 
   // Ejecución inicial preventiva al arrancar el servidor
   cerrarClasesExpiradas().catch(e => console.warn('[AutoCierre] Error inicial:', e.message))
-  console.log('[CRON] Auto-cierre de clases cada minuto activo (límite 3 horas)')
+  console.log('[CRON] Auto-cierre de clases cada minuto activo (fin de jornada: 6h diurna, 5h nocturna)')
 
   // 2. Cron nocturno de sincronización SQLite por Docente
   cron.schedule(schedule, async () => {
@@ -139,46 +147,50 @@ export function iniciarCronJobs() {
     } catch (err) {
       console.error('[CRON] Error actualizando estados de carga:', err.message)
     }
-    try {
-      const resultado = await sincronizarSqlitePorDocente()
-      console.log(`[CRON] ✅ Proceso finalizado. Docentes: ${resultado.totalDocentes}, Clases/Registros: ${resultado.totalRegistros}, Elegibles subida: ${resultado.totalElegiblesSubida}`)
-    } catch (err) {
-      console.error('[CRON] ❌ Error en ejecución del Cron Job:', err.message)
-    }
   }, {
     timezone
   })
 
   console.log(`[CRON] Programador nocturno listo (${schedule} - ${timezone}) - Agrupación por Docente`)
 
-  // 3. Cron semanal de detección de fallas/excusas para Sofía Plus (desactivado por defecto; activar con ENABLE_SOFIA_SYNC=true)
-  if (process.env.ENABLE_SOFIA_SYNC === 'true') {
+  // 3. Cron semanal de detección de fallas/excusas y reporte RPA a Sofía Plus (activo por defecto; desactivar con ENABLE_SOFIA_SYNC=false)
+  if (process.env.ENABLE_SOFIA_SYNC !== 'false') {
     const scheduleSofia = process.env.CRON_SOFIA_SCHEDULE || '0 0 * * 6'
     cron.schedule(scheduleSofia, async () => {
-      console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas para Sofía Plus (Sábado 12:00 AM)...`)
+      console.log(`\n[CRON] ⏰ ${new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}: Iniciando revisión semanal de fallas y reporte RPA a Sofía Plus (Sábado 12:00 AM)...`)
       try {
         const encolado = await revisarYEncolarSofiaPlus()
         console.log(`[CRON] SofiaPlus: ${encolado.encolados} encolados, ${encolado.omitidosYaExistentes} ya existentes, ${encolado.enEsperaDiasHabiles} en espera de días hábiles.`)
+
+        // Disparar Robot RPA de inasistencias en modo desatendido
+        if (process.env.ENABLE_RPA_ROBOT !== 'false') {
+          console.log('[CRON] 🤖 Disparando Robot RPA de inasistencias para reporte oficial en Sofia Plus...')
+          const resRPA = await ejecutarRPAInasistencias({
+            batch: true,
+            headless: true,
+            dryRun: process.env.RPA_DRY_RUN === 'true'
+          })
+          if (resRPA.ok) {
+            console.log('[CRON] 🤖 Robot RPA completó el proceso exitosamente.')
+          } else {
+            console.warn(`[CRON] ⚠️ Robot RPA finalizó con observaciones: ${resRPA.error || 'revisar logs'}`)
+          }
+        }
+
         const alertas = await revisarAlertasSofiaPlus()
         console.log(`[CRON] SofiaPlus: ${alertas.alertasEmitidas} alertas emitidas.`)
       } catch (err) {
-        console.error('[CRON] ❌ Error en revisión de Sofía Plus:', err.message)
+        console.error('[CRON] ❌ Error en ciclo semanal de Sofía Plus / RPA:', err.message)
       }
     }, {
       timezone: 'America/Bogota'
     })
-    console.log(`[CRON] Revisión semanal Sofía Plus activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
+    console.log(`[CRON] Revisión semanal Sofía Plus y RPA activa (Cada Sábado a las 12:00 AM / ${scheduleSofia} - America/Bogota)`)
   }
 }
 
 /**
- * Genera y actualiza un archivo SQLite independiente para cada Docente que haya impartido clases.
- * - Incluye todas las clases dictadas diariamente por el profesor (sin importar si es líder o apoyo).
- * - Evalúa la ventana de excusa (DIAS_HABILES_VENTANA_EXCUSA, Acuerdo 0009 de 2024, Art. 28 Parágrafo 3):
- *   - Si la ventana no venció: Estado de carga 'EN_ESPERA' (ventana reglamentaria para radicar excusas).
- *   - Si la ventana venció (diasHabiles >= DIAS_HABILES_VENTANA_EXCUSA + 1): 'LISTO_PARA_SUBIR'.
- */
-export async function sincronizarSqlitePorDocente() {
+ export async function sincronizarSqlitePorDocente() {
   const hoyStr = getHoyString()
 
   // 1. Cargar conjunto de días festivos para cálculo de días hábiles

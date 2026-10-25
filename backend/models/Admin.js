@@ -8,6 +8,7 @@ const adminSchema = new mongoose.Schema({
   password: { type: String, required: true },
   codigoRecuperacion: { type: String, default: null },
   expiraCodigoRecuperacion: { type: Date, default: null },
+  intentosCodigoRecuperacion: { type: Number, default: 0 },
 }, { timestamps: true, collection: 'admin' })
 
 export default mongoose.model('Admin', adminSchema)

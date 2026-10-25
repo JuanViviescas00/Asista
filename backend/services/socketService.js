@@ -7,6 +7,7 @@ import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
 import { verificarTokenJWT } from '../middlewares/auth.js'
 import { finalizarClase } from './asistenciaService.js'
+import { esOrigenPermitido, esMismoOrigen } from '../utils/corsOrigins.js'
 
 let io = null
 const sesionesActivas = new Map() // fichaId -> { activa: true, iniciadoPor, fecha, jornada, fichaCodigo, nombrePrograma }
@@ -56,17 +57,26 @@ export function initSocket(httpServer) {
   // que detecta desconexiones y reconexiones automáticamente. No se implementa un PING/PONG manual encima.
   io = new Server(httpServer, {
     cors: {
-      origin: '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      origin(origin, callback) {
+        callback(null, esOrigenPermitido(origin))
+      },
+      methods: ['GET', 'POST'],
     },
+    // Rechaza el handshake de navegadores desde orígenes no permitidos
+    // (el huellero Electron no envía Origin y sigue funcionando).
+    allowRequest(req, callback) {
+      const origin = req.headers.origin
+      callback(null, esOrigenPermitido(origin) || esMismoOrigen(origin, req))
+    },
+    maxHttpBufferSize: 1e6,
   })
 
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Cliente conectado: ${socket.id}`)
 
     // 1. Unirse a la sala de una ficha (solo Instructor asignado o Administrador)
-    socket.on('unirse_sala', async ({ fichaId, rol }) => {
-      if (!fichaId) return
+    socket.on('unirse_sala', async ({ fichaId, rol } = {}) => {
+      if (!fichaId || typeof fichaId !== 'string') return
       const room = `ficha_${fichaId}`
 
       // Autenticación del dashboard: el JWT llega en el handshake (socket.handshake.auth.token).
@@ -105,87 +115,102 @@ export function initSocket(httpServer) {
       }
 
       socket.join(room)
-      console.log(`[Socket.IO] Socket ${socket.id} (${rol || 'cliente'}) se unió a sala ${room}`)
+      console.log(`[Socket.IO] Socket ${socket.id} (usuario ${usuario.id}) se unió a ${room}`)
 
-      // Informar si ya hay una sesión activa para esta ficha
-      const sesion = sesionesActivas.get(String(fichaId))
-      socket.emit('estado_sesion', {
-        activa: !!sesion?.activa,
-        sesion: sesion || null,
-      })
+      // Envía el estado actual de la sesión al usuario que entra
+      const sesion = sesionesActivas.get(String(fichaId)) || null
+      socket.emit('estado_sesion', { activa: !!sesion, sesion })
 
-      // Snapshot inicial del estado online del dispositivo asociado a esta ficha
-      // (para que el instructor vea el indicador correcto al entrar, sin esperar
-      // al próximo DEVICE_CONNECTED/DISCONNECTED).
-      try {
-        const deviceId = await deviceIdDeFicha(fichaId)
-        if (deviceId) {
-          socket.emit('DEVICE_STATUS', { deviceId, online: dispositivosConectados.has(deviceId) })
-        }
-      } catch (_) {}
+      // Informa si el huellero asociado a esta ficha está online en este momento
+      const deviceId = await deviceIdDeFicha(fichaId)
+      socket.emit('DEVICE_STATUS', { online: Boolean(deviceId && dispositivosConectados.has(deviceId)) })
     })
 
-    // 2. Unirse a la sala global de administradores (DEVICE_CONNECTED/DISCONNECTED)
-    socket.on('unirse_admin', () => {
+    // 2. Unirse a la sala general de administradores
+    socket.on('unirse_admins', () => {
       const usuario = verificarTokenJWT(socket.handshake?.auth?.token)
       if (!usuario || usuario.rol !== 'Administrador') {
-        socket.emit('error_autenticacion', { error: 'Se requiere una sesión de Administrador válida.' })
+        socket.emit('error_autenticacion', { error: 'Solo los administradores pueden unirse a esta sala.' })
         return
       }
       socket.join('admins')
-      console.log(`[Socket.IO] Socket ${socket.id} (Administrador) se unió a sala admins`)
-
-      // Snapshot inicial: dispositivos conectados en este momento.
-      socket.emit('DEVICES_STATUS', { deviceIds: Array.from(dispositivosConectados.keys()) })
+      console.log(`[Socket.IO] Admin ${socket.id} se unió a la sala 'admins'`)
     })
 
     // 3. Salir de la sala
-    socket.on('salir_sala', ({ fichaId }) => {
+    socket.on('salir_sala', ({ fichaId } = {}) => {
       if (!fichaId) return
       const room = `ficha_${fichaId}`
       socket.leave(room)
     })
 
     // 4. El docente inicia la sesión de toma de asistencia de forma remota
-    socket.on('docente:iniciar_asistencia', (data) => {
+    socket.on('docente:iniciar_asistencia', (data = {}) => {
       const { fichaId, fichaCodigo, nombrePrograma, jornada, fecha, instructorNombre } = data
       if (!fichaId) return
+      // Solo quien ya fue autorizado en unirse_sala (Admin o instructor de la ficha)
+      if (!socket.rooms.has(`ficha_${fichaId}`)) {
+        socket.emit('error_autenticacion', { error: 'No autorizado para controlar esta ficha.' })
+        return
+      }
 
       const sesion = {
         activa: true,
-        fichaId: String(fichaId),
-        fichaCodigo: fichaCodigo || '',
-        nombrePrograma: nombrePrograma || '',
-        jornada: jornada || '',
-        fecha: fecha || new Date().toISOString().slice(0, 10),
-        instructorNombre: instructorNombre || 'Instructor',
-        horaInicio: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        iniciadoPor: instructorNombre || 'Docente',
+        fecha: fecha || new Date().toISOString().split('T')[0],
+        jornada,
+        fichaCodigo,
+        nombrePrograma,
       }
-
       sesionesActivas.set(String(fichaId), sesion)
-      const room = `ficha_${fichaId}`
 
-      console.log(`[Socket.IO] ▶ Docente activó asistencia remota para ficha ${fichaCodigo} (${room})`)
+      console.log(`[Socket.IO] ▶ Docente inició asistencia para ficha ${fichaId} (${fichaCodigo})`)
 
-      io.to(room).emit('estado_sesion', { activa: true, sesion })
+      // Notificar a todos en la sala de la ficha (incluye quioscos/pantallas del aula)
+      io.to(`ficha_${fichaId}`).emit('sesion_iniciada', sesion)
+      io.to(`ficha_${fichaId}`).emit('estado_sesion', { activa: true, sesion })
     })
 
     // 5. El docente finaliza/pausa la toma de asistencia
-    socket.on('docente:cerrar_asistencia', ({ fichaId }) => {
+    socket.on('docente:cerrar_asistencia', ({ fichaId } = {}) => {
       if (!fichaId) return
       const room = `ficha_${fichaId}`
+      if (!socket.rooms.has(room)) {
+        socket.emit('error_autenticacion', { error: 'No autorizado para controlar esta ficha.' })
+        return
+      }
       sesionesActivas.delete(String(fichaId))
 
       console.log(`[Socket.IO] ⏹ Docente detuvo la asistencia para ficha ${fichaId}`)
 
+      io.to(room).emit('sesion_cerrada', { fichaId })
       io.to(room).emit('estado_sesion', { activa: false, sesion: null })
     })
 
-    // 6. Registro de identidad del huellero local (deviceId + token) al conectar
+    // 6. El quiosco registra una marcación biométrica en tiempo real
+    socket.on('kiosco:asistencia_marcada', (datos) => {
+      const { fichaId, estudianteNombre, estado, hora, documento } = datos
+      if (!fichaId) return
+
+      console.log(`[Socket.IO] 👤 Asistencia marcada: ${estudianteNombre} (${estado}) a las ${hora}`)
+
+      // Retransmitir al docente en vivo
+      io.to(`ficha_${fichaId}`).emit('docente:nueva_marcacion', {
+        estudianteNombre,
+        estado,
+        hora,
+        documento,
+        timestamp: new Date().toISOString(),
+      })
+    })
+
+    // 7. HELLO del huellero local (app Electron)
+    // El huellero se autentica con su deviceId + token contra la BD.
+    // Si no está registrado o no está activo, el servidor rechaza y desconecta.
     socket.on('HELLO', async (data) => {
       const deviceId = data?.deviceId
       const token = data?.token
-      if (!deviceId || !token) {
+      if (!deviceId || !token || typeof deviceId !== 'string' || typeof token !== 'string') {
         console.log(`[Socket.IO] HELLO rechazado: faltan deviceId o token (socket ${socket.id})`)
         rechazarHELLO(socket, 'MISSING_FIELDS', 'Faltan credenciales del dispositivo.')
         return
@@ -193,91 +218,75 @@ export function initSocket(httpServer) {
 
       try {
         const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
-
         if (!dispositivo) {
-          console.log(`[Socket.IO] HELLO rechazado: dispositivo no encontrado (${deviceId}, socket ${socket.id})`)
-          rechazarHELLO(socket, 'DEVICE_NOT_FOUND', 'Dispositivo no reconocido por el sistema.')
+          console.log(`[Socket.IO] HELLO rechazado: dispositivo no registrado ${deviceId}`)
+          rechazarHELLO(socket, 'NOT_REGISTERED', 'Este equipo no está registrado en el sistema.')
           return
         }
 
         if (dispositivo.activo !== true) {
-          if (!dispositivo.aprobadoEn) {
-            console.log(`[Socket.IO] HELLO rechazado: dispositivo pendiente de aprobación (${deviceId}, socket ${socket.id})`)
-            rechazarHELLO(socket, 'PENDING_APPROVAL', 'Equipo registrado. Esperando aprobación del administrador.')
-          } else {
-            console.log(`[Socket.IO] HELLO rechazado: dispositivo deshabilitado (${deviceId}, socket ${socket.id})`)
-            rechazarHELLO(socket, 'DEVICE_DISABLED', 'Este equipo fue deshabilitado por el administrador.')
-          }
+          console.log(`[Socket.IO] HELLO rechazado: dispositivo inactivo/pendiente ${deviceId}`)
+          const code = dispositivo.aprobado === false ? 'PENDING_APPROVAL' : 'DEVICE_DISABLED'
+          const msg = dispositivo.aprobado === false
+            ? 'Equipo pendiente de aprobación por el administrador.'
+            : 'Este equipo fue deshabilitado por el administrador.'
+          rechazarHELLO(socket, code, msg)
           return
         }
 
-        const tokenValido = await bcryptjs.compare(token, dispositivo.tokenHash)
+        const tokenValido = await bcryptjs.compare(String(token), dispositivo.tokenHash)
         if (!tokenValido) {
-          console.log(`[Socket.IO] HELLO rechazado: token inválido para ${deviceId} (socket ${socket.id})`)
+          console.log(`[Socket.IO] HELLO rechazado: token inválido para ${deviceId}`)
           rechazarHELLO(socket, 'INVALID_TOKEN', 'Credenciales del dispositivo inválidas.')
           return
         }
 
-        // Validación del fingerprint de hardware (defensa en profundidad contra la
-        // copia de config.json a otra instalación de Windows). Solo se valida si el
-        // huellero ENVÍA el fingerprint; si no lo envía (lectura del registro falló),
-        // se trata como "no se pudo verificar" y NO se rechaza la conexión.
-        const hardwareFingerprint = data?.hardwareFingerprint
-        if (hardwareFingerprint) {
-          const fpHash = crypto.createHash('sha256').update(String(hardwareFingerprint)).digest('hex')
-          if (!dispositivo.hardwareFingerprintHash) {
-            // Primer contacto: adoptar el fingerprint de esta instalación.
-            dispositivo.hardwareFingerprintHash = fpHash
-            await dispositivo.save()
-            console.log(`[Socket.IO] Fingerprint de hardware adoptado para ${deviceId}`)
-          } else if (dispositivo.hardwareFingerprintHash !== fpHash) {
-            console.log(`[Socket.IO] HELLO rechazado: fingerprint de hardware no coincide para ${deviceId} (posible copia de identidad)`)
-            rechazarHELLO(socket, 'HARDWARE_MISMATCH', 'La identidad de hardware no coincide. Posible copia no autorizada. Contacta al administrador.')
-            return
-          }
-        }
-
+        // Autenticación superada: registrar y asociar al socket
         socket.data.deviceId = String(deviceId)
         dispositivosConectados.set(String(deviceId), socket.id)
-        console.log(`[Socket.IO] Huellero registrado: ${deviceId} (socket ${socket.id})`)
 
-        // Notificar conexión del dispositivo a admins y a las fichas asociadas.
-        try {
-          const fichasIds = await idsDeFichasAsociadas(dispositivo._id)
-          emitirEstadoDispositivo('DEVICE_CONNECTED', String(deviceId), fichasIds)
-        } catch (err) {
-          console.log(`[Socket.IO] Error emitiendo DEVICE_CONNECTED para ${deviceId}: ${err.message}`)
-        }
+        // Actualizar último ping y metadatos si vienen
+        dispositivo.ultimoPing = new Date()
+        if (data.hostname) dispositivo.hostname = String(data.hostname).slice(0, 100)
+        if (data.ipLocal) dispositivo.ipLocal = String(data.ipLocal).slice(0, 50)
+        if (data.versionApp) dispositivo.versionApp = String(data.versionApp).slice(0, 30)
+        await dispositivo.save()
 
-        // Reconciliación del estado real tras autenticar (Fase 6):
-        // se reenvía al dispositivo el estado que tiene en BD, haya o no clase activa.
-        // - Clase Activa → ACTIVATE pendiente.
-        // - Sin clase Activa → DEACTIVATE (para limpiar una "clase fantasma" local
-        //   si el dispositivo estuvo offline al finalizar la clase).
+        const fichasIds = await idsDeFichasAsociadas(dispositivo._id)
+
+        console.log(`[Socket.IO] HELLO aceptado: ${dispositivo.nombre} (${deviceId}) socket ${socket.id} [${fichasIds.length} ficha(s)]`)
+        socket.emit('HELLO_OK', {
+          deviceId,
+          nombre: dispositivo.nombre,
+          fichasIds,
+        })
+
+        // Notificar que este equipo está online
+        emitirEstadoDispositivo('DEVICE_CONNECTED', deviceId, fichasIds)
+
+        // Reconciliación tras reconexión: sincroniza el estado del lector con la BD
+        // Si hay una clase activa asignada a este equipo, reenvía ACTIVATE
+        // Si no hay clase activa (o expiró), envía DEACTIVATE para limpiar el lector
         try {
-          const claseActiva = await Clase.findOne({ deviceId: String(deviceId), estado: 'Activa' })
+          const claseActiva = await Clase.findOne({
+            activa: true,
+            fichaId: { $in: fichasIds },
+          })
+
           if (claseActiva) {
-            // Comprobar si la clase superó el límite de 3 horas durante la desconexión
-            const LIMITE_3_HORAS_MS = 3 * 60 * 60 * 1000
-            const tiempoTranscurrido = claseActiva.iniciadaAt ? (Date.now() - new Date(claseActiva.iniciadaAt).getTime()) : 0
-            if (tiempoTranscurrido >= LIMITE_3_HORAS_MS) {
-              // Cierre atómico + auto-cierre de inasistencias (ahora SÍ crea fallas).
-              const resultado = await finalizarClase(claseActiva._id, { motivo: 'AUTO_CIERRE_3_HORAS' })
-
-              // Siempre se limpia la clase fantasma local de este dispositivo.
+            const horasTranscurridas = (Date.now() - new Date(claseActiva.iniciadaAt).getTime()) / (1000 * 60 * 60)
+            if (horasTranscurridas >= 3) {
+              await finalizarClase(claseActiva.fichaId, claseActiva.instructorId)
               emitirDesactivacion(deviceId, {
                 type: 'DEACTIVATE',
-                fichaId: null,
-                instructorId: null,
-                motivo: 'AUTO_CIERRE_3_HORAS'
+                fichaId: String(claseActiva.fichaId),
+                instructorId: String(claseActiva.instructorId),
               })
-
-              if (!resultado.yaFinalizada) {
-                emitirClaseDesactivada(String(claseActiva.fichaId), {
-                  fichaId: String(claseActiva.fichaId),
-                  motivo: 'AUTO_CIERRE_3_HORAS'
-                })
-                console.log(`[Socket.IO] Clase para ${deviceId} expiró (>3h) durante desconexión. Cerrada automáticamente.`)
+              if (io) {
+                const sFichaId = String(claseActiva.fichaId)
+                io.to(`ficha_${sFichaId}`).emit('CLASS_DEACTIVATED', { fichaId: sFichaId, razon: 'timeout_reconexion' })
+                io.to(`ficha_${sFichaId}`).emit('estado_sesion', { activa: false, sesion: null })
+                console.log(`[Socket.IO] Clase de ficha ${claseActiva.fichaId} expiró (>3h) durante desconexión. Cerrada automáticamente.`)
               }
             } else {
               let codigoFicha = ''

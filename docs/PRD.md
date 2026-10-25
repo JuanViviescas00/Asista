@@ -44,7 +44,7 @@ Proporcionar a los Centros de Formación del SENA una plataforma unificada, biom
 * **Cero Suplantación / Cero Fraude:** Sustitución de listas de papel o firmas manuales por comparación biométrica en memoria 1:N utilizando lectores ópticos DigitalPersona U.are.U 4500.
 * **Ahorro de Tiempo Docente (95%):** Los instructores no invierten tiempo de su clase llamando a lista ni dedicando sus fines de semana a radicar inasistencias en el portal web de Sofia Plus.
 * **Garantía del Reglamento del Aprendiz:** Cálculo matemático automatizado de escalas de tardanza (1h, 2h), banco de horas acumuladas adaptativo según la jornada formativa (5 horas en Noche, 6 horas en Mañana/Tarde) y alertas tempranas de deserción.
-* **Resiliencia Operativa Continua:** Capacidad de operar sin conexión a internet en ambientes cerrados del SENA gracias a bases de datos SQLite locales y sincronización diferida con MongoDB Atlas.
+* **Resiliencia Operativa Continua:** Capacidad de operar sin conexión a internet en ambientes cerrados del SENA gracias a la cola de sincronización local atómica en Electron (`store.js`) y sincronización diferida automática con MongoDB Atlas.
 
 ---
 
@@ -77,7 +77,7 @@ mindmap
     Instructor de Apoyo / Docente
       Apertura de clase en vivo
       Supervisión en tiempo real por WebSockets
-      Generación de backup SQLite offline
+      Exportación oficial a Excel y PDF
     Administrador / Coordinación
       Gestión global de instructores y fichas
       Aprobación de hardware y huelleros
@@ -94,7 +94,7 @@ mindmap
 |---|---|---|
 | **Aprendiz SENA** | Estudiante matriculado en una ficha de formación titulada o complementaria. | Registrar su ingreso colocando el dedo en el sensor en menos de 1 segundo; consultar su estado disciplinario y justificar fallas en los 3 días hábiles legales. |
 | **Instructor Líder** | Docente responsable principal de la ficha académica y su seguimiento integral. | Enrolar las huellas de su grupo, aprobar o rechazar excusas médicas/laborales, configurar credenciales de Sofia Plus con cifrado de grado militar. |
-| **Instructor de Apoyo** | Docente que imparte competencias técnicas específicas a la ficha. | Iniciar la sesión de clase con un clic, ver el ingreso de aprendices en vivo en pantalla y descargar la base de datos SQLite para trabajar desconectado. |
+| **Instructor de Apoyo** | Docente que imparte competencias técnicas específicas a la ficha. | Iniciar la sesión de clase con un clic, ver el ingreso de aprendices en vivo en pantalla y exportar reportes de asistencia en Excel y PDF. |
 | **Administrador** | Coordinador académico o líder de área TIC del centro de formación. | Registrar docentes, vincular huelleros aprobados por dirección MAC/huella de hardware, registrar días festivos y auditar el historial de sincronizaciones. |
 | **Agente RPA Autónomo** | Proceso desatendido basado en Playwright y Node.js. | Leer la cola `sofiaplus_sync`, autenticarse en Sofia Plus los sábados a las 12:00 AM, buscar fichas y alumnos mediante paginación DOM y radicar las inasistencias. |
 
@@ -120,7 +120,6 @@ flowchart TB
 
     subgraph CAPA_DATOS [Almacenamiento y Persistencia]
         BackendApp --> MongoAtlas[(MongoDB Atlas Cloud)]
-        BackendApp --> SqliteStore[(SQLite Local por Docente)]
     end
 
     subgraph CAPA_RPA [Automatización Externa - SENA Sofia Plus]
@@ -221,7 +220,7 @@ stateDiagram-v2
 
 ### Épica 6: Arquitectura Offline-First y Resiliencia en Red
 
-* **RF-OFF-01 (Exportación Nocturna a SQLite):** Todas las noches a las 00:00 horas, el backend genera y actualiza un archivo de base de datos local SQLite (`.db`) independiente por cada instructor en `backend/data/{documentoDocente}_asistencias.db`.
+* **RF-OFF-01 (Resiliencia Offline del Kiosco):** En caso de interrupción en la conectividad de red, la aplicación de escritorio almacena localmente las marcaciones en cola atómica persistente (`store.js`) y las despacha de forma segura e idempotente (por UUID) tan pronto se restablece la comunicación con el backend.
 * **RF-OFF-02 (Sincronización Bidireccional Idempotente):** Toda marcación dactilar genera un identificador único universal (`uuid`). Al reanudarse la conectividad, las asistencias almacenadas localmente se sincronizan con MongoDB Atlas sin generar duplicados.
 
 ---
@@ -322,7 +321,7 @@ erDiagram
 4. **Reducción de Carga Operativa Docente:**
    - *Meta:* Disminución del 95% de las horas hombre invertidas por instructores en digitación manual de novedades en Sofia Plus los fines de semana.
 5. **Continuidad Operativa:**
-   - *Meta:* 0 pérdidas de información por caídas de internet gracias a la arquitectura de backup en SQLite.
+   - *Meta:* 0 pérdidas de información por caídas de internet gracias a la cola offline atómica local y persistencia cloud en MongoDB Atlas.
 
 ---
 
@@ -332,7 +331,7 @@ erDiagram
 |---|:---:|:---:|---|
 | **Caídas frecuentes o mantenimiento del portal Sofia Plus** | Alto | Alta | El robot RPA detecta errores 5xx o pantallas de caída, aborta la transacción sin quemar credenciales, reintenta en la siguiente iteración y preserva la cola en estado `pendiente`. |
 | **Bloqueo de cuentas por contraseñas erróneas** | Crítico | Media | El robot valida el mensaje de error de login en pantalla; si detecta error de credenciales, detiene inmediatamente el proceso del docente y envía alerta por WebSocket al panel. |
-| **Fallas en la red Wi-Fi del aula de clases** | Alto | Alta | Almacenamiento local en SQLite y memoria de Electron. La marcación dactilar nunca se interrumpe y los datos se sincronizan al recuperar conexión. |
+| **Fallas en la red Wi-Fi del aula de clases** | Alto | Alta | Almacenamiento local en cola atómica JSON de Electron (`store.js`). La marcación dactilar nunca se interrumpe y los datos se sincronizan al recuperar conexión. |
 | **Daño físico o descalibración del lector óptico** | Medio | Baja | El sistema incluye módulo de marcación manual asistida con registro obligatorio de justificación para casos excepcionales de daño de hardware o heridas en dedos. |
 
 ---
@@ -345,7 +344,7 @@ timeline
     Fase 1 (Completada) : Motor biométrico 1:N en Electron
                         : Comunicación Socket.IO en tiempo real
                         : Modelo de asistencias y base de datos Atlas
-    Fase 2 (Completada) : Exportación Offline en SQLite por docente
+    Fase 2 (Completada) : Cola Offline atómica y exportaciones a Excel/PDF
                         : Algoritmo de 3 días hábiles y festivos
                         : Firma digital de instalador Windows
     Fase 3 (Completada) : Robot RPA Sofia Plus con Playwright

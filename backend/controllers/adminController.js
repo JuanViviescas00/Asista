@@ -1,8 +1,9 @@
 import Admin from '../models/Admin.js'
+import { hashPassword } from '../services/passwordService.js'
 
 export async function getPerfil(req, res) {
   try {
-    const admin = await Admin.findOne().select('-password')
+    const admin = await Admin.findById(req.usuario?.id).select('-password -codigoRecuperacion')
     if (!admin) return res.status(404).json({ error: 'Admin no encontrado' })
     res.json(admin)
   } catch (err) {
@@ -13,13 +14,13 @@ export async function getPerfil(req, res) {
 export async function updatePerfil(req, res) {
   try {
     const { nombre, telefono, correo, password } = req.body
-    let admin = await Admin.findOne()
-    if (!admin) admin = new Admin({})
+    const admin = await Admin.findById(req.usuario?.id)
+    if (!admin) return res.status(404).json({ error: 'Admin no encontrado' })
 
     if (nombre !== undefined) admin.nombre = nombre
     if (telefono !== undefined) admin.telefono = telefono
     if (correo !== undefined) admin.correo = correo
-    if (password) admin.password = password
+    if (password) admin.password = await hashPassword(String(password))
 
     await admin.save()
 

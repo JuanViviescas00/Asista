@@ -6,12 +6,12 @@ import { autenticarJWT, verificarRol, verificarRolOLider, autenticarOpcional } f
 const router = Router()
 
 // Lectura de instructores (requiere autenticación)
-router.get('/', autenticarJWT, instructorController.getInstructores)
+router.get('/', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getInstructores)
 
 // Mutaciones de instructores (restringidas a Administrador)
 router.post('/',
   autenticarJWT,
-  verificarRol(['Administrador']),
+  verificarRolOLider(['Administrador']),
   validarCamposRequeridos(['nombres', 'apellidos', 'numeroDocumento', 'correo']),
   validarEmail('correo'),
   instructorController.createInstructor
@@ -41,5 +41,7 @@ router.get('/documento/:documento/credenciales-sofia', autenticarJWT, verificarR
 router.get('/todos-inasistencias-rpa', autenticarOpcional, instructorController.getTodosInasistenciasParaRPA)
 router.get('/documento/:documento/inasistencias-rpa', autenticarOpcional, instructorController.getInasistenciasParaRPA)
 router.post('/confirmar-subida-sofia', autenticarOpcional, instructorController.confirmarSubidaSofia)
+router.post('/ejecutar-rpa', autenticarJWT, verificarRol(['Administrador']), instructorController.ejecutarRobotRPA)
+router.get('/estado-rpa', autenticarJWT, verificarRol(['Administrador']), instructorController.getEstadoRobotRPA)
 
 export default router

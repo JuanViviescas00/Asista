@@ -23,6 +23,7 @@ const instructorSchema = new mongoose.Schema({
   motivo: { type: String, default: '' },
   codigoRecuperacion: { type: String, default: null },
   expiraCodigoRecuperacion: { type: Date, default: null },
+  intentosCodigoRecuperacion: { type: Number, default: 0 },
 }, { timestamps: true, collection: 'instructores' })
 
 // Normalización automática al crear o guardar

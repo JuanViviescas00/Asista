@@ -3,9 +3,23 @@ import Instructor from '../models/Instructor.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 import { generarToken } from '../middlewares/auth.js'
+import crypto from 'crypto'
 import { hashPassword, verifyAndUpgradePassword } from '../services/passwordService.js'
 import { encrypt } from '../services/cryptoService.js'
 import { enviarCorreoRecuperacion, enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
+
+const MIN_PASSWORD = 8
+const MAX_INTENTOS_CODIGO = 5
+const MENSAJE_CREDENCIALES = 'Usuario o contraseña incorrectos'
+
+function passwordValida(pwd) {
+  return typeof pwd === 'string' && pwd.length >= MIN_PASSWORD && pwd.length <= 128
+}
+
+function errorInterno(res, err) {
+  console.error('[Auth]', err)
+  return res.status(500).json({ error: 'Error interno del servidor' })
+}
 
 export async function login(req, res) {
   try {
@@ -256,6 +270,14 @@ export async function resetPassword(req, res) {
       return res.status(404).json({ error: 'No se encontró ninguna cuenta asociada a este correo' })
     }
 
+    if ((usuario.intentosCodigoRecuperacion || 0) >= MAX_INTENTOS_CODIGO) {
+      usuario.codigoRecuperacion = null
+      usuario.expiraCodigoRecuperacion = null
+      usuario.intentosCodigoRecuperacion = 0
+      await usuario.save()
+      return res.status(400).json({ error: 'Demasiados intentos fallidos. Solicita un nuevo código.' })
+    }
+
     if (!usuario.codigoRecuperacion || !usuario.expiraCodigoRecuperacion) {
       return res.status(400).json({ error: 'No hay una solicitud de recuperación activa para esta cuenta' })
     }
@@ -297,58 +319,46 @@ export async function resetPassword(req, res) {
 
 export async function cambiarPassword(req, res) {
   try {
-    const { id, rol, correo, passwordActual, nuevaPassword } = req.body
-    if (!passwordActual || !nuevaPassword) {
+    const { passwordActual, nuevaPassword } = req.body
+    if (typeof passwordActual !== 'string' || typeof nuevaPassword !== 'string' || !passwordActual) {
       return res.status(400).json({ error: 'Debes ingresar tu contraseña actual y la nueva contraseña.' })
     }
 
-    if (nuevaPassword.length < 6) {
-      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres.' })
+    if (!passwordValida(nuevaPassword)) {
+      return res.status(400).json({ error: `La nueva contraseña debe tener al menos ${MIN_PASSWORD} caracteres.` })
     }
 
+    // El usuario SIEMPRE es el del token JWT verificado (nunca id/rol/correo enviados en el body)
     let usuario = null
-    const rolNormalizado = (rol || '').toLowerCase()
-
-    // 1. Buscar según rol o id/correo
-    if (rolNormalizado.includes('admin') || (!rol && !id)) {
-      if (id) usuario = await Admin.findById(id)
-      if (!usuario && correo) usuario = await Admin.findOne({ correo })
-      if (!usuario) usuario = await Admin.findOne()
-    } else if (rolNormalizado.includes('instructor')) {
-      if (id) usuario = await Instructor.findById(id)
-      if (!usuario && correo) usuario = await Instructor.findOne({ correo })
-    } else {
-      if (id) {
-        usuario = await Admin.findById(id) || await Instructor.findById(id)
-      } else if (correo) {
-        usuario = await Admin.findOne({ correo }) || await Instructor.findOne({ correo })
-      }
+    if (req.usuario?.rol === 'Administrador') {
+      usuario = await Admin.findById(req.usuario.id)
+    } else if (req.usuario?.rol === 'Instructor') {
+      usuario = await Instructor.findById(req.usuario.id)
     }
 
     if (!usuario) {
-      return res.status(404).json({ error: 'Usuario no encontrado.' })
+      return res.status(404).json({ error: 'Usuario no encontrado' })
     }
 
-    // 2. Verificar si la contraseña actual coincide mediante verifyAndUpgradePassword
-    const passOk = await verifyAndUpgradePassword(usuario, passwordActual)
-    if (!passOk) {
-      return res.status(400).json({ error: 'La contraseña actual no coincide. Verifica e intenta de nuevo.' })
+    const { match, needsRehash } = await verifyAndUpgradePassword(passwordActual, usuario.password)
+    if (!match) {
+      return res.status(400).json({ error: 'La contraseña actual ingresada es incorrecta' })
     }
 
-    // 3. Hashear y guardar la nueva contraseña con bcrypt
     usuario.password = await hashPassword(nuevaPassword)
+    usuario.debeCambiarPassword = false
     await usuario.save()
 
     if (usuario.correo) {
       const nombreUsuario = usuario.nombre || `${usuario.nombres || ''} ${usuario.apellidos || ''}`.trim() || 'Usuario'
       enviarCorreoConfirmacionCambioPassword(usuario.correo, nombreUsuario).catch(err => {
-        console.error('[Email] Error al enviar confirmación de cambio de contraseña (cambiarPassword):', err.message)
+        console.error('[Email] Error al enviar confirmación de cambio de contraseña:', err.message)
       })
     }
 
     return res.json({ ok: true, message: '¡Contraseña actualizada exitosamente con cifrado seguro!' })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    return errorInterno(res, err)
   }
 }
 

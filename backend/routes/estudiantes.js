@@ -2,18 +2,18 @@ import { Router } from 'express'
 import * as estudianteController from '../controllers/estudianteController.js'
 import * as permisoDatosController from '../controllers/permisoDatosController.js'
 import { validarCamposRequeridos, validarEmail } from '../middlewares/validator.js'
-import { autenticarJWT, verificarRol, verificarRolOLider, autenticarOpcional } from '../middlewares/auth.js'
+import { autenticarJWT, verificarRol, verificarRolOLider, autenticarJWTODispositivo } from '../middlewares/auth.js'
 
 const router = Router()
 
 // Operaciones de consulta (accesible con sesión o desde Kiosco de aula)
-router.get('/', autenticarOpcional, estudianteController.getEstudiantes)
-router.get('/:id/asistencia-resumen', autenticarOpcional, estudianteController.getAsistenciaResumen)
+router.get('/', autenticarJWTODispositivo(), estudianteController.getEstudiantes)
+router.get('/:id/asistencia-resumen', autenticarJWT, estudianteController.getAsistenciaResumen)
 
 // Operaciones CRUD de aprendices (restringidas a Administrador)
 router.post('/',
   autenticarJWT,
-  verificarRol(['Administrador']),
+  verificarRolOLider(['Administrador']),
   validarCamposRequeridos(['nombres', 'apellidos', 'numeroDocumento', 'fichaId']),
   validarEmail('correo'),
   estudianteController.createEstudiante
