@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
@@ -26,6 +26,30 @@ const asistenciasFicha = ref([])
 const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
+
+// Selector superior de fichas
+function onSelectFicha(id) {
+  const ficha = misFichas.value.find(f => String(f._id) === String(id))
+  if (ficha && String(fichaSeleccionada.value?._id) !== String(ficha._id)) {
+    seleccionarFicha(ficha)
+  }
+}
+
+// Título de la página según la acción activa
+const tituloVista = computed(() => {
+  const f = fichaSeleccionada.value
+  const detalle = f ? `Ficha ${f.codigoFicha} · ${f.nombrePrograma}` : ''
+  if (!f) {
+    return { icono: 'fichas', titulo: 'Mis Fichas / Grupos', subtitulo: 'Selecciona una ficha para gestionar su asistencia.' }
+  }
+  if (vistaFicha.value === 'editar_asistencia') {
+    return { icono: 'historial', titulo: 'Historial de Asistencias', subtitulo: detalle }
+  }
+  if (vistaFicha.value === 'docentes') {
+    return { icono: 'docentes', titulo: 'Equipo Docente', subtitulo: detalle }
+  }
+  return { icono: 'asistencia', titulo: 'Tomar Asistencia', subtitulo: detalle }
+})
 
 // Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
@@ -155,6 +179,20 @@ async function restaurarEstadoClase() {
   }
 }
 
+const alternandoSesion = ref(false)
+
+// Switch de pase de lista: si está apagado lo enciende (activa la clase) y viceversa.
+async function alternarSesionRemota() {
+  if (alternandoSesion.value || finalizando.value) return
+  alternandoSesion.value = true
+  try {
+    if (sesionRemotaActiva.value) await detenerSesionRemotaDocente()
+    else await iniciarSesionRemotaDocente()
+  } finally {
+    alternandoSesion.value = false
+  }
+}
+
 async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
   try {
@@ -205,9 +243,6 @@ async function cargarMisFichas() {
   try {
     if (usuario.value.id) {
       misFichas.value = await api.fichas.getMisFichas(usuario.value.id)
-      if (misFichas.value.length > 0) {
-        seleccionarFicha(misFichas.value[0])
-      }
     } else {
       misFichas.value = await api.fichas.getAll()
     }
@@ -237,6 +272,7 @@ async function cargarDatosFicha(fichaId) {
     const estRes = await api.estudiantes.getAll({ fichaId, estado: 'Activo' }).catch(e => { console.error('Error est:', e); return [] })
     const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => { console.error('Error asis:', e); return [] })
     const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
+    const excRes = await api.excusas.getAll({ fichaId }).catch(e => { console.error('Error excusas:', e); return [] })
 
     estudiantesFicha.value = Array.isArray(estRes) ? estRes : []
     const sFichaId = String(fichaId)
@@ -245,6 +281,7 @@ async function cargarDatosFicha(fichaId) {
       return aFicha === sFichaId
     })
     memoriaBiometricaRAM.value = Array.isArray(bioRes) ? bioRes : []
+    excusasFicha.value = Array.isArray(excRes) ? excRes : []
     inicializarAsistenciaDia()
   } catch (err) {
     console.error('Error al cargar detalle de ficha:', err)
@@ -418,7 +455,13 @@ function irAHoy() {
   inicializarAsistenciaDia()
 }
 
+function avisarJornadaAjena() {
+  const nombre = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
+  showToast(`Esta jornada fue registrada por ${nombre}. Solo ese docente puede modificarla.`, 'warning')
+}
+
 function abrirModalInhabilitar() {
+  if (jornadaEsDeOtroDocente.value) { avisarJornadaAjena(); return }
   if (fechaAsistencia.value > fechaHoyMax.value) {
     showToast('No es posible inhabilitar fechas futuras.', 'warning')
     return
@@ -429,6 +472,7 @@ function abrirModalInhabilitar() {
 }
 
 async function confirmarInhabilitarJornada() {
+  if (jornadaEsDeOtroDocente.value) { showInhabilitarModal.value = false; avisarJornadaAjena(); return }
   inhabilitando.value = true
   const motivoFinal = motivoInhabilitar.value === 'Otro' ? (motivoInhabilitarOtro.value.trim() || 'Jornada no impartida') : motivoInhabilitar.value
   const fecha = fechaAsistencia.value
@@ -466,6 +510,7 @@ async function confirmarInhabilitarJornada() {
 }
 
 async function reactivarJornada() {
+  if (jornadaEsDeOtroDocente.value) { avisarJornadaAjena(); return }
   inhabilitando.value = true
   const fecha = fechaAsistencia.value
   try {
@@ -676,20 +721,27 @@ function inicializarAsistenciaDia() {
     // Verificación de propiedad docente (Solo lectura para otros docentes)
     const instructorAsignado = existente?.instructorId
     const instructorAsignadoId = instructorAsignado ? String(instructorAsignado._id || instructorAsignado) : null
-    const esMio = !existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId)
+    // Si otro docente ya es el responsable del día, ninguna fila es editable (ni siquiera las aún sin registro)
+    const jornadaAjena = !esAdmin && jornadaEsDeOtroDocente.value
+    const esMio = !jornadaAjena && (!existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId))
 
     let nombreDocenteCreador = ''
     if (!esMio && instructorAsignado) {
       if (typeof instructorAsignado === 'object' && instructorAsignado.nombres) {
         nombreDocenteCreador = `${instructorAsignado.nombres} ${instructorAsignado.apellidos || ''}`.trim()
       } else {
-        nombreDocenteCreador = 'otro docente'
+        nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
       }
+    } else if (!esMio && jornadaAjena) {
+      nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
     }
 
     registros[est._id] = {
       estado,
       excusa: existente ? existente.estado === 'Excusada' : false,
+      motivoExcusa: existente && existente.estado === 'Excusada'
+        ? (buscarExcusaAprobada(est._id, hoy, currentFichaId)?.motivo || '')
+        : '',
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
@@ -827,6 +879,7 @@ async function enviarEstado(estId) {
       }
       draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, fecha)
       setEstadoFila(estId, 'guardado')
+      await sincronizarMotivoExcusa(estId, item)
       return
     } catch (err) {
       if (err.status === 409) {
@@ -868,6 +921,7 @@ async function procesarColaSync(estId, entrada, fichaId, fecha) {
 function sincronizarCambioNube(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return
+  if (!reg.esMio) return
   if (fechaAsistencia.value > fechaHoyMax.value) return
 
   const fichaId = fichaSeleccionada.value._id
@@ -930,33 +984,139 @@ async function marcarFalta(estId) {
   await sincronizarCambioNube(estId)
 }
 
-async function toggleExcusa(estId) {
+// --- Descripción de la excusa (modal) ---
+const showExcusaModal = ref(false)
+const excusaEstId = ref('')
+const excusaTexto = ref('')
+const excusaError = ref('')
+const excusaEditando = ref(false)
+const excusaTextareaRef = ref(null)
+const EXCUSA_MAX = 300
+
+const excusaEstudiante = computed(() => estudiantesFicha.value.find(e => String(e._id) === String(excusaEstId.value)) || null)
+
+// Excusa aprobada (la más reciente) de un aprendiz en una fecha y ficha
+function buscarExcusaAprobada(estId, fecha, fichaId) {
+  return excusasFicha.value.find(e =>
+    String(e.estudianteId?._id || e.estudianteId) === String(estId) &&
+    e.fechaInasistencia === fecha &&
+    e.estado === 'Aprobada' &&
+    (!fichaId || String(e.fichaId?._id || e.fichaId) === String(fichaId))
+  ) || null
+}
+
+function validarEdicionExcusa(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para registrar excusas.', 'warning')
-    return
+    return null
   }
   const reg = asistenciaDia.value[estId]
-  if (!reg) return
+  if (!reg) return null
 
   if (!reg.esMio) {
     showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
-    return
+    return null
   }
 
   if (reg.subidoSofia) {
     showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
+    return null
+  }
+  return reg
+}
+
+async function abrirModalExcusa(estId, editando = false) {
+  const reg = validarEdicionExcusa(estId)
+  if (!reg) return
+  excusaEstId.value = estId
+  excusaEditando.value = editando
+  excusaTexto.value = editando ? (reg.motivoExcusa || '') : ''
+  excusaError.value = ''
+  showExcusaModal.value = true
+  await nextTick()
+  excusaTextareaRef.value?.focus()
+}
+
+function cerrarModalExcusa() {
+  showExcusaModal.value = false
+  excusaEstId.value = ''
+  excusaTexto.value = ''
+  excusaError.value = ''
+}
+
+async function confirmarExcusa() {
+  const estId = excusaEstId.value
+  const reg = validarEdicionExcusa(estId)
+  if (!reg) { cerrarModalExcusa(); return }
+
+  const texto = excusaTexto.value.trim()
+  if (texto.length < 5) {
+    excusaError.value = 'Describe brevemente el motivo de la excusa (mínimo 5 caracteres).'
     return
   }
 
-  reg.excusa = !reg.excusa
-  if (reg.excusa) {
-    reg.estado = 'Excusada'
-  } else {
-    reg.estado = reg.previo ? 'Falta' : 'Presente'
+  reg.motivoExcusa = texto
+  reg.excusa = true
+  reg.estado = 'Excusada'
+  reg.horasFallidas = horasAuto(reg)
+  cerrarModalExcusa()
+
+  await sincronizarCambioNube(estId)
+}
+
+// Clic en el checkbox de excusa: al activarla se pide la descripción; al desactivarla se retira
+async function toggleExcusa(estId) {
+  const reg = validarEdicionExcusa(estId)
+  if (!reg) return
+
+  if (!reg.excusa) {
+    await abrirModalExcusa(estId, false)
+    return
   }
+
+  reg.excusa = false
+  reg.motivoExcusa = ''
+  reg.estado = reg.previo ? 'Falta' : 'Presente'
   reg.horasFallidas = horasAuto(reg)
 
   await sincronizarCambioNube(estId)
+}
+
+function editarExcusa(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg?.excusa) return
+  abrirModalExcusa(estId, true)
+}
+
+// Guarda (o retira) la descripción de la excusa usando los endpoints de excusas ya existentes
+async function sincronizarMotivoExcusa(estId, item) {
+  const reg = asistenciaDia.value[estId]
+  const existente = buscarExcusaAprobada(estId, item.fecha, item.fichaId)
+  try {
+    if (item.estado === 'Excusada') {
+      const motivo = (reg?.motivoExcusa || '').trim()
+      if (!motivo) return
+      if (existente && existente.motivo === motivo) return
+      if (existente) {
+        await api.excusas.rechazar(existente._id, 'Reemplazada por una descripción actualizada del instructor')
+        existente.estado = 'Rechazada'
+      }
+      const nueva = await api.excusas.create({
+        estudianteId: estId,
+        fichaId: item.fichaId,
+        fechaInasistencia: item.fecha,
+        motivo,
+        estado: 'Aprobada',
+      })
+      if (nueva?._id) excusasFicha.value = [nueva, ...excusasFicha.value]
+    } else if (existente) {
+      await api.excusas.rechazar(existente._id, 'Excusa retirada por el instructor')
+      existente.estado = 'Rechazada'
+    }
+  } catch (err) {
+    console.warn('[Excusa] No se pudo sincronizar la descripción:', err.message)
+    showToast('La asistencia se guardó, pero no se pudo guardar la descripción de la excusa.', 'warning')
+  }
 }
 
 // Contadores de asistencia del día
@@ -1124,11 +1284,12 @@ function descargarExcel(data, nombreArchivo) {
       </div>
     </Transition>
 
-    <!-- Encabezado del Instructor -->
-    <div class="page-header">
-      <h1>Bienvenido, {{ usuario.nombre }}</h1>
-      <p>Panel de Control de Instructor SENA</p>
-      <div class="header-role-pill">Docente</div>
+    <!-- Título dinámico según la acción activa -->
+    <div class="instructor-titlebar">
+      <div class="titlebar-text">
+        <h1>{{ tituloVista.titulo }}</h1>
+        <p>{{ tituloVista.subtitulo }}</p>
+      </div>
     </div>
 
     <div v-if="loading" class="loading-box">
@@ -1139,37 +1300,30 @@ function descargarExcel(data, nombreArchivo) {
       {{ error }}
     </div>
 
-    <div v-else class="content-layout">
-      <!-- Selector de Fichas -->
-      <div class="fichas-sidebar">
-        <h3>Mis Fichas Asignadas</h3>
-        <div v-if="misFichas.length === 0" class="no-fichas">
-          No tienes fichas asignadas actualmente. Contacta al Administrador.
-        </div>
-        <div
-          v-for="ficha in misFichas"
-          :key="ficha._id"
-          class="ficha-card"
-          :class="{ active: fichaSeleccionada && fichaSeleccionada._id === ficha._id }"
-          @click="seleccionarFicha(ficha)"
+    <template v-else>
+    <!-- Filtro superior de fichas -->
+    <div v-if="misFichas.length > 0" class="fichas-filtro">
+      <div class="filtro-select-wrap">
+        <label class="filtro-label" for="select-ficha">Ficha</label>
+        <select
+          id="select-ficha"
+          class="filtro-select"
+          :value="fichaSeleccionada ? fichaSeleccionada._id : ''"
+          @change="onSelectFicha($event.target.value)"
         >
-          <div class="ficha-card-header">
-            <span class="ficha-code">Ficha {{ ficha.codigoFicha }}</span>
-            <!-- Badge de Liderazgo -->
-            <span v-if="ficha.esLider" class="badge badge-lider" title="Docente Líder de esta Ficha">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
-              Líder
-            </span>
-            <span v-else class="badge badge-comun" title="Docente Común en esta Ficha">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
-              Común
-            </span>
-          </div>
-          <div class="ficha-title">{{ ficha.nombrePrograma }}</div>
-          <div class="ficha-sub">Aula: {{ ficha.aulaAsignada }} | {{ ficha.jornada }}</div>
-        </div>
+          <option value="" disabled>Seleccione la ficha</option>
+          <option v-for="ficha in misFichas" :key="ficha._id" :value="ficha._id">
+            Ficha {{ ficha.codigoFicha }} · {{ ficha.nombrePrograma }} · Aula {{ ficha.aulaAsignada }} · {{ ficha.jornada }}{{ ficha.esLider ? ' · Líder' : '' }}
+          </option>
+        </select>
       </div>
+    </div>
 
+    <div v-else class="no-fichas">
+      No tienes fichas asignadas actualmente. Contacta al Administrador.
+    </div>
+
+    <div class="content-layout">
       <!-- Detalle y Operaciones de la Ficha Seleccionada -->
       <div v-if="fichaSeleccionada" class="ficha-detail">
         <div class="ficha-banner">
@@ -1209,6 +1363,21 @@ function descargarExcel(data, nombreArchivo) {
             >
               <img :src="iconoEquipoDocente" alt="Equipo Docente" class="tab-icon-img" width="16" height="16" />
             </button>
+
+            <!-- Botón-switch de pase de lista: rojo = apagado, verde = encendido -->
+            <button
+              type="button"
+              class="switch-pase-lista"
+              :class="sesionRemotaActiva ? 'is-on' : 'is-off'"
+              role="switch"
+              :aria-checked="sesionRemotaActiva"
+              :disabled="alternandoSesion || finalizando || (!sesionRemotaActiva && jornadaInhabilitada)"
+              :title="sesionRemotaActiva ? 'Pase de lista encendido: clic para apagar' : 'Pase de lista apagado: clic para encender'"
+              @click="alternarSesionRemota"
+            >
+              <svg v-if="!sesionRemotaActiva" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
           </div>
         </div>
 
@@ -1216,49 +1385,6 @@ function descargarExcel(data, nombreArchivo) {
         <!-- VISTA 1: TOMAR ASISTENCIA (POR DÍAS)      -->
         <!-- ========================================= -->
         <div v-if="vistaFicha === 'asistencia'" class="section-body">
-          <!-- CENTRO DE CONTROL REMOTO -->
-          <div class="remote-control-panel">
-            <div class="remote-control-header">
-              <div class="remote-control-info">
-                <div class="remote-status-badge" :class="sesionRemotaActiva ? 'badge-live' : 'badge-idle'">
-                  <span class="live-dot" :class="{ 'live-dot-pulsing': sesionRemotaActiva }"></span>
-                  <span>{{ sesionRemotaActiva ? 'CLASE EN VIVO (PASE DE LISTA REMOTO ACTIVO)' : 'PASE DE LISTA REMOTO EN ESPERA' }}</span>
-                </div>
-                <p class="remote-desc">
-                  {{ sesionRemotaActiva 
-                    ? 'El Kiosco del aula está recibiendo huellas de los aprendices. Las marcaciones se sincronizan aquí en tiempo real.' 
-                    : 'Inicia el pase de lista desde este dispositivo móvil/web para activar automáticamente el lector en el computador del aula.' 
-                  }}
-                </p>
-              </div>
-
-              <div class="remote-control-actions">
-                <!-- Botón Iniciar / Finalizar Remoto -->
-                <button
-                  v-if="!sesionRemotaActiva"
-                  type="button"
-                  class="btn-remote-start"
-                  @click="iniciarSesionRemotaDocente"
-                  :disabled="jornadaInhabilitada"
-                  title="Iniciar pase de lista"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="btn-remote-stop"
-                  @click="detenerSesionRemotaDocente"
-                  :disabled="finalizando"
-                  title="Finalizar pase de lista"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                </button>
-
-              </div>
-            </div>
-          </div>
-
           <div class="section-header-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
               <h4>Tomar Asistencia</h4>
@@ -1338,7 +1464,7 @@ function descargarExcel(data, nombreArchivo) {
                 type="button"
                 class="btn-inhabilitar-action"
                 @click="abrirModalInhabilitar"
-                :disabled="fechaAsistencia > fechaHoyMax"
+                :disabled="fechaAsistencia > fechaHoyMax || jornadaEsDeOtroDocente"
                 title="Inhabilitar día"
                 style="background: #fff1f2; border: 1.5px solid #fecdd3; color: #e11d48; font-weight: 600; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
@@ -1349,7 +1475,7 @@ function descargarExcel(data, nombreArchivo) {
                 type="button"
                 class="btn-reactivar-action"
                 @click="reactivarJornada"
-                :disabled="inhabilitando"
+                :disabled="inhabilitando || jornadaEsDeOtroDocente"
                 title="Reactivar día"
                 style="background: #f0fdf4; border: 1.5px solid #bbf7d0; color: #16a34a; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
@@ -1378,7 +1504,7 @@ function descargarExcel(data, nombreArchivo) {
             <button
               class="btn btn-reactivar-hud"
               @click="reactivarJornada"
-              :disabled="inhabilitando"
+              :disabled="inhabilitando || jornadaEsDeOtroDocente"
               title="Reactivar día"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -1520,9 +1646,22 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
                       Inhabilitada
                     </span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge badge-warning">
+                    <span
+                      v-else-if="asistenciaDia[est._id]?.excusa"
+                      class="badge badge-warning badge-excusa-tip"
+                      tabindex="0"
+                      role="button"
+                      :aria-label="'Excusada: ' + (asistenciaDia[est._id]?.motivoExcusa || 'sin descripción')"
+                      @click="editarExcusa(est._id)"
+                      @keydown.enter="editarExcusa(est._id)"
+                    >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                       Excusada
+                      <span class="excusa-tooltip" role="tooltip">
+                        <strong>Motivo de la excusa</strong>
+                        <span>{{ asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada' }}</span>
+                        <em v-if="asistenciaDia[est._id]?.esMio && !asistenciaDia[est._id]?.subidoSofia">Clic para editar</em>
+                      </span>
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge badge-danger">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
@@ -1595,7 +1734,7 @@ function descargarExcel(data, nombreArchivo) {
                   <div class="mob-status-badge">
                     <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
                     <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
+                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada'" @click="editarExcusa(est._id)">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
                     <span v-else class="badge-mob-pres">Presente</span>
@@ -1813,11 +1952,85 @@ function descargarExcel(data, nombreArchivo) {
         </div>
 
       </div>
+
+      <!-- Estado de espera: aún no se ha elegido una ficha -->
+      <div v-else-if="misFichas.length > 0" class="ficha-espera" aria-live="polite">
+        <!-- Maqueta fantasma de lo que aparecerá al elegir la ficha -->
+        <div class="espera-fantasma" aria-hidden="true">
+          <div class="sk sk-title"></div>
+          <div class="sk sk-pill"></div>
+          <div class="sk-row">
+            <div class="sk sk-tab"></div>
+            <div class="sk sk-tab"></div>
+            <div class="sk sk-tab"></div>
+            <div class="sk sk-tab sk-tab-end"></div>
+          </div>
+          <div class="sk-row sk-chips">
+            <div class="sk sk-chip"></div>
+            <div class="sk sk-chip"></div>
+            <div class="sk sk-chip"></div>
+            <div class="sk sk-chip"></div>
+          </div>
+          <div class="sk sk-line"></div>
+          <div class="sk sk-line"></div>
+          <div class="sk sk-line sk-line-short"></div>
+        </div>
+
+        <!-- Indicador central -->
+        <div class="espera-centro">
+          <div class="espera-icono">
+            <span class="espera-ring"></span>
+            <span class="espera-ring espera-ring-2"></span>
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0 3.5-.5 6-2 8"/><path d="M8 15c.5-1 .8-2.6.8-4a3.2 3.2 0 0 1 6.4 0c0 2.6-.4 5.2-1.4 7.4"/><path d="M5 12a7 7 0 0 1 14 0c0 2-.2 3.8-.7 5.5"/><path d="M3.5 9.5A9 9 0 0 1 20.5 9.5"/></svg>
+          </div>
+          <span class="espera-badge">
+            <span class="espera-dot"></span>
+            Esperando selección de ficha
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- ========================================= -->
     <!-- MODAL INHABILITAR JORNADA                 -->
     <!-- ========================================= -->
+    <!-- MODAL: DESCRIPCIÓN DE LA EXCUSA -->
+    <div v-if="showExcusaModal" class="modal-overlay" @click.self="cerrarModalExcusa" @keydown.esc="cerrarModalExcusa">
+      <div class="modal excusa-modal" role="dialog" aria-modal="true" aria-labelledby="excusa-modal-titulo">
+        <h3 id="excusa-modal-titulo" class="excusa-modal-titulo">
+          <span class="excusa-modal-icono" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </span>
+          {{ excusaEditando ? 'Editar descripción de la excusa' : 'Registrar excusa' }}
+        </h3>
+        <p class="excusa-modal-sub">
+          Aprendiz: <strong>{{ excusaEstudiante ? `${excusaEstudiante.nombres} ${excusaEstudiante.apellidos}` : '' }}</strong><br>
+          Fecha: <strong>{{ fechaAsistencia }}</strong>
+        </p>
+
+        <label class="excusa-modal-label" for="excusa-texto">¿Por qué se le coloca la excusa al aprendiz?</label>
+        <textarea
+          id="excusa-texto"
+          ref="excusaTextareaRef"
+          v-model="excusaTexto"
+          class="form-input excusa-modal-textarea"
+          :maxlength="EXCUSA_MAX"
+          rows="4"
+          placeholder="Ej: Cita médica con soporte de incapacidad, calamidad doméstica, permiso aprobado por coordinación..."
+          @input="excusaError = ''"
+        ></textarea>
+        <div class="excusa-modal-pie">
+          <span v-if="excusaError" class="excusa-modal-error">{{ excusaError }}</span>
+          <span class="excusa-modal-contador">{{ excusaTexto.length }} / {{ EXCUSA_MAX }}</span>
+        </div>
+
+        <div class="modal-actions excusa-modal-acciones">
+          <button type="button" class="btn btn-outline" @click="cerrarModalExcusa">Cancelar</button>
+          <button type="button" class="btn btn-primary" @click="confirmarExcusa">Guardar</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showInhabilitarModal" class="modal-overlay" @click.self="showInhabilitarModal = false">
       <div class="modal" style="max-width: 480px; text-align: left;">
         <h3 style="display: flex; align-items: center; gap: 8px; color: #9a3412;">
@@ -1876,7 +2089,9 @@ function descargarExcel(data, nombreArchivo) {
           </button>
         </div>
       </div>
+
     </div>
+    </template>
 
   </div>
 </template>

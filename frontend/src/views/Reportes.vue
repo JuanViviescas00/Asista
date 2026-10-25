@@ -1,37 +1,40 @@
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import api from '../services/index.js'
 import StatCard from '../components/StatCard.vue'
 import {
-  analizarInasistenciasGraves,
   LIMITE_DIAS_CONSECUTIVOS,
   LIMITE_DIAS_NO_CONSECUTIVOS,
   rachaMaximaConsecutiva,
 } from '../utils/inasistencias.js'
 
-// Parámetros principales de búsqueda
+// ---------- Estado del formulario ----------
+const tipoReporte = ref('aprendiz') // 'aprendiz' | 'ficha' | 'desercion'
 const filtroFicha = ref(null)
-const filtroInstructor = ref('todos') // 'todos' o ID del instructor
-const filtroEstudiante = ref('todos') // 'todos' o ID del estudiante
-const busquedaTexto = ref('') // Búsqueda libre por nombre, documento o docente
+const busqueda = ref('')            // nombre o documento del aprendiz
+const estudianteSel = ref(null)     // aprendiz elegido de la lista
 const fechaDesde = ref('')
 const fechaHasta = ref('')
-const formato = ref('pdf')
-const showPreview = ref(false)
-const filtroTipoInasistencia = ref('todas') // 'todas', 'sin_excusa', 'con_excusa'
-const vistaReporte = ref('aprendices') // 'aprendices', 'docentes', 'sesiones'
+const listaAbierta = ref(false)
+const mensajeError = ref('')
+const cargando = ref(false)
 
+// ---------- Datos ----------
 const fichasList = ref([])
-const todosInstructores = ref([])
-const todosEstudiantes = ref([])
-const todasAsistencias = ref([])
+const estudiantesFicha = ref([])
+const instructores = ref([])
+const asistenciasFicha = ref([])    // asistencias de la ficha en el rango elegido
+const reporte = ref(null)           // snapshot de la búsqueda generada (incluye la lista de aprendices)
+const diaSeleccionado = ref(null)
+const excusasFicha = ref([])        // excusas radicadas de la ficha (de ahí sale el motivo)
+const calendarioEst = ref(null)     // aprendiz cuyo calendario se muestra
+const detalleEst = ref(null)        // fila abierta en el modal
 
 const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : { id: '', rol: 'Administrador' })
-
 const esInstructor = computed(() => usuario.value?.rol === 'Instructor')
 
-// Fichas disponibles: todas (Admin) o todas en las que el docente dicta clase (Líder o de Apoyo).
+// Fichas disponibles: todas (Admin) o aquellas en las que el docente dicta clase (Líder o Apoyo)
 const fichasDisponibles = computed(() => {
   if (!esInstructor.value) return fichasList.value
   const miId = String(usuario.value?.id || '')
@@ -45,1024 +48,979 @@ const fichasDisponibles = computed(() => {
     return f.esLider || esLider || esDocente
   })
 })
-const fichasLideradas = fichasDisponibles
 
 onMounted(async () => {
   try {
-    const [fichas, instructores, estudiantes, asistencias] = await Promise.all([
+    const [fichas, insts] = await Promise.all([
       api.fichas.getAll(),
       api.instructores.getAll().catch(() => []),
-      api.estudiantes.getAll(),
-      api.asistencias.getAll()
     ])
     fichasList.value = fichas
-    todosInstructores.value = instructores
-    todosEstudiantes.value = estudiantes
-    todasAsistencias.value = asistencias
+    instructores.value = insts
   } catch (e) {
     console.error('Error al cargar datos de reportes:', e)
+    mensajeError.value = 'No se pudieron cargar las fichas. Intenta recargar la página.'
   }
 })
 
-const fichaSeleccionada = computed(() => fichasList.value.find(f => String(f._id) === String(filtroFicha.value)))
-
-const horasPorJornada = computed(() => {
-  const j = (fichaSeleccionada.value?.jornada || '').toLowerCase()
-  if (j.includes('noche') || j.includes('nocturna')) return 5
-  return 6 // Mañana, Tarde o Mixta estándar 6 horas
-})
-
-const estudiantesFicha = computed(() => {
-  if (!filtroFicha.value) return []
-  return todosEstudiantes.value.filter(e => String(e.fichaId?._id || e.fichaId) === String(filtroFicha.value))
-})
-
-// Asistencias filtradas por Ficha, Rango de Fecha y Opcionalmente por Instructor
-const asistenciasFichaFiltradas = computed(() => {
-  if (!filtroFicha.value) return []
-  return todasAsistencias.value.filter(a => {
-    if (String(a.fichaId?._id || a.fichaId) !== String(filtroFicha.value)) return false
-    if (fechaDesde.value && a.fecha < fechaDesde.value) return false
-    if (fechaHasta.value && a.fecha > fechaHasta.value) return false
-
-    if (filtroInstructor.value !== 'todos') {
-      const instId = a.instructorId?._id || a.instructorId
-      if (String(instId) !== String(filtroInstructor.value)) return false
-    }
-    return true
-  })
-})
-
-// Lista de instructores que han dictado clases a esta Ficha
-const instructoresDeLaFicha = computed(() => {
-  if (!filtroFicha.value) return []
-  const instIds = new Set()
-  todasAsistencias.value
-    .filter(a => String(a.fichaId?._id || a.fichaId) === String(filtroFicha.value))
-    .forEach(a => {
-      const id = a.instructorId?._id || a.instructorId
-      if (id) instIds.add(String(id))
-    })
-
-  return todosInstructores.value.filter(i => instIds.has(String(i._id)))
-})
-
-const fechasUnicas = computed(() => {
-  let fechas = [...new Set(asistenciasFichaFiltradas.value.map(a => a.fecha))]
-  return fechas.sort()
-})
-
-// Helper para extraer nombre del instructor de un registro
-function getNombreInstructor(reg) {
-  if (!reg || !reg.instructorId) return 'Sin asignar / Registro Kiosco'
-  if (typeof reg.instructorId === 'object') {
-    return `${reg.instructorId.nombres || ''} ${reg.instructorId.apellidos || ''}`.trim() || reg.instructorId.nombre || 'Instructor'
-  }
-  const inst = todosInstructores.value.find(i => String(i._id) === String(reg.instructorId))
-  if (inst) return `${inst.nombres} ${inst.apellidos}`
-  return 'Instructor'
-}
-
-// 1. DATOS POR APRENDIZ (CON DETALLE DE DOCENTE EN CADA INASISTENCIA)
-const datosReporteAprendices = computed(() => {
-  const hDia = horasPorJornada.value
-  return estudiantesFicha.value.map(est => {
-    let presentes = 0, tardanzas = 0, fallasSinExcusa = 0, fallasConExcusa = 0
-    let horasTardanza = 0
-    const detallesInasistencias = []
-
-    fechasUnicas.value.forEach(fecha => {
-      const reg = asistenciasFichaFiltradas.value.find(a => (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) && a.fecha === fecha)
-      if (reg) {
-        const docenteNombre = getNombreInstructor(reg)
-        if (reg.estado === 'Presente') {
-          presentes++
-        } else if (reg.estado === 'Tardanza') {
-          tardanzas++
-          horasTardanza += Number(reg.horasTardanza) || 0
-        } else if (reg.estado === 'Excusada') {
-          fallasConExcusa++
-          detallesInasistencias.push({
-            fecha,
-            docente: docenteNombre,
-            tipo: 'Excusada',
-            horas: hDia,
-            motivo: reg.motivo || reg.motivoInhabilitacion || 'Sin motivo detallado'
-          })
-        } else if (reg.estado === 'Falta' || reg.estado === 'Ausente') {
-          fallasSinExcusa++
-          detallesInasistencias.push({
-            fecha,
-            docente: docenteNombre,
-            tipo: 'Injustificada',
-            horas: hDia,
-            motivo: 'Falta injustificada'
-          })
-        }
-      }
-    })
-
-    const totalDias = presentes + tardanzas + fallasSinExcusa + fallasConExcusa
-    const porcentaje = totalDias > 0 ? Math.round(((presentes + (tardanzas * 0.5)) / totalDias) * 100) : 0
-
-    const horasSinExcusa = fallasSinExcusa * hDia
-    const horasConExcusa = fallasConExcusa * hDia
-    const horasTotalesFalladas = horasSinExcusa + horasConExcusa
-
-    // Cálculo de criticidad y riesgo de deserción
-    const fechasFallasSinExcusa = detallesInasistencias.filter(d => d.tipo === 'Injustificada').map(d => d.fecha).sort()
-    const rachaMaxima = rachaMaximaConsecutiva(fechasFallasSinExcusa)
-    const consecutivoGrave = rachaMaxima >= LIMITE_DIAS_CONSECUTIVOS
-    const noConsecutivoGrave = fallasSinExcusa >= LIMITE_DIAS_NO_CONSECUTIVOS
-    const nivelRiesgo = consecutivoGrave ? 'Crítico (3+ consecutivos)' : (noConsecutivoGrave ? 'Alerta (5+ acumulados)' : 'Bajo control')
-
-    return {
-      estudiante: est,
-      presentes,
-      tardanzas,
-      horasTardanza,
-      fallasSinExcusa,
-      fallasConExcusa,
-      horasSinExcusa,
-      horasConExcusa,
-      horasTotalesFalladas,
-      detallesInasistencias,
-      totalDias,
-      porcentaje,
-      rachaMaxima,
-      consecutivoGrave,
-      noConsecutivoGrave,
-      nivelRiesgo,
-    }
-  })
-})
-
-// FILTRADO DINÁMICO POR BÚSQUEDA DE TEXTO, ESTUDIANTE, DOCENTE Y HORAS
-const datosReporteAprendicesFiltrados = computed(() => {
-  let lista = datosReporteAprendices.value
-
-  // Filtro por estudiante seleccionado en el dropdown
-  if (filtroEstudiante.value !== 'todos') {
-    lista = lista.filter(r => String(r.estudiante._id) === String(filtroEstudiante.value))
-  }
-
-  // Filtro por tipo de inasistencia (horas y criticidad)
-  if (filtroTipoInasistencia.value === 'sin_excusa') {
-    lista = lista.filter(r => r.horasSinExcusa > 0)
-  } else if (filtroTipoInasistencia.value === 'con_excusa') {
-    lista = lista.filter(r => r.horasConExcusa > 0)
-  } else if (filtroTipoInasistencia.value === 'consecutivos_criticos') {
-    lista = lista.filter(r => r.consecutivoGrave)
-  } else if (filtroTipoInasistencia.value === 'acumulados_graves') {
-    lista = lista.filter(r => r.noConsecutivoGrave)
-  }
-
-  // Búsqueda de texto libre (Nombre del estudiante, documento, o nombre del profesor)
-  const q = busquedaTexto.value.trim().toLowerCase()
-  if (q) {
-    lista = lista.filter(r => {
-      const nombreEst = `${r.estudiante.nombres} ${r.estudiante.apellidos}`.toLowerCase()
-      const docEst = String(r.estudiante.numeroDocumento || '').toLowerCase()
-      const coincideEst = nombreEst.includes(q) || docEst.includes(q)
-
-      const coincideDocente = r.detallesInasistencias.some(d =>
-        d.docente.toLowerCase().includes(q) || d.motivo.toLowerCase().includes(q)
-      )
-
-      return coincideEst || coincideDocente
-    })
-  }
-
-  return lista
-})
-
-// 2. DATOS CONSOLIDADOS POR DOCENTE / MATERIA
-const datosReporteDocentes = computed(() => {
-  const hDia = horasPorJornada.value
-  const mapaDocentes = {}
-
-  asistenciasFichaFiltradas.value.forEach(a => {
-    const instId = a.instructorId?._id || a.instructorId || 'sin_asignar'
-    const nombre = getNombreInstructor(a)
-    const especialidad = a.instructorId?.especialidad || 'Formación Técnica'
-
-    if (!mapaDocentes[instId]) {
-      mapaDocentes[instId] = {
-        id: instId,
-        nombre,
-        especialidad,
-        fechasSet: new Set(),
-        totalPresentes: 0,
-        totalTardanzas: 0,
-        totalFallasSinExcusa: 0,
-        totalFallasConExcusa: 0,
-        totalRegistros: 0
-      }
-    }
-
-    mapaDocentes[instId].fechasSet.add(a.fecha)
-    mapaDocentes[instId].totalRegistros++
-
-    if (a.estado === 'Presente') mapaDocentes[instId].totalPresentes++
-    else if (a.estado === 'Tardanza') mapaDocentes[instId].totalTardanzas++
-    else if (a.estado === 'Excusada') mapaDocentes[instId].totalFallasConExcusa++
-    else if (a.estado === 'Falta' || a.estado === 'Ausente') mapaDocentes[instId].totalFallasSinExcusa++
-  })
-
-  let resultado = Object.values(mapaDocentes).map(d => {
-    const clasesDictadas = d.fechasSet.size
-    const horasDictadas = clasesDictadas * hDia
-    const totalAusencias = d.totalFallasSinExcusa + d.totalFallasConExcusa
-    const totalMarcaciones = d.totalPresentes + d.totalTardanzas + totalAusencias
-    const porcentaje = totalMarcaciones > 0 ? Math.round(((d.totalPresentes + (d.totalTardanzas * 0.5)) / totalMarcaciones) * 100) : 0
-
-    return {
-      ...d,
-      clasesDictadas,
-      horasDictadas,
-      totalAusencias,
-      horasAusentes: totalAusencias * hDia,
-      horasSinExcusa: d.totalFallasSinExcusa * hDia,
-      horasConExcusa: d.totalFallasConExcusa * hDia,
-      porcentaje
-    }
-  }).sort((a, b) => b.clasesDictadas - a.clasesDictadas)
-
-  // Filtro por búsqueda de texto
-  const q = busquedaTexto.value.trim().toLowerCase()
-  if (q) {
-    resultado = resultado.filter(d =>
-      d.nombre.toLowerCase().includes(q) || d.especialidad.toLowerCase().includes(q)
-    )
-  }
-
-  return resultado
-})
-
-// 3. DATOS POR SESIÓN / FECHA DE CLASE
-const datosReporteSesiones = computed(() => {
-  const hDia = horasPorJornada.value
-  let sesiones = fechasUnicas.value.map(fecha => {
-    const registrosFecha = asistenciasFichaFiltradas.value.filter(a => a.fecha === fecha)
-    const primerReg = registrosFecha[0]
-    const docente = getNombreInstructor(primerReg)
-
-    let presentes = 0, tardanzas = 0, fallasSinExcusa = 0, fallasConExcusa = 0
-    registrosFecha.forEach(r => {
-      if (r.estado === 'Presente') presentes++
-      else if (r.estado === 'Tardanza') tardanzas++
-      else if (r.estado === 'Excusada') fallasConExcusa++
-      else fallasSinExcusa++
-    })
-
-    const total = presentes + tardanzas + fallasSinExcusa + fallasConExcusa
-    const porcentaje = total > 0 ? Math.round(((presentes + (tardanzas * 0.5)) / total) * 100) : 0
-
-    return {
-      fecha,
-      docente,
-      horasSesion: hDia,
-      presentes,
-      tardanzas,
-      fallasSinExcusa,
-      fallasConExcusa,
-      total,
-      porcentaje
-    }
-  }).reverse()
-
-  const q = busquedaTexto.value.trim().toLowerCase()
-  if (q) {
-    sesiones = sesiones.filter(s =>
-      s.docente.toLowerCase().includes(q) || s.fecha.toLowerCase().includes(q)
-    )
-  }
-
-  return sesiones
-})
-
-const resumenReporte = computed(() => {
-  const d = datosReporteAprendices.value
-  return {
-    totalEstudiantes: d.length,
-    totalPresentes: d.reduce((s, r) => s + r.presentes, 0),
-    totalTardanzas: d.reduce((s, r) => s + r.tardanzas, 0),
-    totalHorasSinExcusa: d.reduce((s, r) => s + r.horasSinExcusa, 0),
-    totalHorasConExcusa: d.reduce((s, r) => s + r.horasConExcusa, 0),
-    totalHorasFalladas: d.reduce((s, r) => s + r.horasTotalesFalladas, 0),
-    totalDocentesActivos: datosReporteDocentes.value.length,
-    totalSesionesDictadas: fechasUnicas.value.length,
-    porcentajeGeneral: d.length > 0 ? Math.round(d.reduce((s, r) => s + r.porcentaje, 0) / d.length) : 0,
-    totalCriticosConsecutivos: d.filter(r => r.consecutivoGrave).length,
-    totalAlertasAcumuladas: d.filter(r => r.noConsecutivoGrave && !r.consecutivoGrave).length,
-  }
-})
-
-// ---------- Filtro por pasos ----------
-const TOTAL_PASOS = 4
-const pasoMax = ref(1) // último paso visible
-
-const sinMovimiento = typeof window !== 'undefined' &&
-  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-
-function mostrarPaso(n) {
-  if (n <= pasoMax.value) return
-  pasoMax.value = n
-  nextTick(() => {
-    const destino = document.getElementById(n === TOTAL_PASOS ? 'rf-resumen' : `rf-paso-${n}`)
-    destino?.scrollIntoView({ behavior: sinMovimiento ? 'auto' : 'smooth', block: 'nearest' })
-  })
-}
-
-// Al elegir ficha se revela el paso 2; si se deja vacía se vuelve al paso 1
-watch(filtroFicha, (val) => {
-  showPreview.value = false
-  filtroEstudiante.value = 'todos'
-  filtroInstructor.value = 'todos'
-  if (val) mostrarPaso(2)
-  else pasoMax.value = 1
-})
-
-const hayPersona = computed(() =>
-  filtroInstructor.value !== 'todos' || filtroEstudiante.value !== 'todos' || !!busquedaTexto.value.trim()
+const fichaSeleccionada = computed(() =>
+  fichasList.value.find((f) => String(f._id) === String(filtroFicha.value))
 )
-const hayFechas = computed(() => !!(fechaDesde.value || fechaHasta.value))
+
+// Al cambiar de ficha se cargan sus aprendices y se reinicia la búsqueda
+watch(filtroFicha, async (val) => {
+  busqueda.value = ''
+  estudianteSel.value = null
+  reporte.value = null
+  calendarioEst.value = null
+  detalleEst.value = null
+  diaSeleccionado.value = null
+  mensajeError.value = ''
+  estudiantesFicha.value = []
+  if (!val) return
+  try {
+    estudiantesFicha.value = await api.estudiantes.getAll({ fichaId: val })
+  } catch (e) {
+    console.error(e)
+    mensajeError.value = 'No se pudieron cargar los aprendices de la ficha.'
+  }
+})
+
+// ---------- Búsqueda de aprendiz (nombre o documento) ----------
+function normalizar(t) {
+  return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+function nombreCompleto(e) {
+  return `${e.nombres || ''} ${e.apellidos || ''}`.trim()
+}
+
+const coincidencias = computed(() => {
+  const q = normalizar(busqueda.value)
+  if (!q || !filtroFicha.value) return []
+  return estudiantesFicha.value.filter((e) =>
+    normalizar(nombreCompleto(e)).includes(q) || String(e.numeroDocumento || '').toLowerCase().includes(q)
+  )
+})
+const sugerencias = computed(() => coincidencias.value.slice(0, 8))
+
+function onEscribir() {
+  estudianteSel.value = null
+  listaAbierta.value = true
+}
+function elegirEstudiante(e) {
+  estudianteSel.value = e
+  busqueda.value = `${nombreCompleto(e)} - ${e.numeroDocumento}`
+  listaAbierta.value = false
+}
+function cerrarListaConRetraso() {
+  setTimeout(() => { listaAbierta.value = false }, 150)
+}
+
 const rangoInvalido = computed(() =>
   !!(fechaDesde.value && fechaHasta.value && fechaDesde.value > fechaHasta.value)
 )
+const puedeGenerar = computed(() =>
+  !!(filtroFicha.value && fechaDesde.value && fechaHasta.value && !rangoInvalido.value && !cargando.value)
+)
 
-// Fecha local (evita el desfase de toISOString por zona horaria)
-function fechaLocalISO(d) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const dia = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${dia}`
+// ---------- Generar reporte ----------
+function fechaISO(valor) {
+  return String(valor || '').slice(0, 10)
 }
-
-function aplicarAtajo(dias) {
-  if (dias === 0) {
-    fechaDesde.value = ''
-    fechaHasta.value = ''
-    return
-  }
-  const hoy = new Date()
-  const inicio = new Date()
-  inicio.setDate(hoy.getDate() - dias)
-  fechaDesde.value = fechaLocalISO(inicio)
-  fechaHasta.value = fechaLocalISO(hoy)
-}
-
-const opcionesHoras = [
-  { valor: 'todas', texto: 'Todas', icono: 'eye' },
-  { valor: 'consecutivos_criticos', texto: 'Crítico (3+ consecutivos)', icono: 'x' },
-  { valor: 'acumulados_graves', texto: 'Alerta (5+ acumuladas)', icono: 'x' },
-  { valor: 'sin_excusa', texto: 'Sin excusa', icono: 'x' },
-  { valor: 'con_excusa', texto: 'Con excusa', icono: 'check' }
-]
-const textoHoras = {
-  todas: 'Todas las horas',
-  consecutivos_criticos: 'Solo riesgo crítico (3+ consecutivos)',
-  acumulados_graves: 'Solo alerta grave (5+ acumuladas)',
-  sin_excusa: 'Solo sin excusa',
-  con_excusa: 'Solo con excusa'
-}
-const textoFormato = { pdf: 'PDF', xlsx: 'Excel (CSV)' }
-
-// Resumen en vivo de la búsqueda
-const resumenFiltros = computed(() => {
-  const items = []
-  const f = fichaSeleccionada.value
-  items.push(f ? `Ficha ${f.codigoFicha}` : 'Sin ficha')
-
-  const inst = todosInstructores.value.find(i => String(i._id) === String(filtroInstructor.value))
-  items.push(filtroInstructor.value === 'todos' || !inst ? 'Todos los docentes' : `${inst.nombres} ${inst.apellidos}`)
-
-  const est = todosEstudiantes.value.find(e => String(e._id) === String(filtroEstudiante.value))
-  items.push(filtroEstudiante.value === 'todos' || !est ? 'Todos los aprendices' : `${est.nombres} ${est.apellidos}`)
-
-  if (busquedaTexto.value.trim()) items.push(`Busca “${busquedaTexto.value.trim()}”`)
-
-  items.push(hayFechas.value
-    ? `${fechaDesde.value || 'inicio'} a ${fechaHasta.value || 'hoy'}`
-    : 'Todo el periodo')
-  items.push(textoHoras[filtroTipoInasistencia.value])
-  items.push(textoFormato[formato.value])
-  return items
-})
 
 async function generarReporte() {
-  if (!filtroFicha.value || rangoInvalido.value) return
+  mensajeError.value = ''
+  if (!puedeGenerar.value) return
+
+  // Aprendices del reporte: toda la ficha (reporte por ficha), el elegido, las coincidencias de la búsqueda,
+  // o toda la ficha si no se escribió nada
+  let lista
+  if (tipoReporte.value === 'ficha' || tipoReporte.value === 'desercion') {
+    lista = estudiantesFicha.value
+  } else if (estudianteSel.value) {
+    lista = [estudianteSel.value]
+  } else if (busqueda.value.trim()) {
+    if (!coincidencias.value.length) {
+      mensajeError.value = 'No se encontró ningún aprendiz con ese nombre o documento en la ficha elegida.'
+      return
+    }
+    lista = coincidencias.value
+  } else {
+    lista = estudiantesFicha.value
+  }
+
+  cargando.value = true
+  diaSeleccionado.value = null
+  detalleEst.value = null
   try {
-    const [estudiantes, asistencias] = await Promise.all([
-      api.estudiantes.getAll({ fichaId: filtroFicha.value }),
-      api.asistencias.getAll({ fichaId: filtroFicha.value, fechaDesde: fechaDesde.value || '', fechaHasta: fechaHasta.value || '' }),
-    ])
-    todosEstudiantes.value = estudiantes
-    todasAsistencias.value = asistencias
-    showPreview.value = true
+    asistenciasFicha.value = await api.asistencias.getAll({
+      fichaId: filtroFicha.value,
+      fechaDesde: fechaDesde.value,
+      fechaHasta: fechaHasta.value,
+    })
+    // El motivo de la excusa vive en la colección de excusas; si falla, el reporte sigue funcionando
+    try {
+      excusasFicha.value = await api.excusas.getAll({ fichaId: filtroFicha.value })
+    } catch (e) {
+      console.error(e)
+      excusasFicha.value = []
+    }
+    reporte.value = {
+      tipo: tipoReporte.value,
+      estudiantes: lista,
+      ficha: fichaSeleccionada.value,
+      desde: fechaDesde.value,
+      hasta: fechaHasta.value,
+    }
+    // Si el resultado es un solo aprendiz, se muestra su calendario de una vez
+    calendarioEst.value = tipoReporte.value === 'aprendiz' && lista.length === 1 ? lista[0] : null
   } catch (e) {
     console.error(e)
+    mensajeError.value = 'No se pudo generar el reporte. Intenta de nuevo.'
+  } finally {
+    cargando.value = false
   }
 }
 
-function getFechaActual() {
-  return new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
-}
-
-function descargarPDF() {
-  const contenido = document.getElementById('reporte-print')
-  if (!contenido) return
-  const ventana = window.open('', '_blank', 'width=1150,height=850')
-  ventana.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte de Asistencias SENA</title><style>body{font-family:system-ui,-apple-system,sans-serif;padding:30px;color:#1e293b;font-size:12px}h1{font-size:20px;margin-bottom:4px}h2{font-size:15px;color:#64748b;margin-bottom:16px;font-weight:600}.info{background:#f8fafc;padding:12px;border-radius:8px;margin-bottom:16px}.info p{margin:4px 0}.resumen{display:flex;gap:12px;margin-bottom:20px}.resumen div{flex:1;text-align:center;padding:12px;border-radius:8px;background:#f1f5f9}.resumen strong{display:block;font-size:22px}table{width:100%;border-collapse:collapse;margin-bottom:20px}th{background:#f1f5f9;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase}td{padding:7px 10px;border-bottom:1px solid #e2e8f0}.badge-danger{color:#dc2626;font-weight:bold}.badge-info{color:#0284c7;font-weight:bold}.badge-warning{color:#d97706;font-weight:bold}.footer{margin-top:30px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center}@media print{body{padding:15px}}</style></head><body>${contenido.innerHTML}</body></html>`)
-  ventana.document.close()
-  setTimeout(() => ventana.print(), 500)
-}
-
-function descargarXLSX() {
-  const f = fichaSeleccionada.value
-  let csv = '\uFEFFREPORTE DETALLADO DE ASISTENCIAS E INASISTENCIAS SENA\n'
-  csv += `Ficha: ${f ? f.codigoFicha + ' - ' + f.nombrePrograma : ''}\n`
-  csv += `Jornada: ${f ? f.jornada : ''} (${horasPorJornada.value}h/dia) | Aula: ${f ? f.aulaAsignada : ''}\n`
-  csv += `Periodo: ${fechaDesde.value || 'Inicio'} al ${fechaHasta.value || 'Fin'}\n`
-  csv += `Filtro Docente: ${filtroInstructor.value === 'todos' ? 'Todos' : (todosInstructores.value.find(i => String(i._id) === String(filtroInstructor.value))?.nombres || 'Docente')}\n`
-  csv += `Filtro Aprendiz: ${filtroEstudiante.value === 'todos' ? 'Todos' : (todosEstudiantes.value.find(e => String(e._id) === String(filtroEstudiante.value))?.nombres || 'Aprendiz')}\n`
-  csv += `Búsqueda Texto: ${busquedaTexto.value || 'Ninguna'}\n`
-  csv += `Generado: ${getFechaActual()}\n\n`
-
-  if (vistaReporte.value === 'docentes') {
-    csv += 'Instructor,Especialidad,Clases_Dictadas,Horas_Dictadas,Total_Presentes,Total_Tardanzas,Hrs_Sin_Excusa,Hrs_Con_Excusa,% Asistencia\n'
-    datosReporteDocentes.value.forEach(d => {
-      csv += `"${d.nombre}","${d.especialidad}",${d.clasesDictadas},${d.horasDictadas} hrs,${d.totalPresentes},${d.totalTardanzas},${d.horasSinExcusa} hrs,${d.horasConExcusa} hrs,${d.porcentaje}%\n`
-    })
-  } else {
-    csv += 'Tipo_Doc,Num_Doc,Aprendiz,Riesgo_Deserción,Racha_Consecutiva,Faltas_Sin_Excusa,Presentes,Tardanzas,Hrs_Total_Falladas,Hrs_Sin_Excusa,Hrs_Con_Excusa,% Asistencia,Detalle_Inasistencias_Docentes\n'
-    datosReporteAprendicesFiltrados.value.forEach(r => {
-      const detalleStr = `"${r.detallesInasistencias.map(d => `${d.fecha} (${d.docente}: ${d.tipo} - ${d.motivo})`).join('; ')}"`
-      csv += `${r.estudiante.tipoDocumento},${r.estudiante.numeroDocumento},"${r.estudiante.nombres} ${r.estudiante.apellidos}","${r.nivelRiesgo}",${r.rachaMaxima},${r.fallasSinExcusa},${r.presentes},${r.tardanzas},${r.horasTotalesFalladas} hrs,${r.horasSinExcusa} hrs,${r.horasConExcusa} hrs,${r.porcentaje}%,${detalleStr}\n`
-    })
-  }
-
-  csv += `\nCONSOLIDADO INSTITUCIONAL\nTotal Estudiantes,${resumenReporte.value.totalEstudiantes}\n% Asistencia General,${resumenReporte.value.porcentajeGeneral}%\nTotal Horas Falladas,${resumenReporte.value.totalHorasFalladas} hrs\nTotal Horas Sin Excusa (Injustificadas),${resumenReporte.value.totalHorasSinExcusa} hrs\nTotal Horas Con Excusa (Justificadas),${resumenReporte.value.totalHorasConExcusa} hrs\nDocentes Activos en Ficha,${resumenReporte.value.totalDocentesActivos}\n`
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `Reporte_Asistencias_${f ? f.codigoFicha : 'ficha'}_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+function cambiarTipo(tipo) {
+  if (tipoReporte.value === tipo) return
+  tipoReporte.value = tipo
+  reporte.value = null
+  calendarioEst.value = null
+  detalleEst.value = null
+  diaSeleccionado.value = null
+  mensajeError.value = ''
 }
 
 function limpiar() {
   filtroFicha.value = null
-  filtroInstructor.value = 'todos'
-  filtroEstudiante.value = 'todos'
-  busquedaTexto.value = ''
+  busqueda.value = ''
+  estudianteSel.value = null
   fechaDesde.value = ''
   fechaHasta.value = ''
-  filtroTipoInasistencia.value = 'todas'
-  vistaReporte.value = 'aprendices'
-  formato.value = 'pdf'
-  showPreview.value = false
-  pasoMax.value = 1
+  reporte.value = null
+  calendarioEst.value = null
+  detalleEst.value = null
+  diaSeleccionado.value = null
+  mensajeError.value = ''
 }
+
+// ---------- Calendario ----------
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+
+function iso(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+function parseISO(s) {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// Clasificación: verde = asistió, amarillo = excusa, rojo = falla.
+// Si en un mismo día hay varios registros, prevalece el más grave (falla > excusa > asistió).
+function categoria(estado) {
+  if (estado === 'Tardanza') return 'tarde'
+  if (estado === 'Excusada') return 'excusa'
+  if (estado === 'Falta' || estado === 'Ausente') return 'falla'
+  return null
+}
+const PRIORIDAD = { falla: 3, excusa: 2, tarde: 1 }
+
+const asistenciasCalendario = computed(() => {
+  if (!calendarioEst.value) return []
+  return asistenciasFicha.value.filter((a) =>
+    String(a.estudianteId?._id || a.estudianteId) === String(calendarioEst.value._id) &&
+    fechaISO(a.fecha) >= reporte.value.desde && fechaISO(a.fecha) <= reporte.value.hasta
+  )
+})
+
+const registrosPorDia = computed(() => {
+  const mapa = {}
+  asistenciasCalendario.value.forEach((a) => {
+    const f = fechaISO(a.fecha)
+    if (!mapa[f]) mapa[f] = []
+    mapa[f].push(a)
+  })
+  return mapa
+})
+
+function estadoDelDia(fecha) {
+  const regs = registrosPorDia.value[fecha]
+  if (!regs) return null
+  let mejor = null
+  regs.forEach((r) => {
+    const c = categoria(r.estado)
+    if (c && (!mejor || PRIORIDAD[c] > PRIORIDAD[mejor])) mejor = c
+  })
+  return mejor
+}
+
+// Rango de meses cubierto por el reporte (de la fecha "desde" a la fecha "hasta")
+const rangoMeses = computed(() => {
+  if (!reporte.value || !calendarioEst.value) return null
+  const ini = parseISO(reporte.value.desde)
+  const fin = parseISO(reporte.value.hasta)
+  return {
+    ini: { y: ini.getFullYear(), m: ini.getMonth() },
+    fin: { y: fin.getFullYear(), m: fin.getMonth() },
+  }
+})
+
+// Mes que se muestra: un solo calendario con navegación (flechas + selectores de mes y año)
+const vista = ref({ y: new Date().getFullYear(), m: new Date().getMonth() })
+watch(rangoMeses, (r) => {
+  if (r) vista.value = { y: r.fin.y, m: r.fin.m } // arranca en el último mes del rango
+})
+
+const hoyISO = (() => {
+  const h = new Date()
+  return iso(h.getFullYear(), h.getMonth(), h.getDate())
+})()
+
+// No se pueden elegir fechas futuras: si se escribe una a mano, se ajusta a hoy
+watch([fechaDesde, fechaHasta], ([d, h]) => {
+  if (d && d > hoyISO) fechaDesde.value = hoyISO
+  if (h && h > hoyISO) fechaHasta.value = hoyISO
+})
+
+const aniosDisponibles = computed(() => {
+  const r = rangoMeses.value
+  if (!r) return []
+  const lista = []
+  for (let y = r.ini.y; y <= r.fin.y; y++) lista.push(y)
+  return lista
+})
+
+const mesesDisponibles = computed(() => {
+  const r = rangoMeses.value
+  if (!r) return []
+  const desde = vista.value.y === r.ini.y ? r.ini.m : 0
+  const hasta = vista.value.y === r.fin.y ? r.fin.m : 11
+  const lista = []
+  for (let m = desde; m <= hasta; m++) lista.push({ valor: m, nombre: MESES[m] })
+  return lista
+})
+
+function ajustarAlRango(y, m) {
+  const r = rangoMeses.value
+  if (!r) return { y, m }
+  if (y < r.ini.y || (y === r.ini.y && m < r.ini.m)) return { y: r.ini.y, m: r.ini.m }
+  if (y > r.fin.y || (y === r.fin.y && m > r.fin.m)) return { y: r.fin.y, m: r.fin.m }
+  return { y, m }
+}
+
+const anioVista = computed({
+  get: () => vista.value.y,
+  set: (y) => { vista.value = ajustarAlRango(Number(y), vista.value.m) },
+})
+const mesVista = computed({
+  get: () => vista.value.m,
+  set: (m) => { vista.value = ajustarAlRango(vista.value.y, Number(m)) },
+})
+
+const puedeAnterior = computed(() => {
+  const r = rangoMeses.value
+  return !!r && (vista.value.y > r.ini.y || (vista.value.y === r.ini.y && vista.value.m > r.ini.m))
+})
+const puedeSiguiente = computed(() => {
+  const r = rangoMeses.value
+  return !!r && (vista.value.y < r.fin.y || (vista.value.y === r.fin.y && vista.value.m < r.fin.m))
+})
+
+function cambiarMes(delta) {
+  const d = new Date(vista.value.y, vista.value.m + delta, 1)
+  vista.value = ajustarAlRango(d.getFullYear(), d.getMonth())
+}
+
+// Celdas del mes visible, en semanas completas (lunes a domingo).
+// Los días de los meses vecinos se muestran atenuados y no se pueden seleccionar.
+const celdasMes = computed(() => {
+  if (!rangoMeses.value) return []
+  const { y, m } = vista.value
+  const offset = (new Date(y, m, 1).getDay() + 6) % 7
+  const diasMes = new Date(y, m + 1, 0).getDate()
+  const totalCeldas = Math.ceil((offset + diasMes) / 7) * 7
+  const celdas = []
+  for (let i = 0; i < totalCeldas; i++) {
+    const fecha = new Date(y, m, 1 - offset + i)
+    const f = iso(fecha.getFullYear(), fecha.getMonth(), fecha.getDate())
+    const delMes = fecha.getMonth() === m
+    celdas.push({
+      fecha: f,
+      dia: fecha.getDate(),
+      delMes,
+      enRango: delMes && f >= reporte.value.desde && f <= reporte.value.hasta,
+      estado: delMes ? estadoDelDia(f) : null,
+    })
+  }
+  return celdas
+})
+
+const resumen = computed(() => {
+  const r = { tarde: 0, excusa: 0, falla: 0 }
+  Object.keys(registrosPorDia.value).forEach((f) => {
+    const c = estadoDelDia(f)
+    if (c) r[c]++
+  })
+  return r
+})
+
+function etiquetaEstado(estado) {
+  if (estado === 'Tardanza') return 'Llegada tarde'
+  if (estado === 'Falta' || estado === 'Ausente') return 'Falla'
+  return estado
+}
+
+const textoEstado = { tarde: 'Llegada tarde', excusa: 'Presentó excusa', falla: 'Falla' }
+const textoBarra = { tarde: 'LLEGADA TARDE', excusa: 'EXCUSA', falla: 'FALLA' }
+
+function nombreInstructor(reg) {
+  const i = reg?.instructorId
+  if (!i) return 'Sin docente asignado'
+  if (typeof i === 'object') return `${i.nombres || ''} ${i.apellidos || ''}`.trim() || 'Docente'
+  const inst = instructores.value.find((x) => String(x._id) === String(i))
+  return inst ? `${inst.nombres} ${inst.apellidos}` : 'Docente'
+}
+
+// Motivo de la excusa de un registro: se busca por aprendiz + fecha (se prefiere la aprobada)
+function motivoExcusa(reg) {
+  if (!reg) return ''
+  const estId = String(reg.estudianteId?._id || reg.estudianteId || '')
+  const fecha = fechaISO(reg.fecha)
+  const candidatas = excusasFicha.value.filter((x) =>
+    String(x.estudianteId?._id || x.estudianteId) === estId && fechaISO(x.fechaInasistencia) === fecha
+  )
+  const ex = candidatas.find((x) => x.estado === 'Aprobada') || candidatas.find((x) => x.estado !== 'Rechazada') || candidatas[0]
+  return ex?.motivo || reg.motivo || reg.motivoInhabilitacion || ''
+}
+
+function formatoFechaLarga(f) {
+  return parseISO(f).toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+// Ventana flotante con el detalle del día (se abre al pulsar la etiqueta dentro del calendario)
+const popover = ref(null) // { top, left }
+const POP_ANCHO = 320
+
+function posicionarPopover(el) {
+  const r = el.getBoundingClientRect()
+  const margen = 12
+  let left = r.right + 8
+  if (left + POP_ANCHO > window.innerWidth - margen) left = r.left - POP_ANCHO - 8
+  if (left < margen) left = Math.max(margen, Math.min(r.left, window.innerWidth - POP_ANCHO - margen))
+  let top = r.top
+  const maxTop = window.innerHeight - 280
+  if (top > maxTop) top = Math.max(margen, maxTop)
+  popover.value = { top, left }
+}
+
+function cerrarPopover() {
+  popover.value = null
+  diaSeleccionado.value = null
+}
+
+function seleccionarDia(celda, ev) {
+  if (!celda.enRango) return
+  if (celda.estado && diaSeleccionado.value !== celda.fecha) {
+    diaSeleccionado.value = celda.fecha
+    const el = ev?.currentTarget?.querySelector('.rp-cal-evento') || ev?.currentTarget
+    if (el) posicionarPopover(el)
+  } else {
+    cerrarPopover()
+  }
+}
+
+function clickFuera(e) {
+  if (!popover.value) return
+  if (e.target.closest?.('.rp-pop') || e.target.closest?.('.rp-cal-dia')) return
+  cerrarPopover()
+}
+onMounted(() => {
+  document.addEventListener('mousedown', clickFuera)
+  window.addEventListener('resize', cerrarPopover)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', clickFuera)
+  window.removeEventListener('resize', cerrarPopover)
+})
+
+const detalleDia = computed(() => {
+  if (!diaSeleccionado.value) return null
+  return {
+    fecha: diaSeleccionado.value,
+    estado: estadoDelDia(diaSeleccionado.value),
+    registros: registrosPorDia.value[diaSeleccionado.value] || [],
+  }
+})
+// Ruta de deserción: 2 o más días consecutivos de falla, o 4 o más días de falla acumulados
+const RUTA_DIAS_CONSECUTIVOS = 2
+const RUTA_DIAS_ACUMULADOS = 4
+
+// ---------- Tabla de aprendices ----------
+const horasPorJornada = computed(() => {
+  const j = (reporte.value?.ficha?.jornada || '').toLowerCase()
+  if (j.includes('noche') || j.includes('nocturna')) return 5
+  return 6 // Mañana, Tarde o Mixta
+})
+
+// Fechas con clase registrada en la ficha dentro del rango
+const fechasClase = computed(() => {
+  if (!reporte.value) return []
+  const d = reporte.value.desde
+  const h = reporte.value.hasta
+  return [...new Set(
+    asistenciasFicha.value.map((a) => fechaISO(a.fecha)).filter((f) => f >= d && f <= h)
+  )].sort()
+})
+
+function datosAprendiz(est) {
+  const hDia = horasPorJornada.value
+  const porFecha = {}
+  asistenciasFicha.value.forEach((a) => {
+    if (String(a.estudianteId?._id || a.estudianteId) === String(est._id)) {
+      porFecha[fechaISO(a.fecha)] = a
+    }
+  })
+
+  let presentes = 0, tardanzas = 0, fallasSinExcusa = 0, fallasConExcusa = 0
+  let horasTardanza = 0
+  const inasistencias = []
+
+  fechasClase.value.forEach((fecha) => {
+    const reg = porFecha[fecha]
+    if (!reg) return
+    if (reg.estado === 'Presente') presentes++
+    else if (reg.estado === 'Tardanza') {
+      tardanzas++
+      horasTardanza += Number(reg.horasTardanza) || 0
+    } else if (reg.estado === 'Excusada') {
+      fallasConExcusa++
+      inasistencias.push({
+        fecha, horas: hDia, tipo: 'Excusada',
+        motivo: reg.motivo || reg.motivoInhabilitacion || 'Sin motivo detallado',
+        docente: nombreInstructor(reg),
+      })
+    } else if (reg.estado === 'Falta' || reg.estado === 'Ausente') {
+      fallasSinExcusa++
+      inasistencias.push({
+        fecha, horas: hDia, tipo: 'Injustificada',
+        motivo: 'Falta injustificada',
+        docente: nombreInstructor(reg),
+      })
+    }
+  })
+
+  const totalDias = presentes + tardanzas + fallasSinExcusa + fallasConExcusa
+  const porcentaje = totalDias > 0 ? Math.round(((presentes + tardanzas * 0.5) / totalDias) * 100) : null
+
+  const fechasInjustificadas = inasistencias.filter((i) => i.tipo === 'Injustificada').map((i) => i.fecha).sort()
+  const rachaMaxima = rachaMaximaConsecutiva(fechasInjustificadas)
+  const consecutivoGrave = rachaMaxima >= LIMITE_DIAS_CONSECUTIVOS
+  const acumuladoGrave = fallasSinExcusa >= LIMITE_DIAS_NO_CONSECUTIVOS
+  const riesgo = consecutivoGrave ? 'critico' : (acumuladoGrave ? 'alerta' : 'normal')
+
+  return {
+    estudiante: est,
+    presentes, tardanzas, fallasSinExcusa, fallasConExcusa,
+    horasSinExcusa: fallasSinExcusa * hDia,
+    horasConExcusa: fallasConExcusa * hDia,
+    horasAusencia: (fallasSinExcusa + fallasConExcusa) * hDia,
+    diasInasistencia: fallasSinExcusa + fallasConExcusa,
+    horasTardanza,
+    totalHoras: (fallasSinExcusa + fallasConExcusa) * hDia + horasTardanza,
+    totalDias, porcentaje, rachaMaxima, riesgo, inasistencias,
+    fechasFallas: fechasInjustificadas,
+    rutaConsecutivos: rachaMaxima >= RUTA_DIAS_CONSECUTIVOS,
+    rutaAcumulados: fallasSinExcusa >= RUTA_DIAS_ACUMULADOS,
+    enRuta: rachaMaxima >= RUTA_DIAS_CONSECUTIVOS || fallasSinExcusa >= RUTA_DIAS_ACUMULADOS,
+  }
+}
+
+const filasAprendices = computed(() => {
+  if (!reporte.value) return []
+  return reporte.value.estudiantes
+    .map(datosAprendiz)
+    .sort((a, b) => nombreCompleto(a.estudiante).localeCompare(nombreCompleto(b.estudiante), 'es'))
+})
+
+// Métricas de toda la ficha en el periodo consultado (no dependen de la búsqueda de aprendiz)
+const resumenFicha = computed(() => {
+  if (!reporte.value) return null
+  const todos = estudiantesFicha.value.map(datosAprendiz)
+  const conRegistro = todos.filter((d) => d.porcentaje !== null)
+  const docentes = new Set()
+  asistenciasFicha.value.forEach((a) => {
+    const f = fechaISO(a.fecha)
+    if (f < reporte.value.desde || f > reporte.value.hasta) return
+    const id = a.instructorId?._id || a.instructorId
+    if (id) docentes.add(String(id))
+  })
+  return {
+    porcentajeGeneral: conRegistro.length
+      ? Math.round(conRegistro.reduce((t, d) => t + d.porcentaje, 0) / conRegistro.length)
+      : 0,
+    enRuta: todos.filter((d) => d.enRuta).length,
+    criticos: todos.filter((d) => d.riesgo === 'critico').length,
+    alertas: todos.filter((d) => d.riesgo === 'alerta').length,
+    docentes: docentes.size,
+    sesiones: fechasClase.value.length,
+  }
+})
+
+// Aprendices en ruta de deserción, de mayor a menor gravedad
+const filasRuta = computed(() =>
+  filasAprendices.value
+    .filter((f) => f.enRuta)
+    .sort((a, b) =>
+      (b.rutaConsecutivos - a.rutaConsecutivos) ||
+      (b.rachaMaxima - a.rachaMaxima) ||
+      (b.fallasSinExcusa - a.fallasSinExcusa) ||
+      nombreCompleto(a.estudiante).localeCompare(nombreCompleto(b.estudiante), 'es'))
+)
+
+const subtituloResultado = computed(() => {
+  if (!reporte.value) return ''
+  if (reporte.value.tipo === 'desercion') {
+    const n = filasRuta.value.length
+    return `${n} ${n === 1 ? 'aprendiz en ruta' : 'aprendices en ruta'} de ${filasAprendices.value.length}`
+  }
+  const n = filasAprendices.value.length
+  return `${n} ${n === 1 ? 'aprendiz' : 'aprendices'}`
+})
+
+function verRutaDesercion() {
+  cambiarTipo('desercion')
+  generarReporte()
+}
+
+const totalesFicha = computed(() => filasAprendices.value.reduce((t, f) => ({
+  dias: t.dias + f.diasInasistencia,
+  horasInasistencia: t.horasInasistencia + f.horasAusencia,
+  horasTardanza: t.horasTardanza + f.horasTardanza,
+  totalHoras: t.totalHoras + f.totalHoras,
+}), { dias: 0, horasInasistencia: 0, horasTardanza: 0, totalHoras: 0 }))
+
+const textoRiesgo = {
+  critico: (f) => `Crítico (${f.rachaMaxima} d consecutivos)`,
+  alerta: (f) => `Alerta (${f.fallasSinExcusa} d acumulados)`,
+  normal: () => 'Normal',
+}
+const claseRiesgo = { critico: 'badge-danger', alerta: 'badge-warning', normal: 'badge-success' }
+
+// ---------- Modal de detalle ----------
+function abrirDetalle(fila) { detalleEst.value = fila }
+function cerrarDetalle() { detalleEst.value = null }
+function onTecla(e) {
+  if (e.key !== 'Escape') return
+  if (detalleEst.value) cerrarDetalle()
+  else if (popover.value) cerrarPopover()
+}
+onMounted(() => window.addEventListener('keydown', onTecla))
+onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
 </script>
 
 <template>
   <div class="page-header">
-    <h1>Reportes, Inasistencias y Filtros Avanzados</h1>
-    <p>Consulta y exporta el historial de asistencias filtrando simultáneamente por Aprendiz, Docente y Rango de Fechas</p>
+    <h1>Reportes de Asistencia</h1>
+    <p>Elige una ficha, define el rango de fechas y, si quieres, busca a un aprendiz específico</p>
   </div>
 
-  <div v-if="usuario.rol === 'Instructor' && fichasDisponibles.length === 0" class="card" style="background: #fff1f2; border-color: #fecdd3; color: #9f1239; padding: 20px;">
-    <strong> Acceso a Reportes:</strong> Actualmente no tienes asignada ninguna Ficha de formación. La generación de reportes está disponible para los instructores asignados a cada ficha (Líder o de Apoyo) o Administradores.
+  <div v-if="esInstructor && fichasDisponibles.length === 0" class="card rp-sin-fichas">
+    <strong>Acceso a Reportes:</strong> actualmente no tienes asignada ninguna ficha de formación. Los reportes están disponibles para los instructores asignados a cada ficha (líder o de apoyo) y para administradores.
   </div>
 
-  <form v-else class="rf-panel" novalidate @submit.prevent="generarReporte">
-    <h2 class="rf-h2">Parámetros de Búsqueda y Filtrado</h2>
-    <p class="rf-sub">Empieza por la ficha. Los siguientes pasos irán apareciendo a medida que avances.</p>
-
-    <!-- PASO 1: FICHA (siempre visible) -->
-    <section id="rf-paso-1" class="rf-paso" :class="{ 'rf-activo': pasoMax === 1, 'rf-completo': pasoMax > 1 }" aria-labelledby="rf-t1">
-      <div class="rf-num" aria-hidden="true">
-        <template v-if="pasoMax > 1"><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></template>
-        <template v-else>1</template>
+  <template v-else>
+    <!-- ===== BÚSQUEDA ===== -->
+    <form class="rp-panel" novalidate @submit.prevent="generarReporte">
+      <div class="rp-panel-head">
+        <h2>Búsqueda de reporte</h2>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </div>
-      <div>
-        <h3 id="rf-t1" class="rf-titulo">Elige la ficha <span class="rf-etiqueta rf-obligatorio">Obligatorio</span></h3>
-        <p class="rf-ayuda">Al elegirla aparecerá el siguiente paso.</p>
-        <div class="rf-campo rf-campo-ficha">
-          <label for="rf-ficha" class="rf-solo-lectores">Ficha de Formación</label>
-          <select id="rf-ficha" v-model="filtroFicha">
-            <option :value="null" disabled>Selecciona una ficha</option>
-            <option v-for="f in fichasLideradas" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
+
+      <div class="rp-tipos" role="tablist" aria-label="Tipo de reporte">
+        <button type="button" role="tab" class="rp-tipo" :class="{ 'rp-tipo-on': tipoReporte === 'aprendiz' }" :aria-selected="tipoReporte === 'aprendiz'" @click="cambiarTipo('aprendiz')">Por aprendiz</button>
+        <button type="button" role="tab" class="rp-tipo" :class="{ 'rp-tipo-on': tipoReporte === 'ficha' }" :aria-selected="tipoReporte === 'ficha'" @click="cambiarTipo('ficha')">Por ficha</button>
+        <button type="button" role="tab" class="rp-tipo" :class="{ 'rp-tipo-on': tipoReporte === 'desercion' }" :aria-selected="tipoReporte === 'desercion'" @click="cambiarTipo('desercion')">Ruta de deserción</button>
+      </div>
+
+      <div class="rp-rejilla">
+        <div class="rp-campo">
+          <label for="rp-ficha">Ficha</label>
+          <select id="rp-ficha" v-model="filtroFicha">
+            <option :value="null" disabled>Escoja una ficha</option>
+            <option v-for="f in fichasDisponibles" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
           </select>
         </div>
+
+        <div v-if="tipoReporte === 'aprendiz'" class="rp-campo rp-campo-busqueda">
+          <label for="rp-aprendiz">Aprendiz</label>
+          <input
+            id="rp-aprendiz"
+            v-model="busqueda"
+            type="text"
+            autocomplete="off"
+            :disabled="!filtroFicha"
+            :placeholder="filtroFicha ? 'Nombre o cédula' : 'Primero escoja una ficha'"
+            @input="onEscribir"
+            @focus="listaAbierta = true"
+            @blur="cerrarListaConRetraso"
+          />
+          <ul v-if="listaAbierta && sugerencias.length && !estudianteSel" class="rp-sugerencias" role="listbox">
+            <li v-for="e in sugerencias" :key="e._id" role="option" @mousedown.prevent="elegirEstudiante(e)">
+              <strong>{{ nombreCompleto(e) }}</strong>
+              <span>{{ e.tipoDocumento }} {{ e.numeroDocumento }}</span>
+            </li>
+          </ul>
+          <p v-else-if="listaAbierta && busqueda.trim() && filtroFicha && !sugerencias.length" class="rp-sin-resultados">Sin coincidencias en esta ficha</p>
+        </div>
+
+        <div class="rp-campo">
+          <label for="rp-desde">Fecha de inicio</label>
+          <input id="rp-desde" v-model="fechaDesde" type="date" :max="hoyISO" />
+        </div>
+
+        <div class="rp-campo">
+          <label for="rp-hasta">Fecha final</label>
+          <input id="rp-hasta" v-model="fechaHasta" type="date" :max="hoyISO" />
+        </div>
+      </div>
+
+      <p v-if="rangoInvalido" class="rp-error" role="alert">La fecha de inicio no puede ser posterior a la fecha final.</p>
+      <p v-if="mensajeError" class="rp-error" role="alert">{{ mensajeError }}</p>
+
+      <div class="rp-acciones">
+        <button type="submit" class="rp-btn rp-btn-primario" :disabled="!puedeGenerar">
+          {{ cargando ? 'Generando...' : 'Generar reporte' }}
+        </button>
+        <button type="button" class="rp-btn rp-btn-secundario" @click="limpiar">Limpiar</button>
+      </div>
+    </form>
+
+    <!-- ===== TABLA DE APRENDICES ===== -->
+    <section v-if="reporte" class="rp-resultado" aria-live="polite">
+      <header class="rp-res-head">
+        <div>
+          <h2>{{ { ficha: 'Reporte de la ficha', desercion: 'Ruta de deserción · Ficha' }[reporte.tipo] || 'Aprendices de la ficha' }} {{ reporte.ficha?.codigoFicha }}</h2>
+          <p>{{ reporte.desde }} al {{ reporte.hasta }} · {{ subtituloResultado }}</p>
+        </div>
+      </header>
+
+      <div v-if="resumenFicha" class="rp-stats">
+        <StatCard icon="percent" label="Asistencia General" :value="`${resumenFicha.porcentajeGeneral}%`" variant="verde" />
+        <StatCard icon="x-circle" label="Riesgo Crítico (3+ consec.)" :value="`${resumenFicha.criticos}`" variant="rojo" />
+        <StatCard icon="clock" label="Alerta (5+ acumuladas)" :value="`${resumenFicha.alertas}`" variant="ambar" />
+        <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenFicha.docentes" variant="morado" />
+        <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenFicha.sesiones" variant="indigo" />
+      </div>
+      <p v-if="resumenFicha" class="rp-nota rp-nota-stats">Las tarjetas resumen toda la ficha en el periodo consultado.</p>
+
+      <div v-if="resumenFicha && resumenFicha.enRuta > 0 && reporte.tipo !== 'desercion'" class="rp-aviso" role="alert">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <p>
+          <strong>{{ resumenFicha.enRuta }} {{ resumenFicha.enRuta === 1 ? 'aprendiz está' : 'aprendices están' }} en ruta de deserción</strong>
+          (2 o más días seguidos de falla, o 4 o más días de falla acumulados).
+        </p>
+        <button type="button" class="rp-aviso-btn" @click="verRutaDesercion">Ver ruta de deserción</button>
+      </div>
+
+      <div v-if="!filasAprendices.length" class="rp-vacio-msg">No hay aprendices para mostrar con los filtros aplicados.</div>
+      <template v-else-if="reporte.tipo === 'ficha'">
+        <div class="rp-tabla-wrap">
+          <table class="rp-tabla">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Identificación</th>
+                <th class="rp-num-col">Días de inasistencia</th>
+                <th class="rp-num-col">Horas de inasistencia</th>
+                <th class="rp-num-col">Horas por llegadas tarde</th>
+                <th class="rp-num-col">Total de horas</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="f in filasAprendices" :key="f.estudiante._id" class="rp-fila" tabindex="0" @click="abrirDetalle(f)" @keydown.enter="abrirDetalle(f)">
+                <td><strong>{{ nombreCompleto(f.estudiante) }}</strong></td>
+                <td>{{ f.estudiante.tipoDocumento }} {{ f.estudiante.numeroDocumento }}</td>
+                <td class="rp-num-col">{{ f.diasInasistencia }}</td>
+                <td class="rp-num-col">{{ f.horasAusencia }} h</td>
+                <td class="rp-num-col">{{ f.horasTardanza }} h</td>
+                <td class="rp-num-col"><strong>{{ f.totalHoras }} h</strong></td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2">Total de la ficha</td>
+                <td class="rp-num-col">{{ totalesFicha.dias }}</td>
+                <td class="rp-num-col">{{ totalesFicha.horasInasistencia }} h</td>
+                <td class="rp-num-col">{{ totalesFicha.horasTardanza }} h</td>
+                <td class="rp-num-col">{{ totalesFicha.totalHoras }} h</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p class="rp-nota">Cada día de inasistencia (falla o excusa) cuenta {{ horasPorJornada }} horas según la jornada de la ficha. Las horas por llegadas tarde se suman al total. Haz clic en un aprendiz para ver su detalle.</p>
+      </template>
+      <template v-else-if="reporte.tipo === 'desercion'">
+        <div v-if="!filasRuta.length" class="rp-ruta-ok">
+          Ningún aprendiz de la ficha está en ruta de deserción en el periodo consultado.
+        </div>
+        <div v-else class="rp-tabla-wrap">
+          <table class="rp-tabla">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Identificación</th>
+                <th>Nivel</th>
+                <th>Motivo</th>
+                <th class="rp-num-col">Días de falla</th>
+                <th>Fechas de las fallas</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="f in filasRuta" :key="f.estudiante._id" class="rp-fila" tabindex="0" @click="abrirDetalle(f)" @keydown.enter="abrirDetalle(f)">
+                <td><strong>{{ nombreCompleto(f.estudiante) }}</strong></td>
+                <td>{{ f.estudiante.tipoDocumento }} {{ f.estudiante.numeroDocumento }}</td>
+                <td>
+                  <span class="badge" :class="f.riesgo === 'normal' ? 'badge-warning' : 'badge-danger'">{{ f.riesgo === 'normal' ? 'En ruta' : 'Deserción' }}</span>
+                </td>
+                <td>
+                  <div class="rp-motivos">
+                    <span v-if="f.rutaConsecutivos" class="rp-motivo">{{ f.rachaMaxima }} {{ f.rachaMaxima === 1 ? 'día seguido' : 'días seguidos' }}</span>
+                    <span v-if="f.rutaAcumulados" class="rp-motivo">{{ f.fallasSinExcusa }} acumulados</span>
+                  </div>
+                </td>
+                <td class="rp-num-col"><strong>{{ f.fallasSinExcusa }}</strong></td>
+                <td>
+                  <div class="rp-motivos">
+                    <span v-for="fecha in f.fechasFallas" :key="fecha" class="rp-chip-fecha">{{ fecha }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="rp-nota">
+          Un aprendiz entra en la ruta de deserción con {{ RUTA_DIAS_CONSECUTIVOS }} o más días seguidos de falla injustificada, o con {{ RUTA_DIAS_ACUMULADOS }} o más días de falla acumulados (no tienen que ser seguidos). Las excusas no cuentan y un fin de semana no interrumpe una racha. Con 3 días seguidos o 5 acumulados el nivel pasa a "Deserción". Haz clic en un aprendiz para ver su detalle.
+        </p>
+      </template>
+      <div v-else class="rp-tabla-wrap">
+        <table class="rp-tabla">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Identificación</th>
+              <th>Riesgo</th>
+              <th>Horas de ausencia</th>
+              <th class="rp-th-acc">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in filasAprendices" :key="f.estudiante._id" class="rp-fila" tabindex="0" @click="abrirDetalle(f)" @keydown.enter="abrirDetalle(f)">
+              <td><strong>{{ nombreCompleto(f.estudiante) }}</strong></td>
+              <td>{{ f.estudiante.tipoDocumento }} {{ f.estudiante.numeroDocumento }}</td>
+              <td><span class="badge" :class="claseRiesgo[f.riesgo]">{{ textoRiesgo[f.riesgo](f) }}</span></td>
+              <td><strong>{{ f.horasAusencia }} hrs</strong></td>
+              <td class="rp-td-acc">
+                <button type="button" class="rp-link" @click.stop="abrirDetalle(f)">Ver detalle</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
-    <!-- PASO 2: PERSONA -->
-    <Transition name="rf-entra">
-      <section v-if="pasoMax >= 2" id="rf-paso-2" class="rf-paso" :class="{ 'rf-activo': pasoMax === 2, 'rf-completo': pasoMax > 2 }" aria-labelledby="rf-t2">
-        <div class="rf-num" aria-hidden="true">
-          <template v-if="pasoMax > 2"><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></template>
-          <template v-else>2</template>
-        </div>
+    <!-- ===== CALENDARIO ===== -->
+    <section v-if="reporte && calendarioEst" class="rp-resultado">
+      <header class="rp-res-head">
         <div>
-          <h3 id="rf-t2" class="rf-titulo">Filtra por persona <span class="rf-etiqueta">Opcional</span></h3>
-          <p class="rf-ayuda">Déjalo vacío para ver todos los docentes y aprendices de la ficha.</p>
-          <div class="rf-rejilla">
-            <div class="rf-campo">
-              <label for="rf-docente">Docente / Instructor</label>
-              <select id="rf-docente" v-model="filtroInstructor">
-                <option value="todos">Todos los Docentes / Clases</option>
-                <option v-for="inst in instructoresDeLaFicha" :key="inst._id" :value="inst._id">
-                  {{ inst.nombres }} {{ inst.apellidos }} ({{ inst.especialidad || 'Docente' }})
-                </option>
-              </select>
-            </div>
-            <div class="rf-campo">
-              <label for="rf-aprendiz">Aprendiz Específico</label>
-              <select id="rf-aprendiz" v-model="filtroEstudiante">
-                <option value="todos">Todos los Aprendices</option>
-                <option v-for="est in estudiantesFicha" :key="est._id" :value="est._id">
-                  {{ est.nombres }} {{ est.apellidos }} ({{ est.numeroDocumento }})
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div class="rf-separador">o busca directamente</div>
-
-          <div class="rf-campo rf-busqueda">
-            <label for="rf-busqueda">Búsqueda rápida por aprendiz, documento o docente</label>
-            <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="rf-busqueda" v-model="busquedaTexto" type="search" autocomplete="off"
-                   placeholder="Escribe un nombre o número de documento" />
-          </div>
-
-          <div v-if="pasoMax === 2" class="rf-pie">
-            <button type="button" class="rf-continuar" @click="mostrarPaso(3)">
-              <span>{{ hayPersona ? 'Continuar' : 'Omitir este paso' }}</span> <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-            </button>
-          </div>
+          <h2>Calendario de {{ nombreCompleto(calendarioEst) }}</h2>
+          <p>
+            {{ calendarioEst.tipoDocumento }} {{ calendarioEst.numeroDocumento }}
+            · Ficha {{ reporte.ficha?.codigoFicha }}
+            · {{ reporte.desde }} al {{ reporte.hasta }}
+          </p>
         </div>
-      </section>
-    </Transition>
-
-    <!-- PASO 3: PERIODO -->
-    <Transition name="rf-entra">
-      <section v-if="pasoMax >= 3" id="rf-paso-3" class="rf-paso" :class="{ 'rf-activo': pasoMax === 3, 'rf-completo': pasoMax > 3 }" aria-labelledby="rf-t3">
-        <div class="rf-num" aria-hidden="true">
-          <template v-if="pasoMax > 3"><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></template>
-          <template v-else>3</template>
-        </div>
-        <div>
-          <h3 id="rf-t3" class="rf-titulo">Define el periodo <span class="rf-etiqueta">Opcional</span></h3>
-          <p class="rf-ayuda">Usa un atajo o escribe las fechas exactas.</p>
-          <div class="rf-rejilla">
-            <div class="rf-campo">
-              <label for="rf-desde">Fecha Desde</label>
-              <input id="rf-desde" v-model="fechaDesde" type="date" />
-            </div>
-            <div class="rf-campo">
-              <label for="rf-hasta">Fecha Hasta</label>
-              <input id="rf-hasta" v-model="fechaHasta" type="date" />
-            </div>
-          </div>
-          <div class="rf-atajos">
-            <span class="rf-atajos-titulo">Atajos:</span>
-            <button type="button" class="rf-chip" @click="aplicarAtajo(7)">Última semana</button>
-            <button type="button" class="rf-chip" @click="aplicarAtajo(30)">Último mes</button>
-            <button type="button" class="rf-chip" @click="aplicarAtajo(0)">Todo el periodo</button>
-          </div>
-          <p v-if="rangoInvalido" class="rf-error" role="alert">La fecha inicial no puede ser posterior a la final.</p>
-
-          <div v-if="pasoMax === 3" class="rf-pie">
-            <button type="button" class="rf-continuar" @click="mostrarPaso(4)">
-              <span>{{ hayFechas ? 'Continuar' : 'Omitir este paso' }}</span> <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-            </button>
-          </div>
-        </div>
-      </section>
-    </Transition>
-
-    <!-- PASO 4: HORAS Y FORMATO -->
-    <Transition name="rf-entra">
-      <section v-if="pasoMax >= 4" id="rf-paso-4" class="rf-paso rf-activo" aria-labelledby="rf-t4">
-        <div class="rf-num" aria-hidden="true">4</div>
-        <div>
-          <h3 id="rf-t4" class="rf-titulo">Horas y formato de descarga <span class="rf-etiqueta">Opcional</span></h3>
-          <p class="rf-ayuda">Elige qué horas mostrar y cómo quieres descargar el resultado.</p>
-
-          <p id="rf-lbl-horas" class="rf-grupo-etq">Filtro de horas</p>
-          <div class="rf-grupo-seg" role="radiogroup" aria-labelledby="rf-lbl-horas">
-            <label v-for="op in opcionesHoras" :key="op.valor" class="rf-seg">
-              <input v-model="filtroTipoInasistencia" type="radio" name="rf_horas" :value="op.valor" />
-              <span>
-                <svg v-if="op.icono === 'eye'" class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                <svg v-else-if="op.icono === 'x'" class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                <svg v-else class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                {{ op.texto }}
-              </span>
-            </label>
-          </div>
-
-          <p id="rf-lbl-formato" class="rf-grupo-etq" style="margin-top: 18px;">Formato de descarga</p>
-          <div class="rf-grupo-seg" role="radiogroup" aria-labelledby="rf-lbl-formato">
-            <label class="rf-seg">
-              <input v-model="formato" type="radio" name="rf_formato" value="pdf" />
-              <span><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> PDF (Impresión / Comité)</span>
-            </label>
-            <label class="rf-seg">
-              <input v-model="formato" type="radio" name="rf_formato" value="xlsx" />
-              <span><svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Excel (CSV)</span>
-            </label>
-          </div>
-        </div>
-      </section>
-    </Transition>
-
-    <!-- RESUMEN + ACCIONES -->
-    <Transition name="rf-entra">
-      <div v-if="pasoMax >= 4" id="rf-resumen" class="rf-resumen" aria-live="polite">
-        <p class="rf-resumen-titulo">Tu búsqueda</p>
-        <ul class="rf-resumen-lista">
-          <li v-for="(item, i) in resumenFiltros" :key="i">{{ item }}</li>
+        <ul class="rp-leyenda" aria-label="Leyenda de colores">
+          <li><span class="rp-punto rp-tarde"></span>Llegadas tarde <b>{{ resumen.tarde }}</b></li>
+          <li><span class="rp-punto rp-excusa"></span>Excusa <b>{{ resumen.excusa }}</b></li>
+          <li><span class="rp-punto rp-falla"></span>Falla <b>{{ resumen.falla }}</b></li>
         </ul>
-        <div class="rf-acciones">
-          <button type="submit" class="rf-btn rf-btn-primario" :disabled="!filtroFicha || rangoInvalido">
-            <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Buscar
-          </button>
-          <button type="button" class="rf-btn rf-btn-secundario" @click="limpiar">
-            <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Limpiar todo
-          </button>
-        </div>
-      </div>
-    </Transition>
+      </header>
 
-    <!-- Si aún no llega al último paso, permite limpiar igualmente -->
-    <div v-if="pasoMax > 1 && pasoMax < 4" class="rf-acciones rf-acciones-parcial">
-      <button type="button" class="rf-btn rf-btn-secundario" @click="limpiar">
-        <svg class="rf-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Limpiar todo
-      </button>
-    </div>
-  </form>
-
-  <div v-if="showPreview && fichaSeleccionada" id="reporte-print">
-    <div class="card">
-      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <!-- Selector de Vista del Reporte -->
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button
-            class="btn btn-sm"
-            :class="vistaReporte === 'aprendices' ? 'btn-primary' : 'btn-outline'"
-            @click="vistaReporte = 'aprendices'"
-            title="Vista por Aprendiz"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      <div class="rp-cal">
+        <div class="rp-cal-nav">
+          <button type="button" class="rp-cal-flecha" :disabled="!puedeAnterior" aria-label="Mes anterior" @click="cambiarMes(-1)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <button
-            class="btn btn-sm"
-            :class="vistaReporte === 'docentes' ? 'btn-primary' : 'btn-outline'"
-            @click="vistaReporte = 'docentes'"
-            title="Vista por Docente"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          </button>
-          <button
-            class="btn btn-sm"
-            :class="vistaReporte === 'sesiones' ? 'btn-primary' : 'btn-outline'"
-            @click="vistaReporte = 'sesiones'"
-            title="Vista por Sesión"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          <select v-model="mesVista" class="rp-cal-select rp-cal-select-mes" aria-label="Mes">
+            <option v-for="mm in mesesDisponibles" :key="mm.valor" :value="mm.valor">{{ mm.nombre }}</option>
+          </select>
+          <select v-model="anioVista" class="rp-cal-select rp-cal-select-anio" aria-label="Año">
+            <option v-for="aa in aniosDisponibles" :key="aa" :value="aa">{{ aa }}</option>
+          </select>
+          <button type="button" class="rp-cal-flecha" :disabled="!puedeSiguiente" aria-label="Mes siguiente" @click="cambiarMes(1)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
         </div>
 
-        <div class="btn-group">
-          <button v-if="formato === 'pdf'" class="btn btn-primary btn-sm" @click="descargarPDF" title="Descargar PDF">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
-          <button v-else class="btn btn-success btn-sm" @click="descargarXLSX" title="Descargar CSV (Excel)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="reporte-header">
-        <h2>REPORTE OFICIAL DE ASISTENCIAS E INASISTENCIAS</h2>
-        <p>SENA - Centro de Formación | Comité de Evaluación y Seguimiento</p>
-      </div>
-
-      <div class="reporte-info">
-        <div class="reporte-info-item"><strong>Ficha:</strong> {{ fichaSeleccionada.codigoFicha }} - {{ fichaSeleccionada.nombrePrograma }}</div>
-        <div class="reporte-info-item"><strong>Jornada:</strong> {{ fichaSeleccionada.jornada }} ({{ horasPorJornada }} horas/sesión)</div>
-        <div class="reporte-info-item"><strong>Aula:</strong> {{ fichaSeleccionada.aulaAsignada }}</div>
-        <div class="reporte-info-item"><strong>Docentes en Ficha:</strong> {{ datosReporteDocentes.map(d => d.nombre).join(', ') || 'No asignados' }}</div>
-        <div class="reporte-info-item"><strong>Filtro Docente:</strong> {{ filtroInstructor === 'todos' ? 'Todos los Profesores' : (todosInstructores.find(i => String(i._id) === String(filtroInstructor))?.nombres || 'Docente') }}</div>
-        <div class="reporte-info-item"><strong>Filtro Aprendiz:</strong> {{ filtroEstudiante === 'todos' ? 'Todos los Aprendices' : (todosEstudiantes.find(e => String(e._id) === String(filtroEstudiante))?.nombres || 'Aprendiz') }}</div>
-        <div class="reporte-info-item"><strong>Periodo Consultado:</strong> {{ fechaDesde || 'Inicio' }} al {{ fechaHasta || 'Fin' }}</div>
-        <div class="reporte-info-item"><strong>Fecha de Generación:</strong> {{ getFechaActual() }}</div>
-      </div>
-
-      <!-- MÉTRICAS CONSOLIDADAS DE HORAS Y DOCENTES -->
-      <div class="stats-row" style="margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;">
-        <StatCard icon="percent" label="Asistencia General" :value="`${resumenReporte.porcentajeGeneral}%`" variant="verde" />
-        <StatCard icon="x-circle" label="Sin Excusa" :value="`${resumenReporte.totalHorasSinExcusa}h`" variant="rojo" />
-        <StatCard icon="x-circle" label="Riesgo Crítico (3+ consec.)" :value="`${resumenReporte.totalCriticosConsecutivos}`" variant="rojo" />
-        <StatCard icon="clock" label="Alerta (5+ acumuladas)" :value="`${resumenReporte.totalAlertasAcumuladas}`" variant="ambar" />
-        <StatCard icon="file-text" label="Con Excusa" :value="`${resumenReporte.totalHorasConExcusa}h`" variant="azul" />
-        <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenReporte.totalDocentesActivos" variant="morado" />
-        <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenReporte.totalSesionesDictadas" variant="indigo" />
-      </div>
-
-      <!-- RESUMEN SUPERIOR: DOCENTES A CARGO DE LAS JORNADAS (UN DOCENTE POR DÍA) -->
-      <div v-if="datosReporteDocentes.length > 0" class="reporte-docentes-superior">
-        <div class="reporte-docentes-titulo">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-          <span>Docentes responsables de las jornadas registradas en este periodo:</span>
-        </div>
-        <div class="reporte-docentes-chips">
-          <div v-for="d in datosReporteDocentes" :key="d.id" class="docente-chip-superior">
-            <strong class="docente-chip-nombre">Prof. {{ d.nombre }}</strong>
-            <span class="docente-chip-meta">{{ d.clasesDictadas }} {{ d.clasesDictadas === 1 ? 'jornada' : 'jornadas' }} ({{ d.horasDictadas }}h) • {{ d.especialidad }}</span>
+        <div class="rp-cal-tabla">
+          <div class="rp-cal-cab">
+            <span v-for="d in DIAS_SEMANA" :key="d">{{ d }}</span>
+          </div>
+          <div class="rp-cal-grid">
+            <button
+              v-for="c in celdasMes"
+              :key="c.fecha"
+              type="button"
+              class="rp-cal-dia"
+              :class="{
+                'rp-cal-otro': !c.delMes,
+                'rp-cal-fuera': c.delMes && !c.enRango,
+                'rp-cal-hoy': c.fecha === hoyISO && c.delMes,
+                'rp-activo': diaSeleccionado === c.fecha,
+              }"
+              :disabled="!c.enRango"
+              :title="c.estado ? textoEstado[c.estado] : (c.enRango ? 'Sin registro' : '')"
+              :aria-label="`${c.dia} de ${MESES[vista.m]} ${vista.y}${c.estado ? ': ' + textoEstado[c.estado] : ''}`"
+              @click="seleccionarDia(c, $event)"
+            >
+              <span class="rp-cal-num">{{ c.dia }}</span>
+              <span v-if="c.estado" class="rp-cal-evento" :class="`rp-${c.estado}`">{{ textoBarra[c.estado] }}</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- ============================================= -->
-      <!-- VISTA 1: DESGLOSE POR APRENDIZ                -->
-      <!-- ============================================= -->
-      <div v-if="vistaReporte === 'aprendices'">
-        <div v-if="datosReporteAprendicesFiltrados.length === 0" class="empty-state">
-          <p>No se encontraron aprendices que coincidan con los filtros de búsqueda aplicados.</p>
+      <Teleport to="body">
+        <div v-if="detalleDia && popover" class="rp-pop" role="dialog" aria-label="Detalle del día" :style="{ top: popover.top + 'px', left: popover.left + 'px', width: POP_ANCHO + 'px' }">
+          <header class="rp-pop-head">
+            <span>Detalle del día</span>
+            <button type="button" class="rp-pop-x" aria-label="Cerrar" @click="cerrarPopover">&times;</button>
+          </header>
+          <div class="rp-pop-body">
+            <p class="rp-pop-fecha">{{ formatoFechaLarga(detalleDia.fecha) }}</p>
+            <p v-if="!detalleDia.registros.length" class="rp-pop-vacio">No hay registro de asistencia para este día.</p>
+            <div v-for="(r, i) in detalleDia.registros" :key="i" class="rp-pop-reg">
+              <span class="rp-pop-lbl">Estado:</span>
+              <span class="rp-pop-val">
+                <span class="rp-pop-dot" :class="categoria(r.estado) ? `rp-pop-${categoria(r.estado)}` : ''"></span>
+                {{ r.estado === 'Excusada' ? 'Excusada' : etiquetaEstado(r.estado) }}
+                <span v-if="r.estado === 'Tardanza'" class="badge badge-danger rp-badge-det">Sin excusa</span>
+              </span>
+              <span class="rp-pop-lbl">Docente:</span>
+              <span class="rp-pop-val">{{ nombreInstructor(r) }}</span>
+              <template v-if="r.estado === 'Tardanza' && Number(r.horasTardanza) > 0">
+                <span class="rp-pop-lbl">Tardanza:</span>
+                <span class="rp-pop-val">{{ r.horasTardanza }} {{ Number(r.horasTardanza) === 1 ? 'hora' : 'horas' }}</span>
+              </template>
+              <template v-if="r.estado === 'Excusada'">
+                <span class="rp-pop-lbl">Motivo de la excusa:</span>
+                <span class="rp-pop-val">{{ motivoExcusa(r) || 'No se registró un motivo.' }}</span>
+              </template>
+            </div>
+          </div>
         </div>
+      </Teleport>
+    </section>
 
-        <div v-else class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Aprendiz</th>
-                <th>Documento</th>
-                <th>Riesgo Deserción</th>
-                <th>Presentes</th>
-                <th>Tardanzas</th>
-                <th>Horas Ausente</th>
-                <th>Sin Excusa</th>
-                <th>Con Excusa</th>
-                <th>Inasistencias por Fecha</th>
-                <th>% Asistencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(r, idx) in datosReporteAprendicesFiltrados" :key="r.estudiante._id">
-                <td>{{ idx + 1 }}</td>
-                <td><strong>{{ r.estudiante.nombres }} {{ r.estudiante.apellidos }}</strong></td>
-                <td>{{ r.estudiante.tipoDocumento }} {{ r.estudiante.numeroDocumento }}</td>
-                <td>
-                  <span v-if="r.consecutivoGrave" class="badge badge-danger" style="font-size: 11px; white-space: nowrap;">
-                    ⚠️ Crítico ({{ r.rachaMaxima }} d consec.)
-                  </span>
-                  <span v-else-if="r.noConsecutivoGrave" class="badge badge-warning" style="font-size: 11px; white-space: nowrap;">
-                    ⚡ Alerta ({{ r.fallasSinExcusa }} d acum.)
-                  </span>
-                  <span v-else class="badge badge-success" style="font-size: 11px;">
-                    Normal
-                  </span>
-                </td>
-                <td><span class="badge badge-success">{{ r.presentes }} d</span></td>
-                <td><span class="badge badge-warning">{{ r.tardanzas }}</span></td>
-                <td>
-                  <strong style="font-size: 14px; color: #1e293b;">
-                    {{ r.horasTotalesFalladas }} hrs
-                  </strong>
-                </td>
-                <td>
-                  <span class="badge badge-danger" style="font-size: 13px;">
-                    {{ r.horasSinExcusa }} hrs ({{ r.fallasSinExcusa }} d)
-                  </span>
-                </td>
-                <td>
-                  <span v-if="r.horasConExcusa > 0" class="badge badge-info" style="font-size: 13px;">
-                     {{ r.horasConExcusa }} hrs ({{ r.fallasConExcusa }} d)
-                  </span>
-                  <span v-else style="color: #94a3b8; font-size: 12px;">—</span>
-                </td>
-                <td>
-                  <div v-if="r.detallesInasistencias.length > 0" class="inasistencias-cell-lista">
-                    <div
-                      v-for="(det, detIdx) in r.detallesInasistencias"
-                      :key="detIdx"
-                      class="inasistencia-chip-item"
-                      :class="{ 'chip-excusada': det.tipo === 'Excusada', 'chip-injustificada': det.tipo !== 'Excusada' }"
-                      :title="`Sesión a cargo de: Prof. ${det.docente}`"
-                    >
-                      <span class="inasistencia-chip-fecha">{{ det.fecha }} ({{ det.horas }}h)</span>
-                      <span class="inasistencia-chip-sep">—</span>
-                      <span class="inasistencia-chip-tipo">
-                        {{ det.tipo === 'Excusada' ? `Excusada (${det.motivo})` : 'Injustificada' }}
-                      </span>
-                    </div>
-                  </div>
-                  <span v-else style="color: #16a34a; font-weight: 600; font-size: 12px;">Sin inasistencias</span>
-                </td>
-                <td>
-                  <strong :style="{ color: r.porcentaje >= 80 ? '#22c55e' : r.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
-                    {{ r.totalDias > 0 ? r.porcentaje + '%' : 'S/R' }}
-                  </strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+    <!-- ===== MODAL DE DETALLE ===== -->
+    <div v-if="detalleEst" class="rp-overlay" @click.self="cerrarDetalle">
+      <div class="rp-modal" role="dialog" aria-modal="true" aria-labelledby="rp-modal-titulo">
+        <header class="rp-modal-head">
+          <div>
+            <h3 id="rp-modal-titulo">{{ nombreCompleto(detalleEst.estudiante) }}</h3>
+            <p>{{ detalleEst.estudiante.tipoDocumento }} {{ detalleEst.estudiante.numeroDocumento }} · Ficha {{ reporte.ficha?.codigoFicha }}</p>
+          </div>
+          <button type="button" class="rp-cerrar" aria-label="Cerrar" @click="cerrarDetalle">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </header>
+
+        <div class="rp-modal-cuerpo">
+          <h4 class="rp-sec-titulo">Resumen</h4>
+          <div class="rp-resumen-grid">
+            <div class="rp-dato"><span>Riesgo de deserción</span><b><span class="badge" :class="claseRiesgo[detalleEst.riesgo]">{{ textoRiesgo[detalleEst.riesgo](detalleEst) }}</span></b></div>
+            <div class="rp-dato"><span>Tardanzas</span><b>{{ detalleEst.tardanzas }}</b></div>
+            <div class="rp-dato"><span>Sin excusa</span><b>{{ detalleEst.horasSinExcusa }} hrs ({{ detalleEst.fallasSinExcusa }} d)</b></div>
+            <div class="rp-dato"><span>Con excusa</span><b>{{ detalleEst.horasConExcusa }} hrs ({{ detalleEst.fallasConExcusa }} d)</b></div>
+          </div>
+
+          <h4 class="rp-sec-titulo">Inasistencias por fecha</h4>
+          <p v-if="!detalleEst.inasistencias.length" class="rp-sin-inas">Sin inasistencias en el periodo consultado.</p>
+          <div v-else class="rp-tabla-wrap">
+            <table class="rp-tabla rp-tabla-det">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Horas</th>
+                  <th>Tipo</th>
+                  <th>Motivo</th>
+                  <th>Docente</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(i, idx) in detalleEst.inasistencias" :key="idx">
+                  <td><strong>{{ i.fecha }}</strong></td>
+                  <td>{{ i.horas }} h</td>
+                  <td><span class="badge" :class="i.tipo === 'Excusada' ? 'badge-warning' : 'badge-danger'">{{ i.tipo }}</span></td>
+                  <td>{{ i.motivo }}</td>
+                  <td>{{ i.docente }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-
-      <!-- ============================================= -->
-      <!-- VISTA 2: DESGLOSE POR DOCENTE / MATERIA       -->
-      <!-- ============================================= -->
-      <div v-else-if="vistaReporte === 'docentes'">
-        <div v-if="datosReporteDocentes.length === 0" class="empty-state">
-          <p>No se encontraron registros de docentes para los filtros aplicados.</p>
-        </div>
-
-        <div v-else class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Instructor / Docente</th>
-                <th>Especialidad / Materia</th>
-                <th>Clases Dictadas</th>
-                <th>Horas Dictadas</th>
-                <th>Asistencias Marcadas</th>
-                <th>Tardanzas</th>
-                <th> Horas Sin Excusa</th>
-                <th> Horas Con Excusa</th>
-                <th>% Asistencia en sus Clases</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(d, idx) in datosReporteDocentes" :key="d.id">
-                <td>{{ idx + 1 }}</td>
-                <td><strong>‍ {{ d.nombre }}</strong></td>
-                <td><span class="badge badge-info">{{ d.especialidad }}</span></td>
-                <td><strong>{{ d.clasesDictadas }} sesiones</strong></td>
-                <td><span style="color: #475569; font-weight: 700;">{{ d.horasDictadas }} hrs</span></td>
-                <td><span class="badge badge-success">{{ d.totalPresentes }}</span></td>
-                <td><span class="badge badge-warning">{{ d.totalTardanzas }}</span></td>
-                <td><span class="badge badge-danger">{{ d.horasSinExcusa }} hrs</span></td>
-                <td><span class="badge badge-info">{{ d.horasConExcusa }} hrs</span></td>
-                <td>
-                  <strong :style="{ color: d.porcentaje >= 80 ? '#22c55e' : d.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
-                    {{ d.porcentaje }}%
-                  </strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ============================================= -->
-      <!-- VISTA 3: HISTORIAL POR SESIÓN DE CLASE        -->
-      <!-- ============================================= -->
-      <div v-else-if="vistaReporte === 'sesiones'">
-        <div v-if="datosReporteSesiones.length === 0" class="empty-state">
-          <p>No se encontraron sesiones registradas para los filtros aplicados.</p>
-        </div>
-
-        <div v-else class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha de Clase</th>
-                <th>Docente a Cargo</th>
-                <th>Horas Sesión</th>
-                <th>Presentes</th>
-                <th>Tardanzas</th>
-                <th> Sin Excusa</th>
-                <th> Con Excusa</th>
-                <th>% Asistencia</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="s in datosReporteSesiones" :key="s.fecha">
-                <td><strong>{{ s.fecha }}</strong></td>
-                <td>‍ {{ s.docente }}</td>
-                <td>{{ s.horasSesion }} hrs</td>
-                <td><span class="badge badge-success">{{ s.presentes }}</span></td>
-                <td><span class="badge badge-warning">{{ s.tardanzas }}</span></td>
-                <td><span class="badge badge-danger">{{ s.fallasSinExcusa }}</span></td>
-                <td><span class="badge badge-info">{{ s.fallasConExcusa }}</span></td>
-                <td>
-                  <strong :style="{ color: s.porcentaje >= 80 ? '#22c55e' : s.porcentaje >= 60 ? '#f59e0b' : '#ef4444' }">
-                    {{ s.porcentaje }}%
-                  </strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="reporte-footer">
-        <p>Documento oficial generado automáticamente por el Sistema de Asistencias SENA.</p>
-        <p>Reporte filtrado dinámicamente por Aprendiz, Docente y Rango de Fechas.</p>
       </div>
     </div>
-  </div>
+  </template>
 </template>
 
 <style scoped>
-/* ====== Filtro por pasos (Reportes) ====== */
-.rf-panel {
-  --rf-verde: var(--verde, #39a900);
-  --rf-verde-osc: #2c8300;
-  --rf-verde-claro: #eaf6e0;
-  --rf-verde-borde: #b9de9c;
-  --rf-borde: var(--borde, #e3e8df);
-  --rf-borde-fuerte: #cdd5c8;
-  --rf-texto: var(--tinta, #1a1f16);
-  --rf-suave: var(--texto-suave, #5b6356);
-  --rf-tenue: #8b9385;
-  --rf-rojo: #c62828;
-  --rf-rojo-claro: #fdeceb;
-  --rf-radio: 10px;
+.rp-sin-fichas { background: #fff1f2; border-color: #fecdd3; color: #9f1239; padding: 20px; }
+
+.rp-panel {
+  --rp-verde: var(--verde, #39a900);
+  --rp-verde-osc: #2c8300;
+  --rp-borde: var(--borde, #e3e8df);
+  --rp-texto: var(--tinta, #16210f);
+  --rp-suave: var(--texto-suave, #5b6356);
+  --rp-rojo: #c4432b;
+  --c-tarde: #38bdf8;
+  --c-excusa: #f5c400;
+  --c-falla: #d93025;
 
   background: #fff;
   border-radius: 24px;
-  padding: 28px 36px 32px;
+  padding: 28px 36px 30px;
   margin-bottom: 24px;
   box-shadow: 0 1px 2px rgba(30, 50, 20, .04), 0 12px 32px rgba(30, 50, 20, .06);
 }
+.rp-resultado { --c-tarde: #38bdf8; --c-excusa: #f5c400; --c-falla: #d93025; }
 
-.rf-panel :focus-visible { outline: 2px solid var(--rf-verde); outline-offset: 2px; }
+.rp-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; color: var(--rp-verde-osc); }
+.rp-panel-head h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--rp-texto); }
 
-.rf-h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; color: var(--rf-texto); }
-.rf-sub { margin: 0 0 8px; font-size: 14px; color: var(--rf-suave); }
+.rp-rejilla { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: end; }
+.rp-campo { position: relative; }
+.rp-campo label { display: block; font-size: 13px; font-weight: 700; line-height: 18px; height: 18px; margin-bottom: 6px; color: var(--rp-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.rf-solo-lectores { position: absolute; left: -9999px; }
-
-/* Pasos */
-.rf-paso {
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  column-gap: 16px;
-  padding: 20px 0 22px;
-}
-.rf-paso + .rf-paso,
-.rf-paso + .rf-resumen { border-top: 1px solid var(--rf-borde); }
-.rf-paso + .rf-resumen { margin-top: 0; }
-
-.rf-num {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  border: 1.5px solid var(--rf-borde-fuerte);
-  background: #fff;
-  display: grid; place-items: center;
-  font-size: 14px; font-weight: 800;
-  color: var(--rf-suave);
-  transition: background .2s, border-color .2s, color .2s;
-}
-.rf-activo .rf-num { border-color: var(--rf-verde); color: var(--rf-verde-osc); background: var(--rf-verde-claro); }
-.rf-completo .rf-num { background: var(--rf-verde); border-color: var(--rf-verde); color: #fff; }
-.rf-num .rf-ico { width: 17px; height: 17px; }
-
-.rf-titulo { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 3px 0 2px; font-size: 16px; font-weight: 800; color: var(--rf-texto); }
-.rf-ayuda { margin: 0 0 14px; font-size: 13.5px; color: var(--rf-suave); }
-
-.rf-etiqueta { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; background: #f0f2ee; color: var(--rf-suave); }
-.rf-obligatorio { background: var(--rf-rojo-claro); color: var(--rf-rojo); }
-
-.rf-ico { width: 18px; height: 18px; flex: none; }
-
-/* Campos */
-.rf-rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.rf-campo { position: relative; }
-.rf-campo label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--rf-texto); }
-.rf-campo-ficha { max-width: 460px; }
-
-.rf-campo select,
-.rf-campo input[type="search"],
-.rf-campo input[type="date"] {
+.rp-campo select,
+.rp-campo input {
   width: 100%;
   height: 46px;
+  box-sizing: border-box;
+  margin: 0;
   padding: 0 14px;
   background: #fff;
-  border: 1px solid var(--rf-borde);
-  border-radius: var(--rf-radio);
+  border: 1px solid var(--rp-borde);
+  border-radius: 10px;
   font: inherit;
   font-size: 15px;
-  color: var(--rf-texto);
+  color: var(--rp-texto);
   transition: border-color .15s, box-shadow .15s;
 }
-.rf-campo select {
+.rp-campo select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 38px;
@@ -1071,240 +1029,193 @@ function limpiar() {
   background-repeat: no-repeat;
   background-position: right 14px center;
 }
-.rf-campo select:hover,
-.rf-campo input:hover { border-color: var(--rf-borde-fuerte); }
-.rf-campo select:focus,
-.rf-campo input:focus { outline: none; border-color: var(--rf-verde); box-shadow: 0 0 0 3px rgba(57, 169, 0, .18); }
-.rf-campo input::placeholder { color: var(--rf-tenue); }
+.rp-campo input:disabled { background: #f6f8f4; cursor: not-allowed; }
+.rp-campo input::placeholder { color: #9aa294; }
+.rp-campo select:focus,
+.rp-campo input:focus { outline: none; border-color: var(--rp-verde); box-shadow: 0 0 0 3px rgba(57, 169, 0, .18); }
 
-.rf-error { margin: 10px 0 0; font-size: 13px; font-weight: 600; color: var(--rf-rojo); }
-
-.rf-separador {
-  display: flex; align-items: center; gap: 12px;
-  margin: 16px 0 12px;
-  font-size: 13px; color: var(--rf-tenue);
+.rp-sugerencias {
+  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+  margin: 0; padding: 6px; list-style: none;
+  background: #fff; border: 1px solid var(--rp-borde); border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(22, 33, 15, .14);
+  max-height: 280px; overflow-y: auto;
 }
-.rf-separador::before,
-.rf-separador::after { content: ""; flex: 1; height: 1px; background: var(--rf-borde); }
+.rp-sugerencias li { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 8px; cursor: pointer; }
+.rp-sugerencias li:hover { background: #f2f9ed; }
+.rp-sugerencias strong { font-size: 14px; color: var(--rp-texto); }
+.rp-sugerencias span { font-size: 12.5px; color: var(--rp-suave); }
+.rp-sin-resultados { position: absolute; top: calc(100% + 4px); left: 0; margin: 0; font-size: 12.5px; color: var(--rp-suave); }
 
-.rf-busqueda .rf-ico { position: absolute; left: 14px; bottom: 13px; width: 19px; height: 19px; color: var(--rf-tenue); pointer-events: none; }
-.rf-campo.rf-busqueda input[type="search"] { padding-left: 44px; }
+.rp-error { margin: 14px 0 0; font-size: 13.5px; font-weight: 600; color: var(--rp-rojo); }
 
-/* Atajos y opciones segmentadas */
-.rf-atajos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
-.rf-atajos-titulo { font-size: 13px; color: var(--rf-suave); margin-right: 2px; }
-
-.rf-chip,
-.rf-seg span {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 8px 14px;
-  border: 1px solid var(--rf-borde);
-  border-radius: 999px;
-  background: #fff;
-  font: inherit;
-  font-size: 14px; font-weight: 600;
-  color: var(--rf-texto);
-  cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s;
+.rp-acciones { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
+.rp-btn {
+  height: 44px; padding: 0 22px; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+  border: 1px solid transparent; transition: background .15s, border-color .15s, opacity .15s;
 }
-.rf-chip:hover,
-.rf-seg span:hover { border-color: var(--rf-verde-borde); background: #f7fbf3; }
+.rp-btn-primario { background: var(--rp-verde); color: #fff; }
+.rp-btn-primario:hover:not(:disabled) { background: var(--rp-verde-osc); }
+.rp-btn-primario:disabled { opacity: .45; cursor: not-allowed; }
+.rp-btn-secundario { background: #fff; color: var(--rp-texto); border-color: var(--rp-borde); }
+.rp-btn-secundario:hover { background: #f6f8f4; }
+.rp-btn:focus-visible { outline: 2px solid var(--rp-verde); outline-offset: 2px; }
 
-.rf-grupo-seg { display: flex; flex-wrap: wrap; gap: 8px; }
-.rf-grupo-etq { font-size: 13px; font-weight: 700; margin: 0 0 8px; color: var(--rf-texto); }
-
-.rf-seg { position: relative; margin: 0; }
-.rf-seg input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.rf-seg input:checked + span { background: var(--rf-verde-claro); border-color: var(--rf-verde); color: var(--rf-verde-osc); }
-.rf-seg input:focus-visible + span { outline: 2px solid var(--rf-verde); outline-offset: 2px; }
-.rf-seg span { border-radius: var(--rf-radio); }
-
-/* Botón para pasar al siguiente paso */
-.rf-pie { margin-top: 20px; }
-.rf-continuar {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 42px; padding: 0 18px;
-  background: #fff;
-  border: 1px solid var(--rf-verde-borde);
-  border-radius: var(--rf-radio);
-  color: var(--rf-verde-osc);
-  font: inherit; font-weight: 700; font-size: 14.5px;
-  cursor: pointer;
-  transition: background .15s, border-color .15s;
+/* ===== Resultado ===== */
+.rp-resultado {
+  background: #fff; border-radius: 24px; padding: 28px 36px 32px; margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(30, 50, 20, .04), 0 12px 32px rgba(30, 50, 20, .06);
 }
-.rf-continuar:hover { background: var(--rf-verde-claro); border-color: var(--rf-verde); }
+.rp-res-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 24px; }
+.rp-res-head h2 { margin: 0 0 4px; font-size: 20px; font-weight: 800; color: #16210f; }
+.rp-res-head p { margin: 0; font-size: 14px; color: #5b6356; }
 
-/* Resumen y acciones */
-.rf-resumen {
-  margin-top: 6px;
-  padding: 16px 18px;
-  background: #f7f9f5;
-  border: 1px solid var(--rf-borde);
-  border-radius: 16px;
-}
-.rf-resumen-titulo { margin: 0 0 10px; font-size: 13px; font-weight: 700; color: var(--rf-suave); }
-.rf-resumen-lista { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.rf-resumen-lista li {
-  padding: 4px 12px;
-  background: #fff;
-  border: 1px solid var(--rf-borde);
-  border-radius: 999px;
-  font-size: 13px; font-weight: 600;
-  color: var(--rf-texto);
-}
+.rp-leyenda { display: flex; gap: 10px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0; }
+.rp-leyenda li { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border: 1px solid #e3e8df; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: #16210f; }
+.rp-leyenda b { font-weight: 800; }
 
-.rf-acciones { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
-.rf-acciones-parcial { margin-top: 4px; }
+.rp-punto { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; background: #cfd6ca; }
+.rp-punto.rp-tarde { background: var(--c-tarde); }
+.rp-punto.rp-excusa { background: var(--c-excusa); }
+.rp-punto.rp-falla { background: var(--c-falla); }
 
-.rf-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 46px; padding: 0 22px;
-  border-radius: var(--rf-radio);
-  border: 1px solid var(--rf-borde);
-  background: #fff;
-  color: var(--rf-texto);
-  font: inherit; font-weight: 700; font-size: 15px;
-  cursor: pointer;
-  transition: background .15s, border-color .15s;
+/* Calendario de un solo mes, con navegación */
+.rp-cal-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.rp-cal-flecha {
+  width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; border-radius: 50%; color: #2e7d32; cursor: pointer;
+  transition: background .15s;
 }
-.rf-btn .rf-ico { width: 19px; height: 19px; }
-.rf-btn-primario { background: var(--rf-verde); border-color: var(--rf-verde); color: #fff; }
-.rf-btn-primario:hover:not(:disabled) { background: var(--verde-hover, #2f8c00); border-color: var(--verde-hover, #2f8c00); }
-.rf-btn-primario:disabled { opacity: .5; cursor: not-allowed; }
-.rf-btn-secundario:hover { background: #f4f6f2; border-color: var(--rf-borde-fuerte); }
+.rp-cal-flecha:hover:not(:disabled) { background: #f2f9ed; }
+.rp-cal-flecha:disabled { color: #c5ccc0; cursor: default; }
+.rp-cal-select {
+  height: 40px; padding: 0 12px; border: 1px solid #d5dbd0; border-radius: 6px; background: #fff;
+  font: inherit; font-size: 14px; color: #16210f; cursor: pointer;
+}
+.rp-cal-select:focus { outline: 2px solid #39a900; outline-offset: 1px; }
+.rp-cal-select-mes { min-width: 140px; }
+.rp-cal-select-anio { min-width: 110px; }
 
-/* Animación de entrada de cada paso */
-.rf-entra-enter-active { animation: rf-entra .4s cubic-bezier(.2, .7, .2, 1) both; }
-@keyframes rf-entra {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: none; }
+.rp-cal-tabla { border: 1px solid #e3e8df; border-radius: 12px; overflow: hidden; }
+.rp-cal-cab, .rp-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.rp-cal-cab span {
+  padding: 10px 0; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: #2e7d32; background: #fafbf9; border-bottom: 1px solid #e3e8df;
 }
+.rp-cal-dia {
+  position: relative; min-height: 86px; padding: 8px 8px 6px; display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+  background: #fff; border: none; border-right: 1px solid #e3e8df; border-bottom: 1px solid #e3e8df; border-radius: 0;
+  font: inherit; text-align: right; cursor: pointer; transition: background .15s;
+}
+.rp-cal-dia:nth-child(7n) { border-right: none; }
+.rp-cal-dia:nth-last-child(-n + 7) { border-bottom: none; }
+.rp-cal-dia:hover:not(:disabled) { background: #f2f9ed; }
+.rp-cal-dia:focus-visible { outline: 2px solid #39a900; outline-offset: -2px; }
+.rp-cal-dia.rp-activo { background: #f2f9ed; box-shadow: inset 0 0 0 2px #39a900; }
+.rp-cal-dia.rp-cal-hoy { background: #f1f8e9; }
+.rp-cal-dia.rp-cal-otro { background: #f5f5f5; cursor: default; }
+.rp-cal-dia.rp-cal-fuera { cursor: default; }
+.rp-cal-num { font-size: 14px; font-weight: 700; color: #16210f; line-height: 1.2; }
+.rp-cal-otro .rp-cal-num, .rp-cal-fuera .rp-cal-num { color: #b7bdb3; font-weight: 600; }
+.rp-cal-evento {
+  display: block; width: 100%; padding: 3px 6px; border-radius: 4px; text-align: left;
+  font-size: 10px; font-weight: 800; letter-spacing: .02em; color: #fff; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rp-cal-evento.rp-tarde { background: var(--c-tarde); color: #06324a; }
+.rp-cal-evento.rp-excusa { background: var(--c-excusa); color: #4a3b00; }
+.rp-cal-evento.rp-falla { background: var(--c-falla); }
 
-@media (max-width: 860px) {
-  .rf-panel { padding: 22px 18px 26px; border-radius: 20px; }
-  .rf-rejilla { grid-template-columns: 1fr; }
-  .rf-paso { grid-template-columns: 30px 1fr; column-gap: 12px; }
-  .rf-num { width: 28px; height: 28px; font-size: 13px; }
-}
+.rp-detalle { margin-top: 24px; padding: 18px 20px; background: #f7f9f5; border-radius: 14px; }
+.rp-detalle h4 { margin: 0 0 10px; font-size: 15px; font-weight: 800; color: #16210f; }
+.rp-detalle h4::first-letter { text-transform: uppercase; }
+.rp-badge-det { margin-left: 8px; font-size: 11px; vertical-align: middle; }
+.rp-detalle-vacio { margin: 0; font-size: 14px; color: #5b6356; }
+.rp-detalle ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rp-detalle li { display: flex; gap: 12px; align-items: flex-start; }
+.rp-detalle li .rp-punto { margin-top: 6px; }
+.rp-detalle li strong { display: block; font-size: 14px; color: #16210f; }
+.rp-detalle-meta { display: block; font-size: 13px; color: #5b6356; }
+
+.rp-tipos { display: inline-flex; gap: 4px; padding: 4px; background: #f0f2ee; border-radius: 12px; margin-bottom: 22px; }
+.rp-tipo { height: 38px; padding: 0 20px; border: none; border-radius: 9px; background: transparent; font: inherit; font-size: 14.5px; font-weight: 700; color: #5b6356; cursor: pointer; transition: background .15s, color .15s; }
+.rp-tipo:hover { color: #16210f; }
+.rp-tipo-on, .rp-tipo-on:hover { background: #fff; color: #2c8300; box-shadow: 0 1px 3px rgba(22, 33, 15, .12); }
+.rp-tipo:focus-visible { outline: 2px solid #39a900; outline-offset: 2px; }
+.rp-num-col { text-align: right !important; white-space: nowrap; }
+.rp-tabla tfoot td { padding: 13px 16px; background: #f7f9f5; font-weight: 800; color: #16210f; border-top: 1px solid #e3e8df; }
+.rp-nota { margin: 14px 2px 0; font-size: 13px; color: #5b6356; }
+
+.rp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 8px; }
+.rp-nota-stats { margin: 0 2px 20px; }
+.rp-aviso { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 0 20px; padding: 14px 18px; background: #fff7e6; border: 1px solid #f5d28a; border-radius: 14px; color: #8a5a00; }
+.rp-aviso svg { flex: none; }
+.rp-aviso p { margin: 0; flex: 1; min-width: 220px; font-size: 14px; color: #6b4600; }
+.rp-aviso-btn { height: 38px; padding: 0 16px; border: 1px solid #e0b04a; border-radius: 9px; background: #fff; font: inherit; font-size: 13.5px; font-weight: 700; color: #8a5a00; cursor: pointer; }
+.rp-aviso-btn:hover { background: #fff1d0; }
+.rp-ruta-ok { padding: 20px; background: #f2f9ed; border-radius: 14px; color: #2c8300; font-weight: 600; font-size: 14.5px; }
+.rp-motivos { display: flex; flex-wrap: wrap; gap: 6px; }
+.rp-motivo { padding: 3px 10px; border-radius: 999px; background: #fbeae6; color: #b3361f; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.rp-chip-fecha { padding: 3px 9px; border-radius: 8px; background: #f0f2ee; color: #3d4638; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+
+.rp-opcional { font-weight: 500; color: #9aa294; }
+.rp-vacio-msg { padding: 24px; text-align: center; color: #5b6356; font-size: 14.5px; }
+
+.rp-tabla-wrap { overflow-x: auto; border: 1px solid #e3e8df; border-radius: 14px; }
+.rp-tabla { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+.rp-tabla th { text-align: left; padding: 12px 16px; background: #f7f9f5; font-size: 12.5px; font-weight: 700; color: #5b6356; text-transform: uppercase; letter-spacing: .03em; border-bottom: 1px solid #e3e8df; white-space: nowrap; }
+.rp-tabla td { padding: 13px 16px; border-bottom: 1px solid #eef1ea; color: #16210f; vertical-align: middle; }
+.rp-tabla tbody tr:last-child td { border-bottom: none; }
+.rp-fila { cursor: pointer; transition: background .15s; }
+.rp-fila:hover, .rp-fila:focus-visible { background: #f2f9ed; outline: none; }
+.rp-th-acc { text-align: right !important; }
+.rp-td-acc { text-align: right; white-space: nowrap; }
+.rp-link { background: none; border: none; padding: 6px 8px; font: inherit; font-size: 13.5px; font-weight: 700; color: #2c8300; cursor: pointer; border-radius: 6px; }
+.rp-link:hover { background: #e8f5e0; }
+
+.rp-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(22, 33, 15, .45); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.rp-modal { background: #fff; border-radius: 20px; width: 100%; max-width: 820px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(22, 33, 15, .28); }
+.rp-modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 26px 16px; border-bottom: 1px solid #e3e8df; }
+.rp-modal-head h3 { margin: 0 0 4px; font-size: 19px; font-weight: 800; color: #16210f; }
+.rp-modal-head p { margin: 0; font-size: 13.5px; color: #5b6356; }
+.rp-cerrar { background: none; border: none; padding: 6px; border-radius: 8px; color: #5b6356; cursor: pointer; }
+.rp-cerrar:hover { background: #f0f2ee; }
+.rp-modal-cuerpo { padding: 20px 26px 26px; overflow-y: auto; }
+.rp-sec-titulo { margin: 0 0 12px; font-size: 14px; font-weight: 800; color: #16210f; }
+.rp-resumen-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 26px; }
+.rp-dato { background: #f7f9f5; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; }
+.rp-dato span { font-size: 12.5px; color: #5b6356; }
+.rp-dato b { font-size: 15px; color: #16210f; }
+.rp-sin-inas { margin: 0; padding: 16px; background: #f2f9ed; border-radius: 12px; color: #2c8300; font-weight: 600; font-size: 14px; }
+.rp-tabla-det td, .rp-tabla-det th { padding: 11px 14px; }
+
+@media (max-width: 1100px) { .rp-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* Ventana flotante de detalle del día */
+.rp-pop { position: fixed; z-index: 1100; max-width: calc(100vw - 24px); background: #fff; border-radius: 6px; box-shadow: 0 8px 28px rgba(22, 33, 15, .28); overflow: hidden; }
+.rp-pop-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: #e8f5e0; color: #2e7d32; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.rp-pop-x { background: none; border: none; font-size: 22px; line-height: 1; color: #2e7d32; cursor: pointer; padding: 0 4px; }
+.rp-pop-x:hover { color: #16210f; }
+.rp-pop-body { padding: 14px 16px 16px; max-height: 60vh; overflow-y: auto; }
+.rp-pop-fecha { margin: 0 0 12px; font-size: 14px; font-weight: 800; color: #16210f; }
+.rp-pop-fecha::first-letter { text-transform: uppercase; }
+.rp-pop-vacio { margin: 0; font-size: 14px; color: #5b6356; }
+.rp-pop-reg { display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #e3e8df; }
+.rp-pop-reg:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: none; }
+.rp-pop-lbl { margin-top: 8px; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #2e7d32; }
+.rp-pop-lbl:first-child { margin-top: 0; }
+.rp-pop-val { font-size: 14px; color: #16210f; word-break: break-word; }
+.rp-pop-dot { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: #b7bdb3; }
+.rp-pop-dot.rp-pop-tarde { background: #38bdf8; }
+.rp-pop-dot.rp-pop-excusa { background: #f5c400; }
+.rp-pop-dot.rp-pop-falla { background: #d93025; }
 
 @media (max-width: 640px) {
-  .rf-panel { padding: 18px 14px 22px; border-radius: 16px; }
-  .rf-campo-ficha { max-width: none; }
-  .rf-titulo { font-size: 15px; }
-  .rf-ayuda { font-size: 13px; }
-  .rf-acciones { flex-direction: column; align-items: stretch; }
-  .rf-acciones .rf-btn,
-  .rf-pie .rf-continuar { width: 100%; }
-  .reporte-header { text-align: left; }
-  .reporte-header h2 { font-size: 16px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rf-panel * { transition: none !important; }
-  .rf-entra-enter-active { animation: none; }
-}
-
-/* ====== Resumen Superior de Docentes (Un docente por jornada) ====== */
-.reporte-docentes-superior {
-  background: #f8fafc;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 14px 18px;
-  margin-bottom: 20px;
-}
-
-.reporte-docentes-titulo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #334155;
-  margin-bottom: 10px;
-}
-
-.reporte-docentes-titulo svg {
-  color: #4f46e5;
-  flex-shrink: 0;
-}
-
-.reporte-docentes-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.docente-chip-superior {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 6px 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-.docente-chip-nombre {
-  font-size: 13px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.docente-chip-meta {
-  font-size: 12px;
-  color: #64748b;
-  border-left: 1px solid #e2e8f0;
-  padding-left: 8px;
-}
-
-/* ====== Lista de Inasistencias en Celdas ====== */
-.inasistencias-cell-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-width: 340px;
-}
-
-.inasistencia-chip-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: #f8fafc;
-  border-left: 3px solid;
-  line-height: 1.3;
-}
-
-.inasistencia-chip-item.chip-injustificada {
-  border-left-color: #ef4444;
-  background: #fef2f2;
-}
-
-.inasistencia-chip-item.chip-excusada {
-  border-left-color: #0284c7;
-  background: #f0f9ff;
-}
-
-.inasistencia-chip-fecha {
-  font-weight: 700;
-  color: #1e293b;
-  white-space: nowrap;
-}
-
-.inasistencia-chip-sep {
-  color: #94a3b8;
-}
-
-.chip-injustificada .inasistencia-chip-tipo {
-  color: #b91c1c;
-  font-weight: 600;
-}
-
-.chip-excusada .inasistencia-chip-tipo {
-  color: #0369a1;
-  font-weight: 600;
+  .rp-panel, .rp-resultado { padding: 22px 18px 24px; border-radius: 18px; }
+  .rp-rejilla { grid-template-columns: 1fr; }
+  .rp-modal-head, .rp-modal-cuerpo { padding-left: 18px; padding-right: 18px; }
+  .rp-cal-dia { min-height: 58px; padding: 6px 4px 4px; }
+  .rp-cal-num { font-size: 12px; }
+  .rp-cal-evento { font-size: 8px; padding: 2px 3px; }
+  .rp-cal-select-mes { min-width: 120px; }
 }
 </style>

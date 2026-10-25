@@ -20,7 +20,7 @@ const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : null)
 const esInstructor = computed(() => usuario.value?.rol === 'Instructor')
 
-const busqueda = reactive({ fichaId: null, jornada: '', documento: '', nombres: '', estadoAsistencia: '' })
+const busqueda = reactive({ fichaId: null, jornada: '', documento: '', nombres: '', nombreDocumento: '', estadoAsistencia: '' })
 
 const estudianteForm = reactive({
   nombres: '', apellidos: '', tipoDocumento: 'CC', numeroDocumento: '',
@@ -69,9 +69,17 @@ function esLiderDeEstudiante(estudiante) {
   return !!(ficha && ficha.esLider)
 }
 
+// Instructor: true mientras no use la búsqueda avanzada (ficha o nombre/documento); hasta entonces el listado no muestra información
+const sinSeleccion = computed(() => {
+  if (!esInstructor.value) return false
+  const hayBusqueda = !!(busqueda.nombreDocumento.trim() || busqueda.fichaId)
+  return !hayBusqueda
+})
+
 const estudiantesFiltrados = computed(() => {
+  if (sinSeleccion.value) return []
   let lista = estudiantes.value
-  if (filtroEstado.value !== 'Todos') lista = lista.filter(e => e.estado === filtroEstado.value)
+  if (filtroEstado.value && filtroEstado.value !== 'Todos') lista = lista.filter(e => e.estado === filtroEstado.value)
   if (busqueda.fichaId) {
     const targetFicha = getFichaById(busqueda.fichaId)
     const targetIds = [String(busqueda.fichaId)]
@@ -101,6 +109,13 @@ const estudiantesFiltrados = computed(() => {
       return completo.includes(nom)
     })
   }
+  if (busqueda.nombreDocumento.trim()) {
+    const q = busqueda.nombreDocumento.trim().toLowerCase()
+    lista = lista.filter(e => {
+      const completo = `${e.nombres} ${e.apellidos}`.toLowerCase()
+      return completo.includes(q) || String(e.numeroDocumento || '').toLowerCase().includes(q)
+    })
+  }
   if (busqueda.estadoAsistencia) lista = lista.filter(e => e.estadoAsistencia === busqueda.estadoAsistencia)
   return lista
 })
@@ -111,12 +126,13 @@ const criteriosActivos = computed(() => {
   if (busqueda.jornada) count++
   if (busqueda.documento) count++
   if (busqueda.nombres) count++
+  if (busqueda.nombreDocumento.trim()) count++
   if (busqueda.estadoAsistencia) count++
   return count
 })
 
 function limpiarBusqueda() {
-  Object.assign(busqueda, { fichaId: null, jornada: '', documento: '', nombres: '', estadoAsistencia: '' })
+  Object.assign(busqueda, { fichaId: null, jornada: '', documento: '', nombres: '', nombreDocumento: '', estadoAsistencia: '' })
 }
 
 function showToastFn(message, type = 'success') {
@@ -320,14 +336,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div class="form-group">
         <label>Ficha</label>
         <select v-model="busqueda.fichaId">
-          <option :value="null">Todas las fichas</option>
+          <option :value="null" :disabled="esInstructor">{{ esInstructor ? 'Seleccione la ficha' : 'Todas las fichas' }}</option>
           <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
         </select>
       </div>
-      <div class="form-group"><label>Jornada</label><select v-model="busqueda.jornada"><option value="">Todas las jornadas</option><option value="Mañana"> Mañana</option><option value="Tarde"> Tarde</option><option value="Noche"> Noche</option></select></div>
-      <div class="form-group"><label>Numero de Documento</label><input v-model="busqueda.documento" type="text" placeholder="Buscar por documento..." /></div>
-      <div class="form-group"><label>Nombres</label><input v-model="busqueda.nombres" type="text" placeholder="Buscar por nombre..." /></div>
-      <div class="form-group"><label>Estado de Asistencia</label><select v-model="busqueda.estadoAsistencia"><option value="">Todos</option><option value="Sin registro">Sin registro</option><option value="Presente">Presente</option><option value="Ausente">Ausente</option></select></div>
+      <div v-if="!esInstructor" class="form-group"><label>Jornada</label><select v-model="busqueda.jornada"><option value="">Todas las jornadas</option><option value="Mañana"> Mañana</option><option value="Tarde"> Tarde</option><option value="Noche"> Noche</option></select></div>
+      <div v-if="!esInstructor" class="form-group"><label>Numero de Documento</label><input v-model="busqueda.documento" type="text" placeholder="Buscar por documento..." /></div>
+      <div v-if="!esInstructor" class="form-group"><label>Nombres</label><input v-model="busqueda.nombres" type="text" placeholder="Buscar por nombre..." /></div>
+      <div v-if="esInstructor" class="form-group"><label>Nombre o Documento</label><input v-model="busqueda.nombreDocumento" type="text" placeholder="Buscar por nombre o documento..." /></div>
+      <div v-if="!esInstructor" class="form-group"><label>Estado de Asistencia</label><select v-model="busqueda.estadoAsistencia"><option value="">Todos</option><option value="Sin registro">Sin registro</option><option value="Presente">Presente</option><option value="Ausente">Ausente</option></select></div>
     </div>
   </div>
 
@@ -336,19 +353,16 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <h3>Listado de Estudiantes</h3>
         <span v-if="criteriosActivos > 0" class="badge badge-primary">{{ estudiantesFiltrados.length }} resultado(s)</span>
-        <select v-model="filtroEstado" class="filtro-select">
+        <select v-if="!esInstructor" v-model="filtroEstado" class="filtro-select">
           <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
-        </select>
-        <select v-if="esInstructor" v-model="busqueda.fichaId" class="filtro-select" title="Filtrar por ficha">
-          <option :value="null">Todas las fichas</option>
-          <option v-for="f in fichasList" :key="f._id" :value="f._id">Ficha {{ f.codigoFicha }}{{ f.esLider ? ' (Líder)' : '' }}</option>
         </select>
       </div>
       <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
-      <p>{{ criteriosActivos > 0 ? 'No se encontraron estudiantes con los criterios de busqueda.' : 'No hay estudiantes registrados. Crea el primero usando el boton "Nuevo Estudiante".' }}</p>
+      <p v-if="sinSeleccion">Usa la búsqueda avanzada para ver la información de los aprendices.</p>
+      <p v-else>{{ criteriosActivos > 0 ? 'No se encontraron estudiantes con los criterios de busqueda.' : 'No hay estudiantes registrados. Crea el primero usando el boton "Nuevo Estudiante".' }}</p>
     </div>
 
     <div v-else class="table-container">

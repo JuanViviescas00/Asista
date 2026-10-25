@@ -217,7 +217,7 @@
 }
 
 .login-carnet.is-active .login-carnet-footer {
-  background: var(--verde-oscuro);
+  background: var(--verde);
   color: var(--blanco);
 }
 
@@ -336,13 +336,14 @@
   transform: translateY(1px);
 }
 
+/* El botón del aprendiz usa el mismo verde institucional que el del instructor */
 .login-button-student {
-  background: var(--verde-oscuro);
+  background: var(--verde);
 }
 
 .login-button-student:hover {
-  background: #173F00;
-  box-shadow: 0 6px 18px rgba(31, 92, 0, .28);
+  background: var(--verde-hover);
+  box-shadow: 0 6px 18px rgba(57, 169, 0, .26);
 }
 
 .login-button-full {
