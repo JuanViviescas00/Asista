@@ -1,0 +1,1 @@
+huellero/release-app/*.exe filter=lfs diff=lfs merge=lfs -text
