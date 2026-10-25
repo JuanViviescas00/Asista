@@ -1371,3 +1371,37 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
   - Compilación de producción con `npm run build:prod` completada en 597ms sin errores.
   - Validación de arranque de servidor y middleware de seguridad perimetral.
   - Ningún push remoto realizado (todo conservado en commits locales de la rama `juan`).
+
+
+---
+
+## [2026-10-25 00:38] Depuración y Actualización de Documentación: Retiro de SQLite y Archivos No Técnicos
+
+- **Fecha y Hora:** 2026-10-25 00:38:00 -05:00
+- **Descripción del Problema / Bug:**
+  Depuración y actualización integral de la documentación del proyecto. Se eliminaron referencias obsoletas a SQLite en la documentación técnica y scripts de arranque, y se removieron de `docs/` los archivos no técnicos de plan de negocio/emprendimiento ajenos al alcance del proyecto final de software.
+- **Causa Raíz:**
+  La arquitectura del sistema evolucionó hacia la persistencia 100% en MongoDB Atlas y cola atómica JSON en el kiosco desktop (`store.js`), descontinuando SQLite. No obstante, los documentos `README.md`, `setup_huellas.bat`, `docs/PRD.md`, `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md` y `CONSOLIDADO_CAMBIOS_Y_BUGS.md` aún describían la exportación de bases de datos SQLite como activa, generando confusión técnica. Adicionalmente, persistían en `docs/` plantillas de planes de negocio no pertinentes para la entrega de software.
+- **Solución Aplicada:**
+  1. *Depuración de SQLite en Documentación:*
+     - `README.md`: Diagrama de flujo Mermaid, tabla de componentes, variables de entorno y estructura de directorios actualizados a MongoDB Atlas y reportes oficiales en Excel/PDF.
+     - `setup_huellas.bat`: Removidas verificaciones de `better-sqlite3` y referencias en texto de instalación de backend.
+     - `docs/PRD.md` y `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`: Requerimientos funcionales y no funcionales actualizados a resiliencia mediante cola atómica local y persistencia cloud.
+     - `CONSOLIDADO_CAMBIOS_Y_BUGS.md`: Normalización de diagramas y tecnologías hacia la arquitectura actual.
+  2. *Depuración de Documentos No Relevantes:*
+     - Eliminación con control de versiones de: `docs/MODELO_CANVAS_SENA.md`, `docs/MODULO_1_PLAN_DE_NEGOCIO.md`, `docs/MODULO_5_ORGANIZACION.md` y `docs/MODULO_6_METAS_SOCIALES.md`.
+- **Archivos Modificados:**
+  - `README.md`
+  - `setup_huellas.bat`
+  - `docs/PRD.md`
+  - `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`
+  - `CONSOLIDADO_CAMBIOS_Y_BUGS.md`
+  - `docs/MODELO_CANVAS_SENA.md` (eliminado)
+  - `docs/MODULO_1_PLAN_DE_NEGOCIO.md` (eliminado)
+  - `docs/MODULO_5_ORGANIZACION.md` (eliminado)
+  - `docs/MODULO_6_METAS_SOCIALES.md` (eliminado)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Búsqueda global `git grep -i "sqlite"` confirmó 0 ocurrencias en `README.md`, `setup_huellas.bat`, `docs/PRD.md` y `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`.
+  - Carpeta `docs/` consolidada únicamente con especificaciones técnicas, requerimientos, arquitectura, guías de instalación y diagnósticos del hardware lector.
+  - Consolidado en commits locales en la rama `juan` sin push a repositorios remotos.

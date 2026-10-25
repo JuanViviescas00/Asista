@@ -23,7 +23,7 @@ echo    Node.js detectado: !NODE_VER! (Recomendado: v22+)
 echo.
 
 :: 2. Instalar dependencias Backend
-echo [2/5] Instalando dependencias del Backend (Express, Mongoose, SQLite)...
+echo [2/5] Instalando dependencias del Backend (Express, Mongoose)...
 cd /d "%ROOT_DIR%\backend"
 call npm install
 if %errorlevel% neq 0 (echo ERROR instalando dependencias del backend && goto :error)
@@ -73,9 +73,6 @@ if exist "%ROOT_DIR%\huellero\dll\dpfj.dll" (
 cd /d "%ROOT_DIR%\huellero"
 node -e "import('koffi').then(() => console.log('   koffi (FFI nativo C++): OK')).catch(e => console.log('   koffi: ERROR - ' + e.message))"
 
-:: Verificación de SQLite en backend
-cd /d "%ROOT_DIR%\backend"
-node -e "import('better-sqlite3').then(() => console.log('   better-sqlite3 (Motor SQLite): OK')).catch(e => console.log('   better-sqlite3: ERROR - ' + e.message))"
 
 echo.
 echo ========================================================
