@@ -899,6 +899,7 @@ function inicializarAsistenciaDia() {
       previo: null,
       esMio,
       nombreDocenteCreador,
+      descripcion: existente?.descripcion || '',
     }
     registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
@@ -925,6 +926,7 @@ function inicializarAsistenciaDia() {
     reg.horaMarcacion = item.hora || '—'
     reg.horasTardanza = item.horasTardanza || 0
     reg.tiempoTardanza = item.tiempoTardanza || '0 horas'
+    reg.descripcion = item.descripcion ?? reg.descripcion
     reg.horasFallidas = horasAuto(reg)
   }
 
@@ -994,6 +996,7 @@ function construirItem(estId) {
     horasTardanza: hTardanza,
     tiempoTardanza: tTardanza,
     instructorId: usuario.value.id || null,
+    descripcion: reg.descripcion || '',
     metodo: 'MANUAL',
   }
 }
@@ -1142,6 +1145,7 @@ const excusaError = ref('')
 const excusaEditando = ref(false)
 const excusaTextareaRef = ref(null)
 const EXCUSA_MAX = 300
+const DESCRIPCION_MAX = 200
 
 const excusaEstudiante = computed(() => estudiantesFicha.value.find(e => String(e._id) === String(excusaEstId.value)) || null)
 
@@ -1267,6 +1271,49 @@ async function sincronizarMotivoExcusa(estId, item) {
     console.warn('[Excusa] No se pudo sincronizar la descripción:', err.message)
     showToast('La asistencia se guardó, pero no se pudo guardar la descripción de la excusa.', 'warning')
   }
+}
+
+// --- Descripción opcional para Sofía Plus (modal) ---
+const showDescModal = ref(false)
+const descEstId = ref('')
+const descTexto = ref('')
+const descTextareaRef = ref(null)
+
+// Valida que la fila admita una descripción: debe existir, ser mía, no estar
+// reportada a Sofía Plus y estar en Falta, Tardanza o Excusada (excusa cuenta).
+function validarEdicionDescripcion(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg) return null
+  if (!reg.esMio) return null
+  if (reg.subidoSofia) return null
+  const estadoEfectivo = reg.excusa ? 'Excusada' : reg.estado
+  if (!['Falta', 'Tardanza', 'Excusada'].includes(estadoEfectivo)) return null
+  return reg
+}
+
+async function abrirModalDescripcion(estId) {
+  const reg = validarEdicionDescripcion(estId)
+  if (!reg) return
+  descEstId.value = estId
+  descTexto.value = reg.descripcion || ''
+  showDescModal.value = true
+  await nextTick()
+  descTextareaRef.value?.focus()
+}
+
+function cerrarModalDescripcion() {
+  showDescModal.value = false
+  descEstId.value = ''
+  descTexto.value = ''
+}
+
+async function confirmarDescripcion() {
+  const estId = descEstId.value
+  const reg = asistenciaDia.value[estId]
+  if (!reg) { cerrarModalDescripcion(); return }
+  reg.descripcion = descTexto.value.trim().slice(0, DESCRIPCION_MAX)
+  cerrarModalDescripcion()
+  await sincronizarCambioNube(estId)
 }
 
 // Contadores de asistencia del día
@@ -1825,6 +1872,17 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
                       Presente (A tiempo)
                     </span>
+                    <button
+                      v-if="(asistenciaDia[est._id]?.excusa || asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.estado === 'Tardanza') && !jornadaInhabilitada"
+                      type="button"
+                      class="btn-desc-nota"
+                      :class="{ 'btn-desc-nota-activa': asistenciaDia[est._id]?.descripcion }"
+                      :disabled="asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
+                      :title="asistenciaDia[est._id]?.subidoSofia ? 'Ya reportada a Sofía Plus' : (asistenciaDia[est._id]?.descripcion ? 'Editar descripción: ' + asistenciaDia[est._id]?.descripcion : 'Añadir descripción opcional')"
+                      @click="abrirModalDescripcion(est._id)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                    </button>
                   </td>
                   <td class="td-horas">
                     <div class="horas-wrap">
@@ -1935,6 +1993,18 @@ function descargarExcel(data, nombreArchivo) {
                       :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Registrar excusa'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </button>
+
+                    <!-- Botón Descripción (nota Sofía Plus) -->
+                    <button
+                      v-if="(asistenciaDia[est._id]?.excusa || asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.estado === 'Tardanza') && !jornadaInhabilitada"
+                      type="button"
+                      class="btn-mob-nota"
+                      :disabled="asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
+                      :title="asistenciaDia[est._id]?.subidoSofia ? 'Ya reportada a Sofía Plus' : (asistenciaDia[est._id]?.descripcion ? 'Editar descripción: ' + asistenciaDia[est._id]?.descripcion : 'Añadir descripción opcional')"
+                      @click="abrirModalDescripcion(est._id)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
                     </button>
                   </div>
                 </div>
@@ -2200,6 +2270,39 @@ function descargarExcel(data, nombreArchivo) {
         <div class="modal-actions excusa-modal-acciones">
           <button type="button" class="btn btn-outline" @click="cerrarModalExcusa">Cancelar</button>
           <button type="button" class="btn btn-primary" @click="confirmarExcusa">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: DESCRIPCIÓN OPCIONAL PARA SOFÍA PLUS -->
+    <div v-if="showDescModal" class="modal-overlay" @click.self="cerrarModalDescripcion" @keydown.esc="cerrarModalDescripcion">
+      <div class="modal excusa-modal" role="dialog" aria-modal="true" aria-labelledby="desc-modal-titulo">
+        <h3 id="desc-modal-titulo" class="excusa-modal-titulo">
+          <span class="excusa-modal-icono" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </span>
+          Descripción para Sofía Plus (opcional)
+        </h3>
+        <p class="excusa-modal-sub">
+          Si la dejas vacía se enviará el texto estándar (Falla justificada / injustificada). No incluyas datos médicos ni personales.
+        </p>
+
+        <textarea
+          id="desc-texto"
+          ref="descTextareaRef"
+          v-model="descTexto"
+          class="form-input excusa-modal-textarea"
+          :maxlength="DESCRIPCION_MAX"
+          rows="4"
+          placeholder="Ej: El aprendiz no asistió a la totalidad de la jornada."
+        ></textarea>
+        <div class="excusa-modal-pie">
+          <span class="excusa-modal-contador">{{ descTexto.length }} / {{ DESCRIPCION_MAX }}</span>
+        </div>
+
+        <div class="modal-actions excusa-modal-acciones">
+          <button type="button" class="btn btn-outline" @click="cerrarModalDescripcion">Cancelar</button>
+          <button type="button" class="btn btn-primary" @click="confirmarDescripcion">Guardar</button>
         </div>
       </div>
     </div>
