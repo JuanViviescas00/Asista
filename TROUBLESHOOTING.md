@@ -1267,3 +1267,32 @@ uevoDocente, validando campos, normalizando datos, generando hash bcrypt con la 
 pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias criticas).
   - Restauracion del directorio ackend/public/ para no ensuciar el control de versiones.
   - Registro sin push a ramas remotas conforme a la restriccion estricta.
+
+
+---
+
+## [2026-10-25 00:01] Corrección de Error 404 en /plantillas-biometricas al Seleccionar Ficha
+
+- **Fecha y Hora:** 2026-10-25 00:01:00 -05:00
+- **Descripción del Problema / Bug:**
+  Al seleccionar una ficha en el panel del instructor (`PanelInstructor.vue`), la consola del navegador arrojaba un error 404 (Not Found):
+  `GET http://localhost:3000/api/fichas/<id>/plantillas-biometricas 404 (Not Found)`
+  seguido de:
+  `Error bio: Error: Ruta de API no encontrada PanelInstructor.vue:424`
+  Adicionalmente se observaba el mensaje `Unchecked runtime.lastError: Uncaught ReferenceError: w is not defined :5173/#/:1` en la línea 1 del documento proveniente de una extensión del navegador.
+- **Causa Raíz:**
+  1. En el backend (`backend/routes/fichas.js`), la ruta existente para obtener plantillas de la ficha estaba nombrada como `/:id/plantillas`, mientras que el servicio frontend (`frontend/src/services/index.js`) consultaba `/:id/plantillas-biometricas`, provocando el error 404.
+  2. El controlador `getPlantillasFicha` (`backend/controllers/fichaController.js`) requería de forma estricta los headers `x-device-id` y `x-device-token` del hardware biométrico Anviz, rechazando a usuarios autenticados con JWT (como instructores y administradores navegando en la web).
+- **Solución Aplicada:**
+  1. En `backend/routes/fichas.js`, se expuso tanto `/:id/plantillas` como el alias `/:id/plantillas-biometricas` protegido con el middleware `autenticarOpcional`.
+  2. En `backend/controllers/fichaController.js`, se flexibilizó `getPlantillasFicha` permitiendo el acceso directo si la petición cuenta con una sesión JWT activa (`req.usuario`), o de forma alternativa validando credenciales de dispositivo (`x-device-id` / `x-device-token`).
+  3. En `frontend/src/views/PanelInstructor.vue`, se controló la captura de excepciones con fallback limpio (`.catch(() => [])`) para evitar trazas rojas innecesarias en la consola.
+- **Archivos Modificados:**
+  - `backend/controllers/fichaController.js`
+  - `backend/routes/fichas.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Consulta HTTP con token JWT de instructor hacia `http://localhost:3000/api/fichas/6ab1c00a31d01b2c49e68ce8/plantillas-biometricas` devolvió exitosamente `Status 200 OK` con el array de 24 registros biométricos de aprendices.
+  - Compilación de frontend con `npm run build:prod` completada sin errores en 649ms.
+  - Sin push a ramas remotas.

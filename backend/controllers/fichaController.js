@@ -65,22 +65,23 @@ export async function getPlantillasFicha(req, res) {
     const deviceId = req.headers['x-device-id']
     const token = req.headers['x-device-token']
 
-    // Autenticación del dispositivo (mismo patrón que POST /api/asistencias/sync
-    // y el HELLO del WebSocket): deviceId + token contra tokenHash con bcryptjs.
-    // No usa JWT de usuario porque quien llama es la app local del huellero.
-    if (!deviceId || !token) {
-      return res.status(401).json({ error: 'deviceId y token son requeridos' })
-    }
-    const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
-    if (!dispositivo) {
-      return res.status(401).json({ error: 'Dispositivo no registrado' })
-    }
-    if (dispositivo.activo !== true) {
-      return res.status(403).json({ error: 'Dispositivo inactivo' })
-    }
-    const tokenValido = await bcryptjs.compare(String(token), dispositivo.tokenHash)
-    if (!tokenValido) {
-      return res.status(401).json({ error: 'Token de dispositivo inválido' })
+    // Autenticación: permitido para usuarios con sesión JWT activa (req.usuario)
+    // o para dispositivos físicos mediante deviceId + token contra tokenHash con bcryptjs.
+    if (!req.usuario) {
+      if (!deviceId || !token) {
+        return res.status(401).json({ error: 'deviceId y token son requeridos o sesión de usuario activa' })
+      }
+      const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
+      if (!dispositivo) {
+        return res.status(401).json({ error: 'Dispositivo no registrado' })
+      }
+      if (dispositivo.activo !== true) {
+        return res.status(403).json({ error: 'Dispositivo inactivo' })
+      }
+      const tokenValido = await bcryptjs.compare(String(token), dispositivo.tokenHash)
+      if (!tokenValido) {
+        return res.status(401).json({ error: 'Token de dispositivo inválido' })
+      }
     }
 
     // Resuelve el id (ObjectId o codigoFicha) a los posibles valores de fichaId

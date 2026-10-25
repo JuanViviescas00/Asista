@@ -421,7 +421,7 @@ async function cargarDatosFicha(fichaId) {
   try {
     const estRes = await api.estudiantes.getAll({ fichaId, estado: 'Activo' }).catch(e => { console.error('Error est:', e); return [] })
     const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => { console.error('Error asis:', e); return [] })
-    const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
+    const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(() => [])
     const excRes = await api.excusas.getAll({ fichaId }).catch(e => { console.error('Error excusas:', e); return [] })
 
     estudiantesFicha.value = Array.isArray(estRes) ? estRes : []
