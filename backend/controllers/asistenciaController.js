@@ -9,7 +9,11 @@ import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
-
+import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanzaEscalonada, formatearFechaColombia, formatearHoraColombia } from '../services/asistenciaService.js'
+import { emitirAsistenciaRegistrada } from '../services/socketService.js'
+import { topeHorasPorJornada, validarHorasInasistencia } from '../utils/jornadaUtils.js'
+import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { asegurarJornada } from '../services/jornadaService.js'
 
 // Shim de compatibilidad: expone la misma forma que el modelo Asistencia.
 function toAsistenciaShape(a) {

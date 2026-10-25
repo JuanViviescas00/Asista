@@ -1131,3 +1131,23 @@
   - Fusión limpia en Git (0 conflictos de código).
   - Compilación de frontend con `npm run build:prod` exitosa en 1.58 segundos.
   - Estado de Git limpio y verificado localmente en commit de fusión.
+
+
+---
+
+## [2026-10-24 22:30] Corrección de Error de Inasistencias no Visibles en Entorno Local (getFichaIdList is not defined)
+
+- **Fecha y Hora:** 2026-10-24 22:30:00 -05:00
+- **Descripción del Problema / Bug:**
+  En el entorno local, las inasistencias y registros de asistencia no se visualizaban ni se cargaban desde MongoDB Atlas al seleccionar una ficha o consultar reportes, quedando las tablas e historiales vacíos (`[]`).
+- **Causa Raíz:**
+  En el commit `071e460` (descontinuación de SQLite), se removieron por error las importaciones de servicios auxiliares en `backend/controllers/asistenciaController.js` (`getFichaIdList`, `getHoyString`, `emitirAsistenciaRegistrada`, `calcularEstadoCarga`, `asegurarJornada`). Cuando el frontend consultaba `GET /api/asistencias?fichaId=...`, el servidor lanzaba un error HTTP 500 (`getFichaIdList is not defined`), haciendo que el cliente capturara el fallo y retornara un array vacío silenciosamente.
+- **Solución Aplicada:**
+  Se restauraron las importaciones requeridas de `asistenciaService.js`, `socketService.js`, `jornadaUtils.js`, `inasistenciaEstado.js` y `jornadaService.js` en `backend/controllers/asistenciaController.js`.
+- **Archivos Modificados:**
+  - `backend/controllers/asistenciaController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Petición HTTP directa a `http://localhost:3000/api/asistencias?fichaId=6ab1c00a31d01b2c49e68ce8` devolvió satisfactoriamente los 48 registros de asistencias e inasistencias de la ficha.
+  - Petición a `fichaId=6acec5daaaf924acea01c5fb` devolvió las 4 inasistencias registradas.
+  - Sin push a repositorios remotos según la instrucción del usuario.
