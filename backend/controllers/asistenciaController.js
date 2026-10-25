@@ -21,7 +21,7 @@ function toAsistenciaShape(a) {
   return {
     ...obj,
     estado: a.tipo,
-    horasTardanza: a.tipo === 'Tardanza' ? a.horas : 0,
+    horasTardanza: (a.tipo === 'Tardanza' || a.tipo === 'Excusada') ? a.horas : 0,
     motivoInhabilitacion: '',
     subidoSofia: a.estadoCarga === 'SUBIDA',
     estadoCarga: a.estadoCarga,
