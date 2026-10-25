@@ -767,6 +767,7 @@ function actualizarEstadoPorHoras(reg, n) {
     if (limitado === 0) {
       reg.excusa = false
       reg.motivoExcusa = ''
+      reg.descripcion = ''
       reg.estado = 'Presente'
       reg.horasTardanza = 0
       reg.tiempoTardanza = '0 horas'
@@ -1135,6 +1136,7 @@ async function marcarFalta(estId) {
     reg.tiempoTardanza = previo?.tiempoTardanza || '0 horas'
     reg.excusa = false
     reg.motivoExcusa = ''
+    reg.descripcion = ''
     reg.previo = null
     reg.horasFallidas = horasAuto(reg)
     await sincronizarCambioNube(estId)
@@ -1216,7 +1218,7 @@ async function abrirModalExcusa(estId, editando = false) {
   if (!reg) return
   excusaEstId.value = estId
   excusaEditando.value = editando
-  excusaTexto.value = editando ? (reg.motivoExcusa || '') : ''
+  excusaTexto.value = editando ? (reg.motivoExcusa || reg.descripcion || '') : ''
   excusaError.value = ''
   showExcusaModal.value = true
   await nextTick()
@@ -1235,16 +1237,13 @@ async function confirmarExcusa() {
   const reg = validarEdicionExcusa(estId)
   if (!reg) { cerrarModalExcusa(); return }
 
-  const texto = excusaTexto.value.trim()
-  if (texto.length < 5) {
-    excusaError.value = 'Describe brevemente el motivo de la excusa (mínimo 5 caracteres).'
-    return
-  }
+  const texto = excusaTexto.value.trim().slice(0, DESCRIPCION_MAX)
 
   reg.motivoExcusa = texto
   reg.excusa = true
   reg.estado = 'Excusada'
   reg.horasFallidas = horasAuto(reg)
+  if (texto) reg.descripcion = texto
   cerrarModalExcusa()
 
   await sincronizarCambioNube(estId)
@@ -1262,6 +1261,7 @@ async function toggleExcusa(estId) {
 
   reg.excusa = false
   reg.motivoExcusa = ''
+  reg.descripcion = ''
   const h = Number(reg.horasTardanza) || 0
   const max = horasClaseFicha.value
   if (h > 0 && h < max) {
@@ -2294,20 +2294,21 @@ function descargarExcel(data, nombreArchivo) {
           Fecha: <strong>{{ fechaAsistencia }}</strong>
         </p>
 
-        <label class="excusa-modal-label" for="excusa-texto">¿Por qué se le coloca la excusa al aprendiz?</label>
+        <label class="excusa-modal-label" for="excusa-texto">¿Por qué se le coloca la excusa al aprendiz? (opcional)</label>
+        <p class="excusa-modal-sub">Este texto se enviará a Sofía Plus. Si lo dejas vacío se enviará "Con excusa". No incluyas datos médicos ni personales.</p>
         <textarea
           id="excusa-texto"
           ref="excusaTextareaRef"
           v-model="excusaTexto"
           class="form-input excusa-modal-textarea"
-          :maxlength="EXCUSA_MAX"
+          :maxlength="DESCRIPCION_MAX"
           rows="4"
-          placeholder="Ej: Cita médica con soporte de incapacidad, calamidad doméstica, permiso aprobado por coordinación..."
+          placeholder="Ej: Permiso aprobado por coordinación."
           @input="excusaError = ''"
         ></textarea>
         <div class="excusa-modal-pie">
           <span v-if="excusaError" class="excusa-modal-error">{{ excusaError }}</span>
-          <span class="excusa-modal-contador">{{ excusaTexto.length }} / {{ EXCUSA_MAX }}</span>
+          <span class="excusa-modal-contador">{{ excusaTexto.length }} / {{ DESCRIPCION_MAX }}</span>
         </div>
 
         <div class="modal-actions excusa-modal-acciones">
