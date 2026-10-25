@@ -243,7 +243,15 @@ export async function createAsistencia(req, res) {
       }
     }
 
-    const instructorFinal = usuarioId || existente?.instructorId || null
+    let instructorFinal
+    if (esAdmin) {
+      instructorFinal = existente?.instructorId
+        || (instructorId && mongoose.Types.ObjectId.isValid(String(instructorId)) ? instructorId : null)
+        || fichaDoc?.instructorLiderId
+        || null
+    } else {
+      instructorFinal = usuarioId || existente?.instructorId || null
+    }
 
     // Bloqueo por subida a Sofía Plus: una novedad ya subida no puede editarse
     // ni quitarse, sin importar su origen (manual o huellero).
@@ -403,6 +411,8 @@ export async function procesarAsistencia(item) {
     // Sin clase localizable: se cae al fallback de horario fijo (jornada).
   }
 
+  const instructorResuelto = instructorId || claseDoc?.instructorId || ficha.instructorLiderId || null
+
   let estado
   let horasTardanza
   let tiempoTardanza
@@ -433,10 +443,10 @@ export async function procesarAsistencia(item) {
 
   try {
     // Asegurar la Jornada (origen huellero) para esta ficha y fecha.
-    await asegurarJornada({ fichaId: ficha._id, fecha, instructorId: instructorId || null, origen: 'huellero' })
+    await asegurarJornada({ fichaId: ficha._id, fecha, instructorId: instructorResuelto, origen: 'huellero' })
 
     if (estado === 'Presente') {
-      return procesarPresente({ uuid, estudianteId, fichaId: ficha._id, fecha, hora, claseIdObj, instructorId, metodo })
+      return procesarPresente({ uuid, estudianteId, fichaId: ficha._id, fecha, hora, claseIdObj, instructorId: instructorResuelto, metodo })
     }
 
     // Tardanza o Falta
@@ -447,7 +457,7 @@ export async function procesarAsistencia(item) {
     const festivosSet = new Set((festivosDocs || []).map((d) => d.fecha))
     const estadoCarga = calcularEstadoCarga({ fecha, tipo, jornada: ficha.jornada || '', festivosSet, hoyStr: getHoyString() })
 
-    return procesarNovedad({ uuid, estudianteId, fichaId: ficha._id, fecha, tipo, horas, hora, tiempoTardanza, claseIdObj, instructorId, estadoCarga })
+    return procesarNovedad({ uuid, estudianteId, fichaId: ficha._id, fecha, tipo, horas, hora, tiempoTardanza, claseIdObj, instructorId: instructorResuelto, estadoCarga })
   } catch (err) {
     return { uuid, estado: 'error', error: err.message }
   }
