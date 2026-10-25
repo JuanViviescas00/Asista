@@ -239,3 +239,70 @@ export async function importarFichas(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+
+export async function addInstructorAFicha(req, res) {
+  try {
+    const { id } = req.params
+    const { instructorId } = req.body
+    if (!instructorId) {
+      return res.status(400).json({ error: 'Se requiere el ID del instructor a agregar' })
+    }
+
+    const ficha = await Ficha.findById(id)
+    if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
+
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    const esLider = String(ficha.instructorLiderId) === String(req.usuario?.id)
+
+    if (!esAdmin && !esLider) {
+      return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede agregar docentes al equipo.' })
+    }
+
+    if (String(ficha.instructorLiderId) === String(instructorId)) {
+      return res.status(400).json({ error: 'El docente seleccionado ya es el líder de esta ficha.' })
+    }
+
+    const yaAsignado = (ficha.instructores || []).some(i => String(i) === String(instructorId))
+    if (yaAsignado) {
+      return res.status(400).json({ error: 'El docente ya se encuentra en el equipo de trabajo de esta ficha.' })
+    }
+
+    ficha.instructores.push(instructorId)
+    await ficha.save()
+
+    const fichaActualizada = await Ficha.findById(id)
+      .populate('instructorLiderId', 'nombres apellidos correo telefono especialidad')
+      .populate('instructores', 'nombres apellidos correo telefono especialidad')
+
+    res.json(fichaActualizada)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function removeInstructorDeFicha(req, res) {
+  try {
+    const { id, instructorId } = req.params
+    const ficha = await Ficha.findById(id)
+    if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
+
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    const esLider = String(ficha.instructorLiderId) === String(req.usuario?.id)
+
+    if (!esAdmin && !esLider) {
+      return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede remover docentes del equipo.' })
+    }
+
+    ficha.instructores = (ficha.instructores || []).filter(i => String(i) !== String(instructorId))
+    await ficha.save()
+
+    const fichaActualizada = await Ficha.findById(id)
+      .populate('instructorLiderId', 'nombres apellidos correo telefono especialidad')
+      .populate('instructores', 'nombres apellidos correo telefono especialidad')
+
+    res.json(fichaActualizada)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}

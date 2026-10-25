@@ -23,6 +23,91 @@ const fichaSeleccionada = ref(null)
 const estudiantesFicha = ref([])
 const excusasFicha = ref([])
 const asistenciasFicha = ref([])
+
+// Historial filtrado únicamente por anomalías (fallas, tardanzas y excusas)
+const historialAnomalias = computed(() => {
+  const anomalos = ['Falta', 'Tardanza', 'Excusada', 'Ausente', 'Retardo']
+  return asistenciasFicha.value.filter(a => {
+    const estado = a.estado || a.tipo
+    return anomalos.includes(estado)
+  })
+})
+
+// Gestión de Equipo Docente (asignar docentes comunes si es líder o admin)
+const esLiderEnFichaSeleccionada = computed(() => {
+  if (!fichaSeleccionada.value) return false
+  if (usuario.value?.rol === 'Administrador') return true
+  const liderId = String(fichaSeleccionada.value.instructorLiderId?._id || fichaSeleccionada.value.instructorLiderId || '')
+  return liderId && liderId === String(usuario.value?.id)
+})
+
+const todosLosInstructores = ref([])
+const modalAgregarDocenteAbierto = ref(false)
+const docenteSeleccionadoId = ref('')
+const guardandoDocente = ref(false)
+
+async function cargarTodosLosInstructores() {
+  try {
+    todosLosInstructores.value = await api.instructores.getAll()
+  } catch (err) {
+    console.error('Error al cargar instructores:', err)
+  }
+}
+
+const docentesDisponiblesParaFicha = computed(() => {
+  if (!fichaSeleccionada.value) return []
+  const liderId = String(fichaSeleccionada.value.instructorLiderId?._id || fichaSeleccionada.value.instructorLiderId || '')
+  const asignadosIds = (fichaSeleccionada.value.instructores || []).map(i => String(i._id || i))
+  return (todosLosInstructores.value || []).filter(doc => {
+    const id = String(doc._id)
+    return id !== liderId && !asignadosIds.includes(id)
+  })
+})
+
+function abrirModalAgregarDocente() {
+  docenteSeleccionadoId.value = ''
+  if (todosLosInstructores.value.length === 0) {
+    cargarTodosLosInstructores()
+  }
+  modalAgregarDocenteAbierto.value = true
+}
+
+async function confirmarAgregarDocente() {
+  if (!docenteSeleccionadoId.value || !fichaSeleccionada.value?._id) return
+  guardandoDocente.value = true
+  try {
+    const fichaActualizada = await api.fichas.agregarInstructor(fichaSeleccionada.value._id, docenteSeleccionadoId.value)
+    fichaSeleccionada.value.instructores = fichaActualizada.instructores || []
+    const idx = misFichas.value.findIndex(f => String(f._id) === String(fichaSeleccionada.value._id))
+    if (idx !== -1) {
+      misFichas.value[idx].instructores = fichaActualizada.instructores || []
+    }
+    showToast('Docente agregado al equipo de la ficha exitosamente.', 'success')
+    modalAgregarDocenteAbierto.value = false
+    docenteSeleccionadoId.value = ''
+  } catch (err) {
+    showToast(err.message || 'Error al agregar docente', 'error')
+  } finally {
+    guardandoDocente.value = false
+  }
+}
+
+async function removerDocenteDeFicha(doc) {
+  const docId = String(doc._id || doc)
+  const nombre = doc.nombres ? `${doc.nombres} ${doc.apellidos || ''}`.trim() : 'este docente'
+  if (!confirm(`¿Deseas desvincular a ${nombre} del equipo de trabajo de esta ficha?`)) return
+  try {
+    const fichaActualizada = await api.fichas.eliminarInstructor(fichaSeleccionada.value._id, docId)
+    fichaSeleccionada.value.instructores = fichaActualizada.instructores || []
+    const idx = misFichas.value.findIndex(f => String(f._id) === String(fichaSeleccionada.value._id))
+    if (idx !== -1) {
+      misFichas.value[idx].instructores = fichaActualizada.instructores || []
+    }
+    showToast(`Docente ${nombre} desvinculado de la ficha.`, 'info')
+  } catch (err) {
+    showToast(err.message || 'Error al desvincular docente', 'error')
+  }
+}
 const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
@@ -103,7 +188,7 @@ function iniciarTimerColaOffline() {
 
 onMounted(async () => {
   window.addEventListener('online', onConexionRecuperada)
-  await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
+  await Promise.all([cargarMisFichas(), cargarDiasFestivos(), cargarTodosLosInstructores()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
   iniciarTimerColaOffline()
@@ -1177,7 +1262,7 @@ function exportarAsistenciaDia() {
 
 function exportarHistorial() {
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
-  const data = asistenciasFicha.value.map(asis => {
+  const data = historialAnomalias.value.map(asis => {
     const est = estudiantesFicha.value.find(e => String(e._id) === String(asis.estudianteId?._id || asis.estudianteId))
     const nombreEst = est ? `${est.nombres} ${est.apellidos}` : (asis.estudianteId?.nombres ? `${asis.estudianteId.nombres} ${asis.estudianteId.apellidos}` : 'Aprendiz')
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
@@ -1197,7 +1282,7 @@ function exportarHistorial() {
       'Motivo Inhabilitación': asis.motivoInhabilitacion || '—',
     }
   })
-  descargarDatos(data, `Historial_${fichaSeleccionada.value.codigoFicha}`, 'Historial de asistencias')
+  descargarDatos(data, `Anomalias_${fichaSeleccionada.value.codigoFicha}`, 'Historial de anomalías (fallas, tardanzas y excusas)')
 }
 
 // Formato elegido para descargar ('excel' | 'pdf')
@@ -1825,11 +1910,11 @@ function descargarExcel(data, nombreArchivo) {
         <div v-if="vistaFicha === 'editar_asistencia'" class="section-body">
           <div class="section-header-row">
             <div>
-              <h4>Historial de Asistencias</h4>
-              <p class="section-desc">Registros de asistencia de esta ficha:</p>
+              <h4>Historial de Asistencias (Anomalías)</h4>
+              <p class="section-desc">Mostrando únicamente fallas, tardanzas y excusas de esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <template v-if="asistenciasFicha.length > 0">
+              <template v-if="historialAnomalias.length > 0">
                 <select v-model="formatoDescarga" class="form-input" title="Formato de descarga" style="width: auto; height: 38px; padding: 0 10px; font-size: 13px; cursor: pointer;"><option value="excel">Excel</option><option value="pdf">PDF</option></select>
                 <button class="btn-export" @click="exportarHistorial" :title="formatoDescarga === 'pdf' ? 'Descargar PDF' : 'Descargar Excel'">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1850,7 +1935,7 @@ function descargarExcel(data, nombreArchivo) {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="asis in asistenciasFicha" :key="asis._id">
+              <tr v-for="asis in historialAnomalias" :key="asis._id">
                 <td>{{ asis.fecha }} {{ asis.hora }}</td>
                 <td>{{ asis.estudianteId?.nombres || '' }} {{ asis.estudianteId?.apellidos || '' }}</td>
                 <td>
@@ -1868,8 +1953,8 @@ function descargarExcel(data, nombreArchivo) {
                   {{ asis.estado === 'Tardanza' ? (asis.tiempoTardanza || '1 hora') : '0 horas' }}
                 </td>
               </tr>
-              <tr v-if="asistenciasFicha.length === 0">
-                <td colspan="5" class="empty-cell">No hay registros de asistencias pasadas.</td>
+              <tr v-if="historialAnomalias.length === 0">
+                <td colspan="5" class="empty-cell">No hay anomalías registradas (fallas, tardanzas o excusas). Todos los aprendices han estado presentes.</td>
               </tr>
             </tbody>
           </table>
@@ -1880,11 +1965,21 @@ function descargarExcel(data, nombreArchivo) {
         <!-- VISTA 5: EQUIPO DOCENTE DE LA FICHA       -->
         <!-- ========================================= -->
         <div v-if="vistaFicha === 'docentes'" class="section-body">
-          <div class="section-header-row">
+          <div class="section-header-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
               <h4>Equipo Docente - Ficha {{ fichaSeleccionada.codigoFicha }}</h4>
               <p class="section-desc">{{ fichaSeleccionada.nombrePrograma }} | Jornada: {{ fichaSeleccionada.jornada }}</p>
             </div>
+            <button
+              v-if="esLiderEnFichaSeleccionada"
+              class="btn btn-primary"
+              style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer;"
+              @click="abrirModalAgregarDocente"
+              title="Agregar docente al equipo de trabajo"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Asignar Docente</span>
+            </button>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px;">
@@ -1919,14 +2014,24 @@ function descargarExcel(data, nombreArchivo) {
               v-for="doc in (fichaSeleccionada.instructores || [])"
               :key="doc._id || doc"
               class="docente-card"
-              style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 18px;"
+              style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 18px; position: relative;"
             >
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <span class="badge badge-neutral" style="font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
                   Docente Común
                 </span>
-                <span v-if="String(doc._id || doc) === String(usuario.id)" class="badge badge-comun" style="font-size: 11px;">(Tú)</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span v-if="String(doc._id || doc) === String(usuario.id)" class="badge badge-comun" style="font-size: 11px;">(Tú)</span>
+                  <button
+                    v-if="esLiderEnFichaSeleccionada"
+                    @click="removerDocenteDeFicha(doc)"
+                    title="Desvincular docente de la ficha"
+                    style="background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 4px; border-radius: 4px; display: inline-flex; align-items: center;"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
               </div>
               <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #1e293b;">
                 {{ doc.nombres || 'Docente' }} {{ doc.apellidos || '' }}
@@ -2089,6 +2194,42 @@ function descargarExcel(data, nombreArchivo) {
           </button>
         </div>
       </div>
+
+    <!-- MODAL PARA ASIGNAR DOCENTE AL EQUIPO (LÍDER/ADMIN) -->
+    <div v-if="modalAgregarDocenteAbierto" class="modal-overlay" @click.self="modalAgregarDocenteAbierto = false">
+      <div class="modal" style="max-width: 480px; background: #ffffff; border-radius: 12px; padding: 24px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Asignar Docente al Equipo</h3>
+          <button @click="modalAgregarDocenteAbierto = false" style="background: none; border: none; font-size: 20px; color: #94a3b8; cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+        <p style="font-size: 13px; color: #64748b; margin-bottom: 16px; line-height: 1.5;">
+          Selecciona un docente para agregarlo como docente común de la ficha <strong>{{ fichaSeleccionada?.codigoFicha }}</strong>. Podrá registrar asistencias en sus jornadas de formación.
+        </p>
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label style="display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Docente Disponible</label>
+          <select v-model="docenteSeleccionadoId" class="form-input" style="width: 100%; height: 42px; border-radius: 8px; font-size: 13px; padding: 0 10px;">
+            <option value="" disabled>Selecciona un docente...</option>
+            <option v-for="inst in docentesDisponiblesParaFicha" :key="inst._id" :value="inst._id">
+              {{ inst.nombres }} {{ inst.apellidos || '' }} ({{ inst.correo || inst.especialidad || 'Docente' }})
+            </option>
+          </select>
+          <p v-if="docentesDisponiblesParaFicha.length === 0" style="font-size: 12px; color: #f59e0b; margin-top: 8px;">
+            No hay otros docentes registrados disponibles para asignar en esta ficha.
+          </p>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;">
+          <button class="btn btn-outline" @click="modalAgregarDocenteAbierto = false" style="padding: 8px 16px; font-size: 13px; font-weight: 600;">Cancelar</button>
+          <button
+            class="btn btn-primary"
+            :disabled="!docenteSeleccionadoId || guardandoDocente"
+            @click="confirmarAgregarDocente"
+            style="padding: 8px 18px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"
+          >
+            <span>{{ guardandoDocente ? 'Asignando...' : 'Asignar Docente' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     </div>
     </template>

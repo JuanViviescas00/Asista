@@ -138,6 +138,14 @@ export async function createEstudiante(req, res) {
     if (!fichaExiste) {
       return res.status(400).json({ error: 'La ficha especificada no existe. Debe crear primero la ficha.' })
     }
+
+    if (req.usuario?.rol === 'Instructor') {
+      const liderId = fichaExiste.instructorLiderId ? String(fichaExiste.instructorLiderId) : ''
+      if (liderId !== String(req.usuario.id)) {
+        return res.status(403).json({ error: 'Solo el docente líder de la ficha puede registrar aprendices en ella.' })
+      }
+    }
+
     req.body.fichaId = fichaExiste._id
     if (req.body.nombres) req.body.nombres = capitalizarTexto(req.body.nombres)
     if (req.body.apellidos) req.body.apellidos = capitalizarTexto(req.body.apellidos)

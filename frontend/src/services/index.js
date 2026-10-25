@@ -122,6 +122,12 @@ const api = {
     update(id, body) { return request(`/fichas/${id}`, { method: 'PUT', body: JSON.stringify(body) }) },
     delete(id) { return request(`/fichas/${id}`, { method: 'DELETE' }) },
     importar(fichas) { return request('/fichas/importar', { method: 'POST', body: JSON.stringify({ fichas }) }) },
+    agregarInstructor(id, instructorId) {
+      return request(`/fichas/${id}/instructores`, { method: 'POST', body: JSON.stringify({ instructorId }) })
+    },
+    eliminarInstructor(id, instructorId) {
+      return request(`/fichas/${id}/instructores/${instructorId}`, { method: 'DELETE' })
+    },
   },
 
   programas: {

@@ -1,5 +1,54 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-24 23:05] Filtro de Anomalías en Historial, Registro Unitario de Estudiantes y Asignación de Equipo Docente
+
+- **Fecha y Hora:** 2026-10-24 23:05:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Historial de Asistencias:* En `PanelInstructor.vue`, las filas con estado "Presente" saturaban la tabla y la exportación con información redundante. Se requería mostrar únicamente anomalías (`Falta`, `Tardanza`, `Excusada`, `Ausente`, `Retardo`).
+  2. *Vista de Estudiantes:*
+     - Los filtros de búsqueda avanzada aparecían colapsados por defecto (`busquedaAvanzadaAbierta = false`), provocando que los instructores vieran una pantalla vacía sin aprendices hasta expandir y buscar manualmente.
+     - No existía botón ni mecanismo para que un instructor líder pudiera registrar aprendices de manera unitaria (manual) sin tener que recurrir a la importación masiva por Excel.
+  3. *Equipo Docente:* En `PanelInstructor.vue`, se requería que el docente líder de la ficha pudiera agregar docentes comunes al equipo de trabajo de dicha ficha y desvincularlos si era necesario.
+- **Causa Raíz:**
+  1. El historial mostraba todas las asistencias directas sin filtrar por estado ni anomalías.
+  2. En `Estudiantes.vue`, el botón `Nuevo Estudiante` tenía la directiva `v-if="!esInstructor"`, bloqueándolo exclusivamente para Administradores; además, el selector de ficha en el modal estaba deshabilitado (`:disabled="esInstructor"`).
+  3. No existían rutas ni controladores en el backend para que un docente líder agregara o removiera docentes en el array `ficha.instructores`.
+- **Solución Aplicada:**
+  1. *Backend - Gestión de Equipo Docente y Creación Unitaria:*
+     - En `backend/controllers/fichaController.js`, se implementaron `addInstructorAFicha` y `removeInstructorDeFicha` validando que el solicitante sea Administrador o el docente líder de la ficha (`ficha.instructorLiderId`).
+     - En `backend/routes/fichas.js`, se expusieron `POST /:id/instructores` y `DELETE /:id/instructores/:instructorId` protegidas con `verificarRolOLider(['Administrador'])`.
+     - En `backend/routes/estudiantes.js`, se actualizó `POST /` con `verificarRolOLider(['Administrador'])`.
+     - En `backend/controllers/estudianteController.js`, se añadió la validación para que los instructores solo puedan registrar aprendices en fichas donde sean líderes.
+  2. *Servicio API Frontend:*
+     - En `frontend/src/services/index.js`, se agregaron `api.fichas.agregarInstructor(id, instructorId)` y `api.fichas.eliminarInstructor(id, instructorId)`.
+  3. *Frontend - Historial de Asistencias (`PanelInstructor.vue`):*
+     - Creado el computed `historialAnomalias`, filtrando únicamente por `['Falta', 'Tardanza', 'Excusada', 'Ausente', 'Retardo']`.
+     - Actualizada la tabla y la función `exportarHistorial()` para consumir exclusivamente `historialAnomalias`.
+  4. *Frontend - Equipo Docente (`PanelInstructor.vue`):*
+     - Añadido botón "+ Asignar Docente" visible para el docente líder o admin.
+     - Creado modal para seleccionar un docente disponible de la institución y vincularlo a la ficha.
+     - Añadido botón de desvinculación rápida en las tarjetas de docentes comunes para el docente líder.
+  5. *Frontend - Estudiantes (`Estudiantes.vue`):*
+     - `busquedaAvanzadaAbierta` configurado en `true` por defecto.
+     - Auto-selección de la primera ficha asignada para instructores en `loadFichas()`, cargando sus aprendices de inmediato.
+     - Habilitado el botón "Nuevo Estudiante" para docentes líderes (`puedeCrearEstudiante`).
+     - En el modal de creación, el selector de ficha se limita a las fichas donde el docente es líder (`fichasLider`).
+- **Archivos Modificados:**
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/fichaController.js`
+  - `backend/routes/estudiantes.js`
+  - `backend/routes/fichas.js`
+  - `frontend/src/services/index.js`
+  - `frontend/src/views/Estudiantes.vue`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de compilación exitosa con `npm run build:prod`.
+  - Pruebas de API local en backend y validación de endpoints HTTP y carga en base de datos.
+  - Comprobación de que no se realizó ningún push a git remoto conforme a la directiva del usuario.
+
+---
+
 ## [2026-10-23 23:10] Actualización de Reglas de Tardanza Escalonada y Auto-cierre al Fin de Jornada
 
 - **Fecha y Hora:** 2026-10-23 23:10:00 -05:00

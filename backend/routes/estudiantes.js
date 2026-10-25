@@ -13,7 +13,7 @@ router.get('/:id/asistencia-resumen', autenticarOpcional, estudianteController.g
 // Operaciones CRUD de aprendices (restringidas a Administrador)
 router.post('/',
   autenticarJWT,
-  verificarRol(['Administrador']),
+  verificarRolOLider(['Administrador']),
   validarCamposRequeridos(['nombres', 'apellidos', 'numeroDocumento', 'fichaId']),
   validarEmail('correo'),
   estudianteController.createEstudiante

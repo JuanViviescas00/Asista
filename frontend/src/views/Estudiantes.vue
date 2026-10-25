@@ -12,13 +12,23 @@ const retirarTarget = ref(null)
 const retirarMotivo = ref('')
 const retirarTipo = ref('Inactivo')
 const filtroEstado = ref('Todos')
-const busquedaAvanzadaAbierta = ref(false)
+const busquedaAvanzadaAbierta = ref(true)
 const loading = ref(false)
 const expandidos = ref({})
 
 const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : null)
 const esInstructor = computed(() => usuario.value?.rol === 'Instructor')
+
+const fichasLider = computed(() => {
+  if (!esInstructor.value) return fichasList.value
+  return fichasList.value.filter(f => f.esLider || String(f.instructorLiderId?._id || f.instructorLiderId) === String(usuario.value?.id))
+})
+
+const puedeCrearEstudiante = computed(() => {
+  if (!esInstructor.value) return true
+  return fichasLider.value.length > 0
+})
 
 const busqueda = reactive({ fichaId: null, jornada: '', documento: '', nombres: '', nombreDocumento: '', estadoAsistencia: '' })
 
@@ -50,6 +60,9 @@ async function loadFichas() {
       fichasList.value = await api.fichas.getMisFichas(usuario.value.id)
     } else {
       fichasList.value = await api.fichas.getAll()
+    }
+    if (esInstructor.value && !busqueda.fichaId && fichasList.value.length > 0) {
+      busqueda.fichaId = fichasList.value[0]._id
     }
   } catch (e) {}
 }
@@ -142,9 +155,15 @@ function showToastFn(message, type = 'success') {
 
 function openCreate() {
   editingId.value = null
+  let fichaDefault = null
+  if (busqueda.fichaId && fichasLider.value.some(f => String(f._id) === String(busqueda.fichaId))) {
+    fichaDefault = busqueda.fichaId
+  } else if (fichasLider.value.length > 0) {
+    fichaDefault = fichasLider.value[0]._id
+  }
   Object.assign(estudianteForm, {
     nombres: '', apellidos: '', tipoDocumento: 'CC', numeroDocumento: '',
-    correo: '', telefono: '', fichaId: null,
+    correo: '', telefono: '', fichaId: fichaDefault,
   })
   showModal.value = true
 }
@@ -357,7 +376,10 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
         </select>
       </div>
-      <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante" style="display: inline-flex; align-items: center; gap: 6px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Nuevo Estudiante</span>
+      </button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
@@ -447,12 +469,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           <label>Ficha Asignada</label>
           <select
             v-model="estudianteForm.fichaId"
-            :disabled="esInstructor"
-            :style="esInstructor ? 'background: #f1f5f9; color: #94a3b8; cursor: not-allowed;' : ''"
+            :disabled="editingId && esInstructor"
+            :style="(editingId && esInstructor) ? 'background: #f1f5f9; color: #94a3b8; cursor: not-allowed;' : ''"
           >
             <option :value="null" disabled>Selecciona una ficha</option>
-            <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
+            <option v-for="f in (esInstructor ? fichasLider : fichasList)" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
           </select>
+          <p v-if="esInstructor && !editingId" style="font-size: 11px; color: #64748b; margin-top: 4px;">
+            Mostrando únicamente las fichas donde eres docente líder.
+          </p>
         </div>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
