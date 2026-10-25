@@ -275,7 +275,15 @@ export async function createAsistencia(req, res) {
     // Derivar y validar las horas según el tipo y el tope de la jornada.
     const jornada = fichaDoc?.jornada || ''
     const tope = topeHorasPorJornada(jornada)
-    const horasPropuestas = estado === 'Tardanza' ? (horasTardanza || 0) : tope
+    let horasPropuestas
+    if (estado === 'Tardanza') {
+      horasPropuestas = horasTardanza || 0
+    } else if (estado === 'Excusada') {
+      const h = Number(horasTardanza)
+      horasPropuestas = Number.isInteger(h) && h > 0 && h < tope ? h : tope
+    } else {
+      horasPropuestas = tope
+    }
     const validacion = validarHorasInasistencia(horasPropuestas, jornada)
     if (!validacion.ok) {
       return res.status(400).json({ error: validacion.error })
