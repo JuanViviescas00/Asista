@@ -13,6 +13,7 @@ import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanz
 import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 import { topeHorasPorJornada, validarHorasInasistencia } from '../utils/jornadaUtils.js'
 import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { normalizarDescripcion } from '../utils/descripcionInasistencia.js'
 import { asegurarJornada } from '../services/jornadaService.js'
 
 // Shim de compatibilidad: expone la misma forma que el modelo Asistencia.
@@ -25,6 +26,7 @@ function toAsistenciaShape(a) {
     motivoInhabilitacion: '',
     subidoSofia: a.estadoCarga === 'SUBIDA',
     estadoCarga: a.estadoCarga,
+    descripcion: obj.descripcion || '',
   }
 }
 
@@ -209,7 +211,8 @@ export async function createAsistencia(req, res) {
       hora,
       horasTardanza,
       tiempoTardanza,
-      instructorId
+      instructorId,
+      descripcion
     } = req.body
 
     if (fecha && fecha > getHoyString()) {
@@ -306,6 +309,9 @@ export async function createAsistencia(req, res) {
           tiempoTardanza: tiempoTardanza || (estado === 'Tardanza' ? `${horas} ${horas === 1 ? 'hora' : 'horas'}` : '0 horas'),
           instructorId: instructorFinal,
           estadoCarga,
+          ...(Object.prototype.hasOwnProperty.call(req.body, 'descripcion')
+            ? { descripcion: normalizarDescripcion(descripcion) }
+            : {}),
         },
         $setOnInsert: {
           origen: 'manual',

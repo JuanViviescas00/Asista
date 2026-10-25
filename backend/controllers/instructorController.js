@@ -10,6 +10,7 @@ import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
 import { ejecutarRPAInasistencias, obtenerEstadoRPA } from '../services/rpaService.js'
+import { textoJustificacion } from '../utils/descripcionInasistencia.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -400,11 +401,7 @@ export async function getInasistenciasParaRPA(req, res) {
           apellidos: a.estudianteId.apellidos || '',
           nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
         },
-        justificacion: a.tipo === 'Excusada'
-          ? 'Falla justificada'
-          : (a.tipo === 'Falta'
-              ? 'Falla injustificada'
-              : 'Tardanza injustificada')
+        justificacion: textoJustificacion(a)
       }))
 
     res.json({
@@ -490,11 +487,7 @@ export async function getTodosInasistenciasParaRPA(req, res) {
             apellidos: a.estudianteId.apellidos || '',
             nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
           },
-          justificacion: a.tipo === 'Excusada'
-            ? 'Falla justificada'
-            : (a.tipo === 'Falta'
-                ? 'Falla injustificada'
-                : 'Tardanza injustificada')
+          justificacion: textoJustificacion(a)
         })
       })
 

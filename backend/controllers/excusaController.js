@@ -110,7 +110,8 @@ export async function aprobarExcusa(req, res) {
           hora: '—',
           tiempoTardanza: '0 horas',
           instructorId,
-          estadoCarga
+          estadoCarga,
+          descripcion: existente?.descripcion || ''
         },
         $setOnInsert: {
           origen: 'manual'
