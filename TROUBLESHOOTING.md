@@ -1093,3 +1093,41 @@
 - **Verificación:**
   - Sintaxis validada con `node -c` en `backend/index.js` y `huellero/src/main/config.js` (código 0).
   - Verificación de ausencia de URLs quemadas de Render en el código fuente del proyecto.
+
+
+---
+
+## [2026-10-24 22:20] Integración y Verificación Local de Cambios de Layouts Remotos (Commit 7b77d3f de Oscar)
+
+- **Fecha y Hora:** 2026-10-24 22:20:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  El equipo remoto realizó un push a `origin/main` (`7b77d3f` por oscar20981 seguido de la compilación CI `215bc7c`), pero los cambios no eran visibles en el entorno local del usuario porque la rama de trabajo (`juan`) no los había incorporado. Se requirió inspeccionar el historial de Git, fusionar las modificaciones e implementarlas localmente sin realizar push.
+- **Causa Raíz:**
+  Divergencia entre la rama local `juan` y la rama remota `origin/main` posterior a la subida de los nuevos layouts y estilos frontend.
+- **Solución Aplicada:**
+  1. **Fetch Completo:** Se ejecutó `git fetch --all --prune` identificando los commits `7b77d3f` (Oscar: modificación de layouts) y `215bc7c` (CI Monolito build) en `origin/main`, además de `fix/security` de Jorge en ramas remotas separadas.
+  2. **Merge Sin Conflictos:** Se realizó la fusión de `origin/main` en la rama local `juan` (`git merge --no-commit origin/main`), integrando limpiamente los 14 archivos frontend modificados (vistas `PanelInstructor.vue`, `PanelEstudiante.vue`, `Reportes.vue`, nuevos estilos CSS y assets de excusas).
+  3. **Preservación de Configuraciones Críticas:** Se mantuvieron intactas las variables parametrizadas de Docker y backend (`SOFIA_ENCRYPTION_KEY`, `CORS_ORIGIN`, `ALLOWED_ORIGINS`, `SEED_ADMIN_*`) y el mapeo estandarizado de puertos (`3000:3000`).
+  4. **Compilación de Producción:** Se ejecutó `npm run build:prod` verificando la transformación exitosa de 324 módulos Vite en 1.58s sin errores.
+  5. **Cumplimiento de Directiva de Seguridad:** No se realizó ningún push a repositorios remotos (`origin` ni `asista`).
+- **Archivos Modificados / Integrados:**
+  - `frontend/src/assets/con-excusa-icon.png`
+  - `frontend/src/assets/historial-aprendiz-icon.png`
+  - `frontend/src/assets/sin-excusa-icon.png`
+  - `frontend/src/composables/useAuth.js`
+  - `frontend/src/layouts/DefaultLayout.vue`
+  - `frontend/src/styles/login.css`
+  - `frontend/src/styles/main.css`
+  - `frontend/src/styles/panelEstudiante.css`
+  - `frontend/src/styles/panelInstructor.css`
+  - `frontend/src/views/Estudiantes.vue`
+  - `frontend/src/views/Login.vue`
+  - `frontend/src/views/PanelEstudiante.vue`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Reportes.vue`
+  - `docker-compose.yml`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Fusión limpia en Git (0 conflictos de código).
+  - Compilación de frontend con `npm run build:prod` exitosa en 1.58 segundos.
+  - Estado de Git limpio y verificado localmente en commit de fusión.
