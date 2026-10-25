@@ -1448,3 +1448,25 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
 - **Verificación:**
   - Inspección de `main:backend/public/index.html` confirmó las referencias al bundle moderno con hash `index-Bvpnp_MJ.js`.
   - Push exitoso a `origin/main` disparando el despliegue automático en la plataforma Render.
+
+
+---
+
+## [2026-10-25 13:40] Corrección de Conectividad CORS y Socket.IO para asista.onrender.com
+
+- **Fecha y Hora:** 2026-10-25 13:40:00 -05:00
+- **Descripción del Problema / Bug:**
+  El preflight CORS (`OPTIONS`) y el handshake de WebSockets (`socket.io`) devolvían `Access-Control-Allow-Origin: null` hacia el origen en producción `https://asista.onrender.com`, provocando que el navegador bloqueara peticiones de API y conexiones en tiempo real del frontend web.
+- **Causa Raíz:**
+  En `backend/utils/corsOrigins.js`, la lista blanca fija `ORIGENES_FIJOS` únicamente contenía el dominio legacy `https://huelleroactualizado-1.onrender.com` y no contemplaba el dominio real de producción `https://asista.onrender.com`, ni admitía de forma dinámica subdominios de Render (`*.onrender.com`), ni leía la variable de entorno autogenerada por Render `RENDER_EXTERNAL_URL`.
+- **Solución Aplicada:**
+  1. Se incluyó `https://asista.onrender.com` en `ORIGENES_FIJOS`.
+  2. Se agregó soporte para cualquier subdominio de Render mediante expresión regular `/^https:\/\/[a-z0-9-]+(\.onrender\.com)$/i`.
+  3. Se habilitó lectura dinámica de variables de entorno: `CORS_ORIGINS`, `CORS_ORIGIN`, `ALLOWED_ORIGINS` y `RENDER_EXTERNAL_URL`, incluyendo soporte para wildcard (`*`).
+  4. Se constató que las peticiones del Kiosco Electron (`huellero/`) corren en proceso Node.js sin cabecera `Origin` y son aceptadas inmediatamente con `if (!origin) return true`.
+- **Archivos Modificados:**
+  - `backend/utils/corsOrigins.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Pruebas unitarias con Node.js validaron que `esOrigenPermitido('https://asista.onrender.com')` devuelve `true` tanto en modo desarrollo como en `NODE_ENV=production`.
+  - Prueba de handshake WebSocket en Kiosco demostró conexión exitosa con ID asignado y autenticación por dispositivo.
