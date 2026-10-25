@@ -1,4 +1,3 @@
-import Asistencia from '../models/Asistencia.js'
 import Inasistencia from '../models/Inasistencia.js'
 import Jornada from '../models/Jornada.js'
 import Estudiante from '../models/Estudiante.js'
