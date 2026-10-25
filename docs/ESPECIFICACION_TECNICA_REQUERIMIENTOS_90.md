@@ -9,7 +9,7 @@
 **Versión de la Especificación:** 2.0 (Consolidada con Estado de Implementación al 90%)  
 **Fecha:** Septiembre de 2026  
 **Autores y Equipo de Desarrollo:** Juan Camilo Viviescas, María Julia Saavedra, César, Óscar, Iván René  
-**Stack Tecnológico:** Vue 3 + Quasar (Frontend), Node.js + Express + Socket.IO (Backend), Electron + Koffi FFI + C DLLs DigitalPersona (Desktop), MongoDB Atlas + SQLite (Bases de Datos), Docker en Render.com (Despliegue)
+**Stack Tecnológico:** Vue 3 + Quasar (Frontend), Node.js + Express + Socket.IO (Backend), Electron + Koffi FFI + C DLLs DigitalPersona (Desktop), MongoDB Atlas (Base de Datos Cloud), Docker en Render.com (Despliegue)
 
 ---
 
@@ -84,7 +84,7 @@ graph TD
 | **Registro Manual de Asistencia (Falla Física)** | ✅ | ✅ | ✅ | ❌ |
 | **Gestión y Aprobación de Excusas** | ✅ Total | ✅ Ficha asignada | ✅ Ficha asignada | ❌ |
 | **Días Festivos y No Lectivos** | ✅ Total | 👁️ Lectura | 👁️ Lectura | ❌ |
-| **Descarga de Reportes (Excel / PDF / SQLite)** | ✅ Consolidado | ✅ Por Ficha | ✅ Por Ficha | ❌ |
+| **Descarga de Reportes (Excel / PDF)** | ✅ Consolidado | ✅ Por Ficha | ✅ Por Ficha | ❌ |
 | **Portal de Consulta de Asistencia Personal** | ❌ | ❌ | ❌ | ✅ Exclusivo |
 
 ---
@@ -325,7 +325,7 @@ graph TD
 | **RNF-006** | **Seguridad Biométrica** | Almacenamiento exclusivo de plantillas matemáticas binarias cifradas (no imágenes). | `template` generado como string base64 por `dpfj_create_fmd_from_raw()`. | ✅ Verificado (100%) |
 | **RNF-007** | **Umbral de Comparación** | Tasa FAR < 0.001% (1 en 100,000) y FRR < 0.1%. | `BIOMETRIC_MATCH_THRESHOLD = 21474` configurado en `huellero/config.json`. | ✅ Verificado (100%) |
 | **RNF-008** | **Resiliencia Offline** | Operación continua ante fallos de internet y sincronización diferida. | Cola local `huellero/data/pendientes.json` y endpoint `/api/asistencias/sync`. | ✅ Verificado (100%) |
-| **RNF-009** | **Aislamiento de BD** | Bases de datos locales dedicadas por docente para contingencia. | Generación de SQLite por instructor con `better-sqlite3` en `backend/data/`. | ✅ Verificado (100%) |
+| **RNF-009** | **Persistencia Centralizada y Segura** | Persistencia atómica en la nube y reportes oficiales en cliente. | MongoDB Atlas con índices optimizados y exportación oficial a Excel/PDF. | ✅ Verificado (100%) |
 | **RNF-010** | **Rendimiento en RAM** | Búsqueda 1:N masiva en memoria RAM en menos de 1 segundo. | `dpfj_compare()` itera sobre plantillas cacheadas en memoria (~10-40ms). | ✅ Verificado (100%) |
 | **RNF-011** | **Cumplimiento Legal** | Consentimiento informado de Habeas Data previo a enrolar. | Modal bloqueante Ley 1581 de 2012 y auditoría de aceptación. | ✅ Verificado (100%) |
 
@@ -397,7 +397,7 @@ Durante la fase de estabilización y pruebas en laboratorio se identificaron y s
 * **Motor Biométrico Local (Electron + Koffi + DigitalPersona):** 100% completado.
 * **Monitoreo en Tiempo Real (WebSockets Socket.IO):** 100% completado.
 * **Reglas de Negocio de Asistencia y Tolerancia:** 100% completado.
-* **Persistencia Doble (MongoDB Atlas + SQLite por Docente):** 100% completado.
+* **Persistencia Centralizada y Reportes (MongoDB Atlas + Excel/PDF):** 100% completado.
 * **Despliegue Continuo en Render con Docker:** 100% completado.
 
 ### 7.2. Tareas del 10% Restante para Cierre y Entrega Final
@@ -407,5 +407,5 @@ Durante la fase de estabilización y pruebas en laboratorio se identificaron y s
    * Configuración de `manualChunks` en Vite para segmentar el archivo `dist/assets/index-*.js` (actualmente de 838 kB) y reducir la advertencia de bundle mayor a 500 kB.
 3. **Servicio Ping / Keep-Alive para Render Gratuito:**
    * Configurar un monitor externo ligero (ej. cron cada 14 minutos contra `GET /api/health`) para prevenir la suspensión por inactividad (*spin-down*) en horarios lectivos.
-4. **Política de Depuración de Bases de Datos SQLite Locales:**
-   * Implementar un script de retención programada que archive bases de datos docentes con antigüedad superior a 90 días en el servidor.
+4. **Endurecimiento Perimetral y Contenedores:**
+   * Despliegue en contenedor con usuario sin privilegios (USER node), modo solo lectura (ead_only) y cabeceras de seguridad Helmet/CORS.

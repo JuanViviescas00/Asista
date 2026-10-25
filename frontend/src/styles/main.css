@@ -381,11 +381,14 @@ body {
 }
 
 .main-content {
-  --main-pad-top: 44px;
-  --main-pad-x: 48px;
+  /* Márgenes del contenedor (referencia): arriba 20px, derecha 20px, izquierda 22px */
+  --main-pad-top: 20px;
+  --main-pad-x: 20px;
   position: relative;
   flex: 1;
   padding: var(--main-pad-top) var(--main-pad-x) 60px;
+  /* Espacio entre el menú lateral y los contenedores: 22px (antes 48px) */
+  padding-left: 22px;
   min-height: 100vh;
   max-width: 1440px;
 }
@@ -394,7 +397,7 @@ body {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  margin-bottom: 34px;
+  margin-bottom: 22px;
   padding: 108px 40px 26px;
   min-height: 150px;
   border-radius: var(--radio-lg);
@@ -916,8 +919,8 @@ table tbody tr:hover {
    queda fijo en la esquina superior derecha. */
 .app-topbar {
   position: absolute;
-  top: 66px;
-  right: 64px;
+  top: 32px;   /* dentro del encabezado compacto (que empieza a 20px del borde) */
+  right: 36px; /* acompaña al nuevo margen derecho de 20px */
   z-index: 5;
   display: flex;
   align-items: center;
@@ -1579,5 +1582,57 @@ body {
 @media (max-width: 360px) {
   .stats-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ============================================================
+   ENCABEZADO UNIFICADO (igual al del panel del Instructor)
+   Todas las vistas usan el mismo encabezado compacto con ondas:
+   - Padding: 28px 32px 36px (alto ≈ 122px)
+   - Ondas: 46px de alto
+   - Título 28px / subtítulo 14px
+   - Separación con la tarjeta siguiente: 22px
+   Solo escritorio y tablet (desde 769px); en móvil se mantiene el diseño responsivo.
+   ============================================================ */
+@media (min-width: 769px) {
+  .main-content .page-header,
+  .main-content .fichas-page-header,
+  .main-content .holidays-page-header,
+  .main-content .import-users-page-header,
+  .main-content .admin-profile-page-header {
+    padding: 28px 32px 36px;
+    min-height: 0;
+    margin-bottom: 22px;
+  }
+
+  .main-content .page-header::before,
+  .main-content .fichas-page-header::before,
+  .main-content .holidays-page-header::before,
+  .main-content .import-users-page-header::before,
+  .main-content .admin-profile-page-header::before {
+    background-size: 100% 46px;
+  }
+
+  .main-content .page-header h1,
+  .main-content .fichas-page-header h1,
+  .main-content .holidays-page-header h1,
+  .main-content .import-users-page-header h1,
+  .main-content .admin-profile-page-header h1 {
+    font-size: 28px;
+    line-height: 1.15;
+  }
+
+  .main-content .page-header p,
+  .main-content .fichas-page-header p,
+  .main-content .holidays-page-header p,
+  .main-content .import-users-page-header p,
+  .main-content .admin-profile-page-header p {
+    font-size: 14px;
+    margin-top: 4px;
+  }
+
+  /* Esta vista traía un padding propio que sumaba al margen del contenedor */
+  .main-content .student-consult-page {
+    padding: 0;
   }
 }

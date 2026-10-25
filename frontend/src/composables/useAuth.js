@@ -101,14 +101,40 @@ export function initAuth() {
   if (autenticado.value) iniciarTimerInactividad()
 }
 
+// El backend entrega el nombre del aprendiz ya unido ("nombres apellidos").
+// Se toma el primer nombre y el primer apellido: con 4 o más palabras el primer
+// apellido es la 3.ª; con 3 se asume 1 nombre + 2 apellidos; con 2 se usan ambas.
+function primerNombreApellido(nombreCompleto) {
+  let texto = (nombreCompleto || '').trim().replace(/\s+/g, ' ')
+  if (!texto) return ''
+  if (texto === texto.toUpperCase()) {
+    texto = texto.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase())
+  }
+  const partes = texto.split(' ')
+  if (partes.length <= 2) return partes.join(' ')
+  const particulas = ['de', 'del', 'la', 'las', 'los', 'y', 'san', 'santa', 'da', 'di']
+  let idx = partes.length === 3 ? 1 : 2
+  let apellido = partes[idx]
+  while (particulas.includes(partes[idx].toLowerCase()) && idx + 1 < partes.length) {
+    idx++
+    apellido += ' ' + partes[idx]
+  }
+  return `${partes[0]} ${apellido}`
+}
+
 const headerTitulo = computed(() => {
-  if (usuario.value?.rol === 'Instructor') return 'Panel Instructor'
-  if (usuario.value?.rol === 'Estudiante') return 'Panel Aprendiz'
+  if (usuario.value?.rol === 'Instructor') {
+    const nombre = (usuario.value?.nombre || '').trim()
+    return nombre ? `Bienvenido ${nombre}` : 'Bienvenido Instructor'
+  }
+  if (usuario.value?.rol === 'Estudiante') {
+    return primerNombreApellido(usuario.value?.nombre) || 'Panel Aprendiz'
+  }
   return 'Panel Admin'
 })
 
 const headerSubtitulo = computed(() => {
-  if (usuario.value?.rol === 'Instructor') return 'Docente SENA'
+  if (usuario.value?.rol === 'Instructor') return 'Instructor SENA'
   if (usuario.value?.rol === 'Estudiante') return 'Aprendiz SENA'
   return 'Administración SENA'
 })

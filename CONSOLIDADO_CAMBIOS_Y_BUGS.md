@@ -1,7 +1,7 @@
 # 📋 Consolidado Técnico Integral: Arquitectura, Cambios y Bugs Resueltos
 **Proyecto:** Sistema de Control de Asistencia Biométrico (Huellero SENA / Asista)  
 **Fecha de Actualización:** 22 de Septiembre de 2026  
-**Ambientes y Tecnologías:** Vue 3 + Quasar (Frontend), Node.js + Express + Socket.IO (Backend), Electron + Koffi FFI + C DLLs DigitalPersona (Desktop), MongoDB Atlas + SQLite (Bases de Datos), Docker en Render.com (Despliegue)
+**Ambientes y Tecnologías:** Vue 3 + Quasar (Frontend), Node.js + Express + Socket.IO (Backend), Electron + Koffi FFI + C DLLs DigitalPersona (Desktop), MongoDB Atlas (Base de Datos Cloud), Docker en Render.com (Despliegue)
 
 ---
 
@@ -39,7 +39,7 @@ flowchart TB
     subgraph Cliente_Desktop [Aplicación de Escritorio - Huellero]
         Lector[Lector DigitalPersona U.are.U 4500] -->|USB Raw| Koffi[Koffi FFI - dpfpdd.dll / dpfj.dll]
         Koffi --> Engine[Engine Biométrico Local / Matching FMR]
-        Engine --> StoreOffline[(Almacenamiento Local JSON/SQLite)]
+        Engine --> StoreOffline[(Cola Local Atómica JSON)]
         Engine --> ElectronRenderer[Interfaz Kiosko / Enrolamiento Vue 3]
     end
 
@@ -56,14 +56,12 @@ flowchart TB
 
     subgraph Bases_De_Datos [Capa de Persistencia]
         MongoDB[(MongoDB Atlas)]
-        SQLiteDocente[(SQLite Export por Docente)]
     end
 
     Cliente_Desktop <-->|WebSocket wss:// - Eventos HELLO / ACTIVATE| SocketIO
     Cliente_Desktop -->|HTTP POST /api/asistencias/sync| Express
     Frontend_Web <-->|WebSocket / REST| Backend_Cloud
     Express <--> MongoDB
-    Express <--> SQLiteDocente
 ```
 
 * **Frontend Web:** Aplicación SPA construida con **Vue 3**, **Vite** y componentes de **Quasar Framework**. Gestiona roles de Administrador, Instructor Líder e Instructor de Apoyo, monitoreo en vivo de clases, reportes consolidados y gestión de aprendices.
@@ -71,7 +69,7 @@ flowchart TB
 * **Desktop (Huellero):** Aplicación de escritorio desarrollada en **Electron** que se ejecuta en las aulas. Se comunica con las librerías dinámicas nativas en C (`dpfpdd.dll` y `dpfj.dll`) mediante **Koffi FFI**. Realiza la identificación biométrica localmente en memoria (comparando contra plantillas cacheadas de la ficha), garantizando funcionamiento ininterrumpido aun en caso de cortes de internet (almacenamiento local en cola y sincronización automática).
 * **Bases de Datos:** 
   - **MongoDB Atlas:** Base de datos central para usuarios, fichas, estudiantes, asistencias y dispositivos autorizados.
-  - **SQLite:** Bases de datos locales embebidas generadas por docente para auditoría, contingencia y consulta sin conexión.
+  - **Resiliencia Local:** Cola offline atómica (`store.js`) en Electron para registro ininterrumpido sin internet y reportes oficiales en Excel (.xlsx) y PDF.
 * **Despliegue:** Arquitectura de servicio único (*Single Service*) mediante un **`Dockerfile` multi-stage** alojado en **Render.com**, optimizado para el plan gratuito y WebSockets continuos.
 
 ---
@@ -268,7 +266,7 @@ flowchart TB
      ```
   2. Uso estricto de `Intl.DateTimeFormat` configurado para `America/Bogota` en la generación de fechas y horas (`getHoyString()`, `formatearFechaColombia()`, `formatearHoraColombia()`).
   3. Extracción de horas y minutos en horario colombiano para el cálculo de tardanzas escalonadas (`calcularTardanzaEscalonada`).
-  4. Configuración de `{ timezone: 'America/Bogota' }` en los cron jobs nocturnos de SQLite.
+  4. Configuración de `{ timezone: 'America/Bogota' }` en los cron jobs nocturnos institucionales.
 * **Archivos Modificados:**
   - [`Dockerfile`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/Dockerfile#L37-L38)
   - [`backend/Dockerfile`](file:///c:/Users/JuanC/OneDrive/Desktop/SENA/PROYECTO_FINAL_LECTOR/HuelleroActualizado/backend/Dockerfile#L11)
@@ -335,7 +333,7 @@ flowchart TB
    - Normalización de reglas: 0-5 min (Presente), 5-65 min (Tardanza 1h), 65-125 min (Tardanza 2h), >125 min (Falta).
    - Acumulación en banco de horas de inasistencia (cada 6 horas = 1 día de falla).
 4. **Exportación y Sincronización Nocturna por Docente:**
-   - Generación de archivos SQLite independientes por instructor a la medianoche con los últimos 3 días hábiles (considerando días festivos institucionales).
+   - Sincronización nocturna institucional y cálculo de días hábiles conforme al Acuerdo 0009 de 2024.
 5. **Gestión y Cifrado AES-256-GCM de Credenciales Sofia Plus para Robot RPA (2 de Octubre de 2026):**
    - **Propósito:** Permitir al robot RPA (`Practica_RPA/bot_sofia_login.py`) autenticarse automáticamente en la plataforma Sofia Plus (`senasofiaplus.edu.co`) a nombre del instructor para el reporte y sincronización de novedades, protegiendo las credenciales contra accesos no autorizados a la base de datos.
    - **Cifrado Criptográfico de Grado Militar (`backend/services/cryptoService.js`):**
@@ -422,6 +420,6 @@ flowchart TB
 3. **Manejo del Spin-Down en el Plan Gratuito de Render:**
    * *Diagnóstico:* Tras 15 minutos de inactividad, Render suspende el contenedor gratuito, tomando entre 50 y 90 segundos en responder a la primera petición.
    * *Recomendación:* Mantener activo un servicio ping/uptime ligero (ej. Cron Job externo contra `/api/health`) o migrar al plan Render Individual ($7/mes) si se requiere disponibilidad inmediata en horarios de clase.
-4. **Estrategia de Purga y Backup de Bases de Datos SQLite:**
-   * *Diagnóstico:* La carpeta `backend/data/` acumula archivos SQLite por docente de manera indefinida.
+4. **Desacoplamiento de BD Locales y Exportación Nativa (Completado):**
+   * Retiro integral de motores locales y migración hacia exportación oficial en Excel y PDF generada bajo demanda.
    * *Recomendación:* Implementar un script de retención que archive o elimine bases de datos con más de 90 días de antigüedad para no saturar el almacenamiento efímero del contenedor.

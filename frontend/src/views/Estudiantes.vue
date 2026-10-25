@@ -12,7 +12,7 @@ const retirarTarget = ref(null)
 const retirarMotivo = ref('')
 const retirarTipo = ref('Inactivo')
 const filtroEstado = ref('Todos')
-const busquedaAvanzadaAbierta = ref(false)
+const busquedaAvanzadaAbierta = ref(true)
 const loading = ref(false)
 const expandidos = ref({})
 
@@ -20,7 +20,17 @@ const userStr = sessionStorage.getItem('user_data')
 const usuario = ref(userStr ? JSON.parse(userStr) : null)
 const esInstructor = computed(() => usuario.value?.rol === 'Instructor')
 
-const busqueda = reactive({ fichaId: null, jornada: '', documento: '', nombres: '', estadoAsistencia: '' })
+const fichasLider = computed(() => {
+  if (!esInstructor.value) return fichasList.value
+  return fichasList.value.filter(f => f.esLider || String(f.instructorLiderId?._id || f.instructorLiderId) === String(usuario.value?.id))
+})
+
+const puedeCrearEstudiante = computed(() => {
+  if (!esInstructor.value) return true
+  return fichasLider.value.length > 0
+})
+
+const busqueda = reactive({ fichaId: null, jornada: '', documento: '', nombres: '', nombreDocumento: '', estadoAsistencia: '' })
 
 const estudianteForm = reactive({
   nombres: '', apellidos: '', tipoDocumento: 'CC', numeroDocumento: '',
@@ -51,6 +61,9 @@ async function loadFichas() {
     } else {
       fichasList.value = await api.fichas.getAll()
     }
+    if (esInstructor.value && !busqueda.fichaId && fichasList.value.length > 0) {
+      busqueda.fichaId = fichasList.value[0]._id
+    }
   } catch (e) {}
 }
 
@@ -69,9 +82,17 @@ function esLiderDeEstudiante(estudiante) {
   return !!(ficha && ficha.esLider)
 }
 
+// Instructor: true mientras no use la búsqueda avanzada (ficha o nombre/documento); hasta entonces el listado no muestra información
+const sinSeleccion = computed(() => {
+  if (!esInstructor.value) return false
+  const hayBusqueda = !!(busqueda.nombreDocumento.trim() || busqueda.fichaId)
+  return !hayBusqueda
+})
+
 const estudiantesFiltrados = computed(() => {
+  if (sinSeleccion.value) return []
   let lista = estudiantes.value
-  if (filtroEstado.value !== 'Todos') lista = lista.filter(e => e.estado === filtroEstado.value)
+  if (filtroEstado.value && filtroEstado.value !== 'Todos') lista = lista.filter(e => e.estado === filtroEstado.value)
   if (busqueda.fichaId) {
     const targetFicha = getFichaById(busqueda.fichaId)
     const targetIds = [String(busqueda.fichaId)]
@@ -101,6 +122,13 @@ const estudiantesFiltrados = computed(() => {
       return completo.includes(nom)
     })
   }
+  if (busqueda.nombreDocumento.trim()) {
+    const q = busqueda.nombreDocumento.trim().toLowerCase()
+    lista = lista.filter(e => {
+      const completo = `${e.nombres} ${e.apellidos}`.toLowerCase()
+      return completo.includes(q) || String(e.numeroDocumento || '').toLowerCase().includes(q)
+    })
+  }
   if (busqueda.estadoAsistencia) lista = lista.filter(e => e.estadoAsistencia === busqueda.estadoAsistencia)
   return lista
 })
@@ -111,12 +139,13 @@ const criteriosActivos = computed(() => {
   if (busqueda.jornada) count++
   if (busqueda.documento) count++
   if (busqueda.nombres) count++
+  if (busqueda.nombreDocumento.trim()) count++
   if (busqueda.estadoAsistencia) count++
   return count
 })
 
 function limpiarBusqueda() {
-  Object.assign(busqueda, { fichaId: null, jornada: '', documento: '', nombres: '', estadoAsistencia: '' })
+  Object.assign(busqueda, { fichaId: null, jornada: '', documento: '', nombres: '', nombreDocumento: '', estadoAsistencia: '' })
 }
 
 function showToastFn(message, type = 'success') {
@@ -126,9 +155,15 @@ function showToastFn(message, type = 'success') {
 
 function openCreate() {
   editingId.value = null
+  let fichaDefault = null
+  if (busqueda.fichaId && fichasLider.value.some(f => String(f._id) === String(busqueda.fichaId))) {
+    fichaDefault = busqueda.fichaId
+  } else if (fichasLider.value.length > 0) {
+    fichaDefault = fichasLider.value[0]._id
+  }
   Object.assign(estudianteForm, {
     nombres: '', apellidos: '', tipoDocumento: 'CC', numeroDocumento: '',
-    correo: '', telefono: '', fichaId: null,
+    correo: '', telefono: '', fichaId: fichaDefault,
   })
   showModal.value = true
 }
@@ -308,26 +343,105 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
     <StatCard icon="user-x" label="Retirados" :value="retiradosCount()" variant="rojo" />
   </div>
 
-  <div class="card">
-    <div class="card-header">
-      <h3>Busqueda Avanzada</h3>
+  <div class="card card-busqueda">
+    <div class="card-header busqueda-header">
+      <div class="busqueda-header-info">
+        <div class="busqueda-icon-badge">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        </div>
+        <div>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Filtros y Búsqueda de Aprendices</h3>
+          <p class="busqueda-subtitulo">Ajusta los criterios para encontrar aprendices rápidamente</p>
+        </div>
+      </div>
       <div class="btn-group">
-        <button v-if="criteriosActivos > 0" class="btn btn-outline btn-sm" @click="limpiarBusqueda" title="Limpiar filtros"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        <button class="btn btn-outline btn-sm" @click="busquedaAvanzadaAbierta = !busquedaAvanzadaAbierta" title="Mostrar u ocultar búsqueda"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+        <button v-if="criteriosActivos > 0" class="btn btn-outline btn-sm btn-limpiar-filtros" @click="limpiarBusqueda" title="Limpiar todos los filtros">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span>Limpiar filtros ({{ criteriosActivos }})</span>
+        </button>
+        <button class="btn btn-outline btn-sm" @click="busquedaAvanzadaAbierta = !busquedaAvanzadaAbierta" :title="busquedaAvanzadaAbierta ? 'Ocultar filtros' : 'Mostrar filtros'">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :style="busquedaAvanzadaAbierta ? 'transform: rotate(180deg);' : ''" style="transition: transform .2s ease;"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
       </div>
     </div>
-    <div v-if="busquedaAvanzadaAbierta" class="busqueda-grid">
-      <div class="form-group">
-        <label>Ficha</label>
-        <select v-model="busqueda.fichaId">
-          <option :value="null">Todas las fichas</option>
-          <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option>
+
+    <div v-if="busquedaAvanzadaAbierta" class="busqueda-filtros-grid" :class="esInstructor ? 'grid-instructor' : 'grid-admin'">
+      <div class="filtro-campo campo-ficha">
+        <label>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Ficha / Programa
+        </label>
+        <select v-model="busqueda.fichaId" class="filtro-input">
+          <option :value="null" :disabled="esInstructor">{{ esInstructor ? 'Seleccione la ficha' : 'Todas las fichas' }}</option>
+          <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} — {{ f.nombrePrograma }} ({{ f.jornada }})</option>
         </select>
       </div>
-      <div class="form-group"><label>Jornada</label><select v-model="busqueda.jornada"><option value="">Todas las jornadas</option><option value="Mañana"> Mañana</option><option value="Tarde"> Tarde</option><option value="Noche"> Noche</option></select></div>
-      <div class="form-group"><label>Numero de Documento</label><input v-model="busqueda.documento" type="text" placeholder="Buscar por documento..." /></div>
-      <div class="form-group"><label>Nombres</label><input v-model="busqueda.nombres" type="text" placeholder="Buscar por nombre..." /></div>
-      <div class="form-group"><label>Estado de Asistencia</label><select v-model="busqueda.estadoAsistencia"><option value="">Todos</option><option value="Sin registro">Sin registro</option><option value="Presente">Presente</option><option value="Ausente">Ausente</option></select></div>
+
+      <template v-if="esInstructor">
+        <div class="filtro-campo campo-buscar">
+          <label>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Buscar Aprendiz
+          </label>
+          <div class="input-con-limpiar">
+            <input
+              v-model="busqueda.nombreDocumento"
+              type="text"
+              class="filtro-input"
+              placeholder="Buscar por nombres, apellidos o documento..."
+            />
+            <button v-if="busqueda.nombreDocumento" type="button" class="btn-clear-field" @click="busqueda.nombreDocumento = ''" title="Borrar texto">&times;</button>
+          </div>
+        </div>
+
+
+      </template>
+
+      <template v-else>
+        <div class="filtro-campo campo-buscar">
+          <label>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Nombres o Apellidos
+          </label>
+          <input v-model="busqueda.nombres" type="text" class="filtro-input" placeholder="Buscar por nombre..." />
+        </div>
+
+        <div class="filtro-campo campo-doc">
+          <label>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><line x1="15" y1="8" x2="17" y2="8"/><line x1="15" y1="12" x2="17" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
+            N° Documento
+          </label>
+          <input v-model="busqueda.documento" type="text" class="filtro-input" placeholder="Documento..." />
+        </div>
+
+        <div class="filtro-campo campo-jornada">
+          <label>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Jornada
+          </label>
+          <select v-model="busqueda.jornada" class="filtro-input">
+            <option value="">Todas</option>
+            <option value="Mañana">Mañana</option>
+            <option value="Tarde">Tarde</option>
+            <option value="Noche">Noche</option>
+          </select>
+        </div>
+
+
+
+        <div class="filtro-campo campo-asistencia">
+          <label>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+            Asistencia
+          </label>
+          <select v-model="busqueda.estadoAsistencia" class="filtro-input">
+            <option value="">Todos</option>
+            <option value="Sin registro">Sin registro</option>
+            <option value="Presente">Presente</option>
+            <option value="Ausente">Ausente</option>
+          </select>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -336,19 +450,17 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <h3>Listado de Estudiantes</h3>
         <span v-if="criteriosActivos > 0" class="badge badge-primary">{{ estudiantesFiltrados.length }} resultado(s)</span>
-        <select v-model="filtroEstado" class="filtro-select">
-          <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
-        </select>
-        <select v-if="esInstructor" v-model="busqueda.fichaId" class="filtro-select" title="Filtrar por ficha">
-          <option :value="null">Todas las fichas</option>
-          <option v-for="f in fichasList" :key="f._id" :value="f._id">Ficha {{ f.codigoFicha }}{{ f.esLider ? ' (Líder)' : '' }}</option>
-        </select>
+        
       </div>
-      <button v-if="!esInstructor" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+      <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante" style="display: inline-flex; align-items: center; gap: 6px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Nuevo Estudiante</span>
+      </button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
-      <p>{{ criteriosActivos > 0 ? 'No se encontraron estudiantes con los criterios de busqueda.' : 'No hay estudiantes registrados. Crea el primero usando el boton "Nuevo Estudiante".' }}</p>
+      <p v-if="sinSeleccion">Usa la búsqueda avanzada para ver la información de los aprendices.</p>
+      <p v-else>{{ criteriosActivos > 0 ? 'No se encontraron estudiantes con los criterios de busqueda.' : 'No hay estudiantes registrados. Crea el primero usando el boton "Nuevo Estudiante".' }}</p>
     </div>
 
     <div v-else class="table-container">
@@ -433,12 +545,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           <label>Ficha Asignada</label>
           <select
             v-model="estudianteForm.fichaId"
-            :disabled="esInstructor"
-            :style="esInstructor ? 'background: #f1f5f9; color: #94a3b8; cursor: not-allowed;' : ''"
+            :disabled="editingId && esInstructor"
+            :style="(editingId && esInstructor) ? 'background: #f1f5f9; color: #94a3b8; cursor: not-allowed;' : ''"
           >
             <option :value="null" disabled>Selecciona una ficha</option>
-            <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
+            <option v-for="f in (esInstructor ? fichasLider : fichasList)" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
           </select>
+          <p v-if="esInstructor && !editingId" style="font-size: 11px; color: #64748b; margin-top: 4px;">
+            Mostrando únicamente las fichas donde eres docente líder.
+          </p>
         </div>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
@@ -452,6 +567,142 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 </template>
 
 <style>
+/* Filtros avanzados con óptimo aprovechamiento del espacio */
+.card-busqueda {
+  padding: 18px 22px;
+  margin-bottom: 20px;
+}
+.busqueda-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.busqueda-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.busqueda-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(0, 120, 50, 0.08);
+  color: #007832;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.busqueda-subtitulo {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+.btn-limpiar-filtros {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+.btn-limpiar-filtros:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.busqueda-filtros-grid {
+  display: grid;
+  gap: 16px 20px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+  align-items: flex-end;
+  width: 100%;
+}
+.busqueda-filtros-grid.grid-instructor {
+  grid-template-columns: minmax(320px, 1.3fr) minmax(280px, 1fr);
+  width: 100%;
+}
+.busqueda-filtros-grid.grid-admin {
+  grid-template-columns: minmax(260px, 1.8fr) minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr);
+}
+.filtro-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.filtro-campo label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.filtro-campo label svg {
+  color: #007832;
+}
+.filtro-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.filtro-input:focus {
+  border-color: #007832;
+  box-shadow: 0 0 0 3px rgba(0, 120, 50, 0.12);
+}
+.input-con-limpiar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.btn-clear-field {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #94a3b8;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.btn-clear-field:hover {
+  color: #334155;
+}
+
+@media (max-width: 1100px) {
+  .busqueda-filtros-grid.grid-instructor {
+    grid-template-columns: 1fr 1fr;
+  }
+  .busqueda-filtros-grid.grid-instructor .campo-ficha {
+    grid-column: 1 / -1;
+  }
+  .busqueda-filtros-grid.grid-admin {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .busqueda-filtros-grid.grid-instructor,
+  .busqueda-filtros-grid.grid-admin {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Anchos de columna controlados para evitar espacios vacíos anchos entre columnas.
    El ancho total de la tabla no cambia (sigue siendo 100% del contenedor),
    solo se distribuye el espacio interno de forma proporcional al contenido. */

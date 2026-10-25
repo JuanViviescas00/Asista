@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import * as XLSX from 'xlsx'
 import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js'
@@ -23,9 +23,183 @@ const fichaSeleccionada = ref(null)
 const estudiantesFicha = ref([])
 const excusasFicha = ref([])
 const asistenciasFicha = ref([])
+
+// Historial filtrado únicamente por anomalías (fallas, tardanzas y excusas)
+const historialAnomalias = computed(() => {
+  const anomalos = ['Falta', 'Tardanza', 'Excusada', 'Ausente', 'Retardo']
+  return asistenciasFicha.value.filter(a => {
+    const estado = a.estado || a.tipo
+    return anomalos.includes(estado)
+  })
+})
+
+// Gestión de Equipo Docente (asignar docentes comunes si es líder o admin)
+const esLiderEnFichaSeleccionada = computed(() => {
+  if (!fichaSeleccionada.value) return false
+  if (usuario.value?.rol === 'Administrador') return true
+  if (fichaSeleccionada.value.esLider === true) return true
+  const liderId = String(fichaSeleccionada.value.instructorLiderId?._id || fichaSeleccionada.value.instructorLiderId || '')
+  const miId = String(usuario.value?.id || usuario.value?._id || '')
+  return Boolean(liderId && miId && liderId === miId)
+})
+
+const todosLosInstructores = ref([])
+const modalAgregarDocenteAbierto = ref(false)
+const docenteSeleccionadoId = ref('')
+const guardandoDocente = ref(false)
+
+async function cargarTodosLosInstructores() {
+  try {
+    const res = await api.instructores.getAll()
+    todosLosInstructores.value = Array.isArray(res) ? res : (res?.data || [])
+  } catch (err) {
+    console.error('Error al cargar instructores:', err)
+  }
+}
+
+const docentesDisponiblesParaFicha = computed(() => {
+  if (!fichaSeleccionada.value) return []
+  const liderId = String(fichaSeleccionada.value.instructorLiderId?._id || fichaSeleccionada.value.instructorLiderId || '')
+  const asignadosIds = (fichaSeleccionada.value.instructores || []).map(i => String(i._id || i.id || i))
+  return (todosLosInstructores.value || []).filter(doc => {
+    const id = String(doc._id || doc.id)
+    return id && id !== liderId && !asignadosIds.includes(id)
+  })
+})
+
+const modoAsignar = ref('existente') // 'existente' | 'nuevo'
+const nuevoDocenteForm = reactive({
+  nombres: '',
+  apellidos: '',
+  tipoDocumento: 'CC',
+  numeroDocumento: '',
+  correo: '',
+  telefono: '',
+  especialidad: ''
+})
+
+const modalDesvincularAbierto = ref(false)
+const docenteADesvincular = ref(null)
+const desvinculandoDocente = ref(false)
+
+function abrirModalAgregarDocente() {
+  modoAsignar.value = 'existente'
+  docenteSeleccionadoId.value = ''
+  Object.assign(nuevoDocenteForm, {
+    nombres: '',
+    apellidos: '',
+    tipoDocumento: 'CC',
+    numeroDocumento: '',
+    correo: '',
+    telefono: '',
+    especialidad: ''
+  })
+  cargarTodosLosInstructores()
+  modalAgregarDocenteAbierto.value = true
+}
+
+async function confirmarAgregarDocente() {
+  if (!fichaSeleccionada.value?._id) return
+  guardandoDocente.value = true
+  try {
+    let payload
+    let nombreDoc = ''
+    if (modoAsignar.value === 'existente') {
+      if (!docenteSeleccionadoId.value) {
+        showToast('Debes seleccionar un docente de la lista', 'warning')
+        guardandoDocente.value = false
+        return
+      }
+      payload = { instructorId: docenteSeleccionadoId.value }
+      const found = todosLosInstructores.value.find(i => String(i._id || i.id) === String(docenteSeleccionadoId.value))
+      nombreDoc = found ? `${found.nombres} ${found.apellidos || ''}`.trim() : 'Docente'
+    } else {
+      const { nombres, apellidos, numeroDocumento, correo } = nuevoDocenteForm
+      if (!nombres?.trim() || !apellidos?.trim() || !numeroDocumento?.trim() || !correo?.trim()) {
+        showToast('Nombres, apellidos, documento y correo son obligatorios', 'warning')
+        guardandoDocente.value = false
+        return
+      }
+      payload = { nuevoDocente: { ...nuevoDocenteForm } }
+      nombreDoc = `${nombres.trim()} ${apellidos.trim()}`
+    }
+
+    const fichaActualizada = await api.fichas.agregarInstructor(fichaSeleccionada.value._id, payload)
+    fichaSeleccionada.value.instructores = fichaActualizada.instructores || []
+    const idx = misFichas.value.findIndex(f => String(f._id) === String(fichaSeleccionada.value._id))
+    if (idx !== -1) {
+      misFichas.value[idx].instructores = fichaActualizada.instructores || []
+    }
+    await cargarTodosLosInstructores()
+    showToast(`Docente ${nombreDoc} asignado al equipo exitosamente.`, 'success')
+    modalAgregarDocenteAbierto.value = false
+    docenteSeleccionadoId.value = ''
+  } catch (err) {
+    showToast(err.message || 'Error al agregar docente', 'error')
+  } finally {
+    guardandoDocente.value = false
+  }
+}
+
+function abrirModalDesvincularDocente(doc) {
+  docenteADesvincular.value = doc
+  modalDesvincularAbierto.value = true
+}
+
+function cerrarModalDesvincularDocente() {
+  if (desvinculandoDocente.value) return
+  modalDesvincularAbierto.value = false
+  docenteADesvincular.value = null
+}
+
+async function confirmarDesvincularDocente() {
+  if (!docenteADesvincular.value || !fichaSeleccionada.value?._id) return
+  desvinculandoDocente.value = true
+  try {
+    const docId = String(docenteADesvincular.value._id || docenteADesvincular.value.id || docenteADesvincular.value)
+    const nombre = docenteADesvincular.value.nombres ? `${docenteADesvincular.value.nombres} ${docenteADesvincular.value.apellidos || ''}`.trim() : 'este docente'
+    const fichaActualizada = await api.fichas.eliminarInstructor(fichaSeleccionada.value._id, docId)
+    fichaSeleccionada.value.instructores = fichaActualizada.instructores || []
+    const idx = misFichas.value.findIndex(f => String(f._id) === String(fichaSeleccionada.value._id))
+    if (idx !== -1) {
+      misFichas.value[idx].instructores = fichaActualizada.instructores || []
+    }
+    await cargarTodosLosInstructores()
+    showToast(`Docente ${nombre} desvinculado de la ficha.`, 'info')
+    cerrarModalDesvincularDocente()
+  } catch (err) {
+    showToast(err.message || 'Error al desvincular docente', 'error')
+  } finally {
+    desvinculandoDocente.value = false
+  }
+}
 const loading = ref(true)
 const error = ref('')
 const vistaFicha = ref('asistencia')
+
+// Selector superior de fichas
+function onSelectFicha(id) {
+  const ficha = misFichas.value.find(f => String(f._id) === String(id))
+  if (ficha && String(fichaSeleccionada.value?._id) !== String(ficha._id)) {
+    seleccionarFicha(ficha)
+  }
+}
+
+// Título de la página según la acción activa
+const tituloVista = computed(() => {
+  const f = fichaSeleccionada.value
+  const detalle = f ? `Ficha ${f.codigoFicha} · ${f.nombrePrograma}` : ''
+  if (!f) {
+    return { icono: 'fichas', titulo: 'Mis Fichas / Grupos', subtitulo: 'Selecciona una ficha para gestionar su asistencia.' }
+  }
+  if (vistaFicha.value === 'editar_asistencia') {
+    return { icono: 'historial', titulo: 'Historial de Asistencias', subtitulo: detalle }
+  }
+  if (vistaFicha.value === 'docentes') {
+    return { icono: 'docentes', titulo: 'Equipo Docente', subtitulo: detalle }
+  }
+  return { icono: 'asistencia', titulo: 'Tomar Asistencia', subtitulo: detalle }
+})
 
 // Control Remoto en Vivo
 const sesionRemotaActiva = ref(false)
@@ -79,7 +253,7 @@ function iniciarTimerColaOffline() {
 
 onMounted(async () => {
   window.addEventListener('online', onConexionRecuperada)
-  await Promise.all([cargarMisFichas(), cargarDiasFestivos()])
+  await Promise.all([cargarMisFichas(), cargarDiasFestivos(), cargarTodosLosInstructores()])
   await restaurarEstadoClase()
   iniciarSocketDocente()
   iniciarTimerColaOffline()
@@ -155,6 +329,20 @@ async function restaurarEstadoClase() {
   }
 }
 
+const alternandoSesion = ref(false)
+
+// Switch de pase de lista: si está apagado lo enciende (activa la clase) y viceversa.
+async function alternarSesionRemota() {
+  if (alternandoSesion.value || finalizando.value) return
+  alternandoSesion.value = true
+  try {
+    if (sesionRemotaActiva.value) await detenerSesionRemotaDocente()
+    else await iniciarSesionRemotaDocente()
+  } finally {
+    alternandoSesion.value = false
+  }
+}
+
 async function iniciarSesionRemotaDocente() {
   if (!fichaSeleccionada.value) return
   try {
@@ -205,9 +393,6 @@ async function cargarMisFichas() {
   try {
     if (usuario.value.id) {
       misFichas.value = await api.fichas.getMisFichas(usuario.value.id)
-      if (misFichas.value.length > 0) {
-        seleccionarFicha(misFichas.value[0])
-      }
     } else {
       misFichas.value = await api.fichas.getAll()
     }
@@ -236,7 +421,8 @@ async function cargarDatosFicha(fichaId) {
   try {
     const estRes = await api.estudiantes.getAll({ fichaId, estado: 'Activo' }).catch(e => { console.error('Error est:', e); return [] })
     const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => { console.error('Error asis:', e); return [] })
-    const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(e => { console.error('Error bio:', e); return [] })
+    const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(() => [])
+    const excRes = await api.excusas.getAll({ fichaId }).catch(e => { console.error('Error excusas:', e); return [] })
 
     estudiantesFicha.value = Array.isArray(estRes) ? estRes : []
     const sFichaId = String(fichaId)
@@ -245,6 +431,7 @@ async function cargarDatosFicha(fichaId) {
       return aFicha === sFichaId
     })
     memoriaBiometricaRAM.value = Array.isArray(bioRes) ? bioRes : []
+    excusasFicha.value = Array.isArray(excRes) ? excRes : []
     inicializarAsistenciaDia()
   } catch (err) {
     console.error('Error al cargar detalle de ficha:', err)
@@ -418,7 +605,13 @@ function irAHoy() {
   inicializarAsistenciaDia()
 }
 
+function avisarJornadaAjena() {
+  const nombre = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
+  showToast(`Esta jornada fue registrada por ${nombre}. Solo ese docente puede modificarla.`, 'warning')
+}
+
 function abrirModalInhabilitar() {
+  if (jornadaEsDeOtroDocente.value) { avisarJornadaAjena(); return }
   if (fechaAsistencia.value > fechaHoyMax.value) {
     showToast('No es posible inhabilitar fechas futuras.', 'warning')
     return
@@ -429,6 +622,7 @@ function abrirModalInhabilitar() {
 }
 
 async function confirmarInhabilitarJornada() {
+  if (jornadaEsDeOtroDocente.value) { showInhabilitarModal.value = false; avisarJornadaAjena(); return }
   inhabilitando.value = true
   const motivoFinal = motivoInhabilitar.value === 'Otro' ? (motivoInhabilitarOtro.value.trim() || 'Jornada no impartida') : motivoInhabilitar.value
   const fecha = fechaAsistencia.value
@@ -466,6 +660,7 @@ async function confirmarInhabilitarJornada() {
 }
 
 async function reactivarJornada() {
+  if (jornadaEsDeOtroDocente.value) { avisarJornadaAjena(); return }
   inhabilitando.value = true
   const fecha = fechaAsistencia.value
   try {
@@ -676,20 +871,27 @@ function inicializarAsistenciaDia() {
     // Verificación de propiedad docente (Solo lectura para otros docentes)
     const instructorAsignado = existente?.instructorId
     const instructorAsignadoId = instructorAsignado ? String(instructorAsignado._id || instructorAsignado) : null
-    const esMio = !existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId)
+    // Si otro docente ya es el responsable del día, ninguna fila es editable (ni siquiera las aún sin registro)
+    const jornadaAjena = !esAdmin && jornadaEsDeOtroDocente.value
+    const esMio = !jornadaAjena && (!existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId))
 
     let nombreDocenteCreador = ''
     if (!esMio && instructorAsignado) {
       if (typeof instructorAsignado === 'object' && instructorAsignado.nombres) {
         nombreDocenteCreador = `${instructorAsignado.nombres} ${instructorAsignado.apellidos || ''}`.trim()
       } else {
-        nombreDocenteCreador = 'otro docente'
+        nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
       }
+    } else if (!esMio && jornadaAjena) {
+      nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
     }
 
     registros[est._id] = {
       estado,
       excusa: existente ? existente.estado === 'Excusada' : false,
+      motivoExcusa: existente && existente.estado === 'Excusada'
+        ? (buscarExcusaAprobada(est._id, hoy, currentFichaId)?.motivo || '')
+        : '',
       horaMarcacion: hora,
       horasTardanza: tardanzaInfo.horas,
       tiempoTardanza: tardanzaInfo.texto,
@@ -827,6 +1029,7 @@ async function enviarEstado(estId) {
       }
       draftStore.quitarDeColaOffline(item.estudianteId, item.fichaId, fecha)
       setEstadoFila(estId, 'guardado')
+      await sincronizarMotivoExcusa(estId, item)
       return
     } catch (err) {
       if (err.status === 409) {
@@ -868,6 +1071,7 @@ async function procesarColaSync(estId, entrada, fichaId, fecha) {
 function sincronizarCambioNube(estId) {
   const reg = asistenciaDia.value[estId]
   if (!reg || !fichaSeleccionada.value?._id || !fechaAsistencia.value) return
+  if (!reg.esMio) return
   if (fechaAsistencia.value > fechaHoyMax.value) return
 
   const fichaId = fichaSeleccionada.value._id
@@ -930,33 +1134,139 @@ async function marcarFalta(estId) {
   await sincronizarCambioNube(estId)
 }
 
-async function toggleExcusa(estId) {
+// --- Descripción de la excusa (modal) ---
+const showExcusaModal = ref(false)
+const excusaEstId = ref('')
+const excusaTexto = ref('')
+const excusaError = ref('')
+const excusaEditando = ref(false)
+const excusaTextareaRef = ref(null)
+const EXCUSA_MAX = 300
+
+const excusaEstudiante = computed(() => estudiantesFicha.value.find(e => String(e._id) === String(excusaEstId.value)) || null)
+
+// Excusa aprobada (la más reciente) de un aprendiz en una fecha y ficha
+function buscarExcusaAprobada(estId, fecha, fichaId) {
+  return excusasFicha.value.find(e =>
+    String(e.estudianteId?._id || e.estudianteId) === String(estId) &&
+    e.fechaInasistencia === fecha &&
+    e.estado === 'Aprobada' &&
+    (!fichaId || String(e.fichaId?._id || e.fichaId) === String(fichaId))
+  ) || null
+}
+
+function validarEdicionExcusa(estId) {
   if (jornadaInhabilitada.value) {
     showToast('La sesión está inhabilitada. Reactívala para registrar excusas.', 'warning')
-    return
+    return null
   }
   const reg = asistenciaDia.value[estId]
-  if (!reg) return
+  if (!reg) return null
 
   if (!reg.esMio) {
     showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
-    return
+    return null
   }
 
   if (reg.subidoSofia) {
     showToast('Esta inasistencia ya fue reportada formalmente a Sofia Plus y no se puede modificar.', 'warning')
+    return null
+  }
+  return reg
+}
+
+async function abrirModalExcusa(estId, editando = false) {
+  const reg = validarEdicionExcusa(estId)
+  if (!reg) return
+  excusaEstId.value = estId
+  excusaEditando.value = editando
+  excusaTexto.value = editando ? (reg.motivoExcusa || '') : ''
+  excusaError.value = ''
+  showExcusaModal.value = true
+  await nextTick()
+  excusaTextareaRef.value?.focus()
+}
+
+function cerrarModalExcusa() {
+  showExcusaModal.value = false
+  excusaEstId.value = ''
+  excusaTexto.value = ''
+  excusaError.value = ''
+}
+
+async function confirmarExcusa() {
+  const estId = excusaEstId.value
+  const reg = validarEdicionExcusa(estId)
+  if (!reg) { cerrarModalExcusa(); return }
+
+  const texto = excusaTexto.value.trim()
+  if (texto.length < 5) {
+    excusaError.value = 'Describe brevemente el motivo de la excusa (mínimo 5 caracteres).'
     return
   }
 
-  reg.excusa = !reg.excusa
-  if (reg.excusa) {
-    reg.estado = 'Excusada'
-  } else {
-    reg.estado = reg.previo ? 'Falta' : 'Presente'
+  reg.motivoExcusa = texto
+  reg.excusa = true
+  reg.estado = 'Excusada'
+  reg.horasFallidas = horasAuto(reg)
+  cerrarModalExcusa()
+
+  await sincronizarCambioNube(estId)
+}
+
+// Clic en el checkbox de excusa: al activarla se pide la descripción; al desactivarla se retira
+async function toggleExcusa(estId) {
+  const reg = validarEdicionExcusa(estId)
+  if (!reg) return
+
+  if (!reg.excusa) {
+    await abrirModalExcusa(estId, false)
+    return
   }
+
+  reg.excusa = false
+  reg.motivoExcusa = ''
+  reg.estado = reg.previo ? 'Falta' : 'Presente'
   reg.horasFallidas = horasAuto(reg)
 
   await sincronizarCambioNube(estId)
+}
+
+function editarExcusa(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg?.excusa) return
+  abrirModalExcusa(estId, true)
+}
+
+// Guarda (o retira) la descripción de la excusa usando los endpoints de excusas ya existentes
+async function sincronizarMotivoExcusa(estId, item) {
+  const reg = asistenciaDia.value[estId]
+  const existente = buscarExcusaAprobada(estId, item.fecha, item.fichaId)
+  try {
+    if (item.estado === 'Excusada') {
+      const motivo = (reg?.motivoExcusa || '').trim()
+      if (!motivo) return
+      if (existente && existente.motivo === motivo) return
+      if (existente) {
+        await api.excusas.rechazar(existente._id, 'Reemplazada por una descripción actualizada del instructor')
+        existente.estado = 'Rechazada'
+      }
+      const nueva = await api.excusas.create({
+        estudianteId: estId,
+        fichaId: item.fichaId,
+        fechaInasistencia: item.fecha,
+        motivo,
+        estado: 'Aprobada',
+      })
+      if (nueva?._id) excusasFicha.value = [nueva, ...excusasFicha.value]
+    } else if (existente) {
+      await api.excusas.rechazar(existente._id, 'Excusa retirada por el instructor')
+      existente.estado = 'Rechazada'
+    }
+  } catch (err) {
+    console.warn('[Excusa] No se pudo sincronizar la descripción:', err.message)
+    showToast('La asistencia se guardó, pero no se pudo guardar la descripción de la excusa.', 'warning')
+  }
 }
 
 // Contadores de asistencia del día
@@ -1017,7 +1327,7 @@ function exportarAsistenciaDia() {
 
 function exportarHistorial() {
   const jornadaFicha = fichaSeleccionada.value?.jornada || 'Mañana'
-  const data = asistenciasFicha.value.map(asis => {
+  const data = historialAnomalias.value.map(asis => {
     const est = estudiantesFicha.value.find(e => String(e._id) === String(asis.estudianteId?._id || asis.estudianteId))
     const nombreEst = est ? `${est.nombres} ${est.apellidos}` : (asis.estudianteId?.nombres ? `${asis.estudianteId.nombres} ${asis.estudianteId.apellidos}` : 'Aprendiz')
     const docEst = est ? est.numeroDocumento : (asis.estudianteId?.numeroDocumento || '')
@@ -1037,7 +1347,7 @@ function exportarHistorial() {
       'Motivo Inhabilitación': asis.motivoInhabilitacion || '—',
     }
   })
-  descargarDatos(data, `Historial_${fichaSeleccionada.value.codigoFicha}`, 'Historial de asistencias')
+  descargarDatos(data, `Anomalias_${fichaSeleccionada.value.codigoFicha}`, 'Historial de anomalías (fallas, tardanzas y excusas)')
 }
 
 // Formato elegido para descargar ('excel' | 'pdf')
@@ -1124,11 +1434,12 @@ function descargarExcel(data, nombreArchivo) {
       </div>
     </Transition>
 
-    <!-- Encabezado del Instructor -->
-    <div class="page-header">
-      <h1>Bienvenido, {{ usuario.nombre }}</h1>
-      <p>Panel de Control de Instructor SENA</p>
-      <div class="header-role-pill">Docente</div>
+    <!-- Título dinámico según la acción activa -->
+    <div class="instructor-titlebar">
+      <div class="titlebar-text">
+        <h1>{{ tituloVista.titulo }}</h1>
+        <p>{{ tituloVista.subtitulo }}</p>
+      </div>
     </div>
 
     <div v-if="loading" class="loading-box">
@@ -1139,37 +1450,30 @@ function descargarExcel(data, nombreArchivo) {
       {{ error }}
     </div>
 
-    <div v-else class="content-layout">
-      <!-- Selector de Fichas -->
-      <div class="fichas-sidebar">
-        <h3>Mis Fichas Asignadas</h3>
-        <div v-if="misFichas.length === 0" class="no-fichas">
-          No tienes fichas asignadas actualmente. Contacta al Administrador.
-        </div>
-        <div
-          v-for="ficha in misFichas"
-          :key="ficha._id"
-          class="ficha-card"
-          :class="{ active: fichaSeleccionada && fichaSeleccionada._id === ficha._id }"
-          @click="seleccionarFicha(ficha)"
+    <template v-else>
+    <!-- Filtro superior de fichas -->
+    <div v-if="misFichas.length > 0" class="fichas-filtro">
+      <div class="filtro-select-wrap">
+        <label class="filtro-label" for="select-ficha">Ficha</label>
+        <select
+          id="select-ficha"
+          class="filtro-select"
+          :value="fichaSeleccionada ? fichaSeleccionada._id : ''"
+          @change="onSelectFicha($event.target.value)"
         >
-          <div class="ficha-card-header">
-            <span class="ficha-code">Ficha {{ ficha.codigoFicha }}</span>
-            <!-- Badge de Liderazgo -->
-            <span v-if="ficha.esLider" class="badge badge-lider" title="Docente Líder de esta Ficha">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
-              Líder
-            </span>
-            <span v-else class="badge badge-comun" title="Docente Común en esta Ficha">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
-              Común
-            </span>
-          </div>
-          <div class="ficha-title">{{ ficha.nombrePrograma }}</div>
-          <div class="ficha-sub">Aula: {{ ficha.aulaAsignada }} | {{ ficha.jornada }}</div>
-        </div>
+          <option value="" disabled>Seleccione la ficha</option>
+          <option v-for="ficha in misFichas" :key="ficha._id" :value="ficha._id">
+            Ficha {{ ficha.codigoFicha }} · {{ ficha.nombrePrograma }} · Aula {{ ficha.aulaAsignada }} · {{ ficha.jornada }}{{ ficha.esLider ? ' · Líder' : '' }}
+          </option>
+        </select>
       </div>
+    </div>
 
+    <div v-else class="no-fichas">
+      No tienes fichas asignadas actualmente. Contacta al Administrador.
+    </div>
+
+    <div class="content-layout">
       <!-- Detalle y Operaciones de la Ficha Seleccionada -->
       <div v-if="fichaSeleccionada" class="ficha-detail">
         <div class="ficha-banner">
@@ -1209,6 +1513,21 @@ function descargarExcel(data, nombreArchivo) {
             >
               <img :src="iconoEquipoDocente" alt="Equipo Docente" class="tab-icon-img" width="16" height="16" />
             </button>
+
+            <!-- Botón-switch de pase de lista: rojo = apagado, verde = encendido -->
+            <button
+              type="button"
+              class="switch-pase-lista"
+              :class="sesionRemotaActiva ? 'is-on' : 'is-off'"
+              role="switch"
+              :aria-checked="sesionRemotaActiva"
+              :disabled="alternandoSesion || finalizando || (!sesionRemotaActiva && jornadaInhabilitada)"
+              :title="sesionRemotaActiva ? 'Pase de lista encendido: clic para apagar' : 'Pase de lista apagado: clic para encender'"
+              @click="alternarSesionRemota"
+            >
+              <svg v-if="!sesionRemotaActiva" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
           </div>
         </div>
 
@@ -1216,49 +1535,6 @@ function descargarExcel(data, nombreArchivo) {
         <!-- VISTA 1: TOMAR ASISTENCIA (POR DÍAS)      -->
         <!-- ========================================= -->
         <div v-if="vistaFicha === 'asistencia'" class="section-body">
-          <!-- CENTRO DE CONTROL REMOTO -->
-          <div class="remote-control-panel">
-            <div class="remote-control-header">
-              <div class="remote-control-info">
-                <div class="remote-status-badge" :class="sesionRemotaActiva ? 'badge-live' : 'badge-idle'">
-                  <span class="live-dot" :class="{ 'live-dot-pulsing': sesionRemotaActiva }"></span>
-                  <span>{{ sesionRemotaActiva ? 'CLASE EN VIVO (PASE DE LISTA REMOTO ACTIVO)' : 'PASE DE LISTA REMOTO EN ESPERA' }}</span>
-                </div>
-                <p class="remote-desc">
-                  {{ sesionRemotaActiva 
-                    ? 'El Kiosco del aula está recibiendo huellas de los aprendices. Las marcaciones se sincronizan aquí en tiempo real.' 
-                    : 'Inicia el pase de lista desde este dispositivo móvil/web para activar automáticamente el lector en el computador del aula.' 
-                  }}
-                </p>
-              </div>
-
-              <div class="remote-control-actions">
-                <!-- Botón Iniciar / Finalizar Remoto -->
-                <button
-                  v-if="!sesionRemotaActiva"
-                  type="button"
-                  class="btn-remote-start"
-                  @click="iniciarSesionRemotaDocente"
-                  :disabled="jornadaInhabilitada"
-                  title="Iniciar pase de lista"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="btn-remote-stop"
-                  @click="detenerSesionRemotaDocente"
-                  :disabled="finalizando"
-                  title="Finalizar pase de lista"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                </button>
-
-              </div>
-            </div>
-          </div>
-
           <div class="section-header-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
               <h4>Tomar Asistencia</h4>
@@ -1338,7 +1614,7 @@ function descargarExcel(data, nombreArchivo) {
                 type="button"
                 class="btn-inhabilitar-action"
                 @click="abrirModalInhabilitar"
-                :disabled="fechaAsistencia > fechaHoyMax"
+                :disabled="fechaAsistencia > fechaHoyMax || jornadaEsDeOtroDocente"
                 title="Inhabilitar día"
                 style="background: #fff1f2; border: 1.5px solid #fecdd3; color: #e11d48; font-weight: 600; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
@@ -1349,7 +1625,7 @@ function descargarExcel(data, nombreArchivo) {
                 type="button"
                 class="btn-reactivar-action"
                 @click="reactivarJornada"
-                :disabled="inhabilitando"
+                :disabled="inhabilitando || jornadaEsDeOtroDocente"
                 title="Reactivar día"
                 style="background: #f0fdf4; border: 1.5px solid #bbf7d0; color: #16a34a; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
               >
@@ -1378,7 +1654,7 @@ function descargarExcel(data, nombreArchivo) {
             <button
               class="btn btn-reactivar-hud"
               @click="reactivarJornada"
-              :disabled="inhabilitando"
+              :disabled="inhabilitando || jornadaEsDeOtroDocente"
               title="Reactivar día"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -1520,9 +1796,22 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"/></svg>
                       Inhabilitada
                     </span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge badge-warning">
+                    <span
+                      v-else-if="asistenciaDia[est._id]?.excusa"
+                      class="badge badge-warning badge-excusa-tip"
+                      tabindex="0"
+                      role="button"
+                      :aria-label="'Excusada: ' + (asistenciaDia[est._id]?.motivoExcusa || 'sin descripción')"
+                      @click="editarExcusa(est._id)"
+                      @keydown.enter="editarExcusa(est._id)"
+                    >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                       Excusada
+                      <span class="excusa-tooltip" role="tooltip">
+                        <strong>Motivo de la excusa</strong>
+                        <span>{{ asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada' }}</span>
+                        <em v-if="asistenciaDia[est._id]?.esMio && !asistenciaDia[est._id]?.subidoSofia">Clic para editar</em>
+                      </span>
                     </span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge badge-danger">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
@@ -1595,7 +1884,7 @@ function descargarExcel(data, nombreArchivo) {
                   <div class="mob-status-badge">
                     <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
                     <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc">Excusada</span>
+                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada'" @click="editarExcusa(est._id)">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
                     <span v-else class="badge-mob-pres">Presente</span>
@@ -1686,11 +1975,11 @@ function descargarExcel(data, nombreArchivo) {
         <div v-if="vistaFicha === 'editar_asistencia'" class="section-body">
           <div class="section-header-row">
             <div>
-              <h4>Historial de Asistencias</h4>
-              <p class="section-desc">Registros de asistencia de esta ficha:</p>
+              <h4>Historial de Asistencias (Anomalías)</h4>
+              <p class="section-desc">Mostrando únicamente fallas, tardanzas y excusas de esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <template v-if="asistenciasFicha.length > 0">
+              <template v-if="historialAnomalias.length > 0">
                 <select v-model="formatoDescarga" class="form-input" title="Formato de descarga" style="width: auto; height: 38px; padding: 0 10px; font-size: 13px; cursor: pointer;"><option value="excel">Excel</option><option value="pdf">PDF</option></select>
                 <button class="btn-export" @click="exportarHistorial" :title="formatoDescarga === 'pdf' ? 'Descargar PDF' : 'Descargar Excel'">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -1711,7 +2000,7 @@ function descargarExcel(data, nombreArchivo) {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="asis in asistenciasFicha" :key="asis._id">
+              <tr v-for="asis in historialAnomalias" :key="asis._id">
                 <td>{{ asis.fecha }} {{ asis.hora }}</td>
                 <td>{{ asis.estudianteId?.nombres || '' }} {{ asis.estudianteId?.apellidos || '' }}</td>
                 <td>
@@ -1729,8 +2018,8 @@ function descargarExcel(data, nombreArchivo) {
                   {{ asis.estado === 'Tardanza' ? (asis.tiempoTardanza || '1 hora') : '0 horas' }}
                 </td>
               </tr>
-              <tr v-if="asistenciasFicha.length === 0">
-                <td colspan="5" class="empty-cell">No hay registros de asistencias pasadas.</td>
+              <tr v-if="historialAnomalias.length === 0">
+                <td colspan="5" class="empty-cell">No hay anomalías registradas (fallas, tardanzas o excusas). Todos los aprendices han estado presentes.</td>
               </tr>
             </tbody>
           </table>
@@ -1741,11 +2030,21 @@ function descargarExcel(data, nombreArchivo) {
         <!-- VISTA 5: EQUIPO DOCENTE DE LA FICHA       -->
         <!-- ========================================= -->
         <div v-if="vistaFicha === 'docentes'" class="section-body">
-          <div class="section-header-row">
+          <div class="section-header-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
               <h4>Equipo Docente - Ficha {{ fichaSeleccionada.codigoFicha }}</h4>
               <p class="section-desc">{{ fichaSeleccionada.nombrePrograma }} | Jornada: {{ fichaSeleccionada.jornada }}</p>
             </div>
+            <button
+              v-if="esLiderEnFichaSeleccionada"
+              class="btn btn-primary"
+              style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer;"
+              @click="abrirModalAgregarDocente"
+              title="Agregar docente al equipo de trabajo"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Asignar Docente</span>
+            </button>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px;">
@@ -1780,14 +2079,27 @@ function descargarExcel(data, nombreArchivo) {
               v-for="doc in (fichaSeleccionada.instructores || [])"
               :key="doc._id || doc"
               class="docente-card"
-              style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 18px;"
+              style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 18px; position: relative;"
             >
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <span class="badge badge-neutral" style="font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
                   Docente Común
                 </span>
-                <span v-if="String(doc._id || doc) === String(usuario.id)" class="badge badge-comun" style="font-size: 11px;">(Tú)</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span v-if="String(doc._id || doc) === String(usuario.id)" class="badge badge-comun" style="font-size: 11px;">(Tú)</span>
+                  <button
+                    v-if="esLiderEnFichaSeleccionada"
+                    type="button"
+                    class="btn-quitar-doc"
+                    @click="abrirModalDesvincularDocente(doc)"
+                    title="Desvincular docente de la ficha"
+                    style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; cursor: pointer; padding: 4px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; transition: background .15s ease;"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <span>Quitar</span>
+                  </button>
+                </div>
               </div>
               <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #1e293b;">
                 {{ doc.nombres || 'Docente' }} {{ doc.apellidos || '' }}
@@ -1813,11 +2125,85 @@ function descargarExcel(data, nombreArchivo) {
         </div>
 
       </div>
+
+      <!-- Estado de espera: aún no se ha elegido una ficha -->
+      <div v-else-if="misFichas.length > 0" class="ficha-espera" aria-live="polite">
+        <!-- Maqueta fantasma de lo que aparecerá al elegir la ficha -->
+        <div class="espera-fantasma" aria-hidden="true">
+          <div class="sk sk-title"></div>
+          <div class="sk sk-pill"></div>
+          <div class="sk-row">
+            <div class="sk sk-tab"></div>
+            <div class="sk sk-tab"></div>
+            <div class="sk sk-tab"></div>
+            <div class="sk sk-tab sk-tab-end"></div>
+          </div>
+          <div class="sk-row sk-chips">
+            <div class="sk sk-chip"></div>
+            <div class="sk sk-chip"></div>
+            <div class="sk sk-chip"></div>
+            <div class="sk sk-chip"></div>
+          </div>
+          <div class="sk sk-line"></div>
+          <div class="sk sk-line"></div>
+          <div class="sk sk-line sk-line-short"></div>
+        </div>
+
+        <!-- Indicador central -->
+        <div class="espera-centro">
+          <div class="espera-icono">
+            <span class="espera-ring"></span>
+            <span class="espera-ring espera-ring-2"></span>
+            <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11c0 3.5-.5 6-2 8"/><path d="M8 15c.5-1 .8-2.6.8-4a3.2 3.2 0 0 1 6.4 0c0 2.6-.4 5.2-1.4 7.4"/><path d="M5 12a7 7 0 0 1 14 0c0 2-.2 3.8-.7 5.5"/><path d="M3.5 9.5A9 9 0 0 1 20.5 9.5"/></svg>
+          </div>
+          <span class="espera-badge">
+            <span class="espera-dot"></span>
+            Esperando selección de ficha
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- ========================================= -->
     <!-- MODAL INHABILITAR JORNADA                 -->
     <!-- ========================================= -->
+    <!-- MODAL: DESCRIPCIÓN DE LA EXCUSA -->
+    <div v-if="showExcusaModal" class="modal-overlay" @click.self="cerrarModalExcusa" @keydown.esc="cerrarModalExcusa">
+      <div class="modal excusa-modal" role="dialog" aria-modal="true" aria-labelledby="excusa-modal-titulo">
+        <h3 id="excusa-modal-titulo" class="excusa-modal-titulo">
+          <span class="excusa-modal-icono" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </span>
+          {{ excusaEditando ? 'Editar descripción de la excusa' : 'Registrar excusa' }}
+        </h3>
+        <p class="excusa-modal-sub">
+          Aprendiz: <strong>{{ excusaEstudiante ? `${excusaEstudiante.nombres} ${excusaEstudiante.apellidos}` : '' }}</strong><br>
+          Fecha: <strong>{{ fechaAsistencia }}</strong>
+        </p>
+
+        <label class="excusa-modal-label" for="excusa-texto">¿Por qué se le coloca la excusa al aprendiz?</label>
+        <textarea
+          id="excusa-texto"
+          ref="excusaTextareaRef"
+          v-model="excusaTexto"
+          class="form-input excusa-modal-textarea"
+          :maxlength="EXCUSA_MAX"
+          rows="4"
+          placeholder="Ej: Cita médica con soporte de incapacidad, calamidad doméstica, permiso aprobado por coordinación..."
+          @input="excusaError = ''"
+        ></textarea>
+        <div class="excusa-modal-pie">
+          <span v-if="excusaError" class="excusa-modal-error">{{ excusaError }}</span>
+          <span class="excusa-modal-contador">{{ excusaTexto.length }} / {{ EXCUSA_MAX }}</span>
+        </div>
+
+        <div class="modal-actions excusa-modal-acciones">
+          <button type="button" class="btn btn-outline" @click="cerrarModalExcusa">Cancelar</button>
+          <button type="button" class="btn btn-primary" @click="confirmarExcusa">Guardar</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showInhabilitarModal" class="modal-overlay" @click.self="showInhabilitarModal = false">
       <div class="modal" style="max-width: 480px; text-align: left;">
         <h3 style="display: flex; align-items: center; gap: 8px; color: #9a3412;">
@@ -1877,6 +2263,168 @@ function descargarExcel(data, nombreArchivo) {
         </div>
       </div>
     </div>
+
+    <!-- MODAL PARA ASIGNAR / REGISTRAR DOCENTE EN EL EQUIPO (LÍDER/ADMIN) -->
+    <div v-if="modalAgregarDocenteAbierto" class="modal-overlay" @click.self="modalAgregarDocenteAbierto = false">
+      <div class="modal" style="max-width: 540px; background: #ffffff; border-radius: 14px; padding: 24px 26px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(0, 120, 50, 0.1); color: #007832; display: flex; align-items: center; justify-content: center;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Agregar Docente al Equipo</h3>
+              <p style="margin: 2px 0 0; font-size: 12.5px; color: #64748b;">Ficha {{ fichaSeleccionada?.codigoFicha }} — {{ fichaSeleccionada?.jornada }}</p>
+            </div>
+          </div>
+          <button @click="modalAgregarDocenteAbierto = false" style="background: none; border: none; font-size: 22px; color: #94a3b8; cursor: pointer; line-height: 1; padding: 4px;">&times;</button>
+        </div>
+
+        <!-- TABS MODO: EXISTENTE VS NUEVO -->
+        <div style="display: flex; gap: 6px; margin: 16px 0 20px; background: #f1f5f9; padding: 4px; border-radius: 10px;">
+          <button
+            type="button"
+            :style="modoAsignar === 'existente' ? 'background: #ffffff; color: #007832; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.08);' : 'background: transparent; color: #64748b; font-weight: 600;'"
+            style="flex: 1; padding: 9px 12px; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; transition: all .15s ease;"
+            @click="modoAsignar = 'existente'"
+          >
+            Docente Existente
+          </button>
+          <button
+            type="button"
+            :style="modoAsignar === 'nuevo' ? 'background: #ffffff; color: #007832; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.08);' : 'background: transparent; color: #64748b; font-weight: 600;'"
+            style="flex: 1; padding: 9px 12px; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; transition: all .15s ease;"
+            @click="modoAsignar = 'nuevo'"
+          >
+            + Registrar Nuevo Docente
+          </button>
+        </div>
+
+        <!-- MODO 1: SELECCIONAR DOCENTE EXISTENTE -->
+        <div v-if="modoAsignar === 'existente'">
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 14px; line-height: 1.5;">
+            Selecciona un docente ya registrado en la institución para vincularlo como docente común de esta ficha:
+          </p>
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Selecciona el Docente</label>
+            <select v-model="docenteSeleccionadoId" class="form-input" style="width: 100%; height: 44px; border-radius: 8px; font-size: 13.5px; padding: 0 12px;">
+              <option value="" disabled>Selecciona un docente de la lista...</option>
+              <option v-for="inst in docentesDisponiblesParaFicha" :key="inst._id || inst.id" :value="inst._id || inst.id">
+                {{ inst.nombres }} {{ inst.apellidos || '' }} — {{ inst.correo || inst.especialidad || 'Docente' }}
+              </option>
+            </select>
+            <p v-if="docentesDisponiblesParaFicha.length === 0" style="font-size: 12.5px; color: #b45309; background: #fffbeb; border: 1px solid #fef3c7; padding: 10px 12px; border-radius: 8px; margin-top: 10px;">
+              No hay otros docentes registrados disponibles. Puedes usar la pestaña <strong>"+ Registrar Nuevo Docente"</strong> para crearlo con sus datos.
+            </p>
+          </div>
+        </div>
+
+        <!-- MODO 2: REGISTRAR NUEVO DOCENTE CON TODOS SUS DATOS -->
+        <div v-else>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 14px; line-height: 1.5;">
+            Ingresa todos los datos del nuevo docente. Se creará su cuenta institucional y se vinculará de inmediato a esta ficha:
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+            <div class="form-group">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Nombres *</label>
+              <input v-model="nuevoDocenteForm.nombres" type="text" class="form-input" placeholder="Nombres del docente" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+            </div>
+            <div class="form-group">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Apellidos *</label>
+              <input v-model="nuevoDocenteForm.apellidos" type="text" class="form-input" placeholder="Apellidos del docente" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+            </div>
+            <div class="form-group">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Tipo Documento</label>
+              <select v-model="nuevoDocenteForm.tipoDocumento" class="form-input" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;">
+                <option value="CC">Cédula de Ciudadanía (CC)</option>
+                <option value="CE">Cédula de Extranjería (CE)</option>
+                <option value="TI">Tarjeta de Identidad (TI)</option>
+                <option value="PEP">Permiso Especial (PEP)</option>
+                <option value="PAS">Pasaporte (PAS)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">N° Documento *</label>
+              <input v-model="nuevoDocenteForm.numeroDocumento" type="text" class="form-input" placeholder="Número de documento" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+            </div>
+            <div class="form-group">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Correo Institucional *</label>
+              <input v-model="nuevoDocenteForm.correo" type="email" class="form-input" placeholder="correo@sena.edu.co" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+            </div>
+            <div class="form-group">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Teléfono</label>
+              <input v-model="nuevoDocenteForm.telefono" type="tel" class="form-input" placeholder="Ej: 3001234567" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Especialidad / Área Pedagógica</label>
+              <input v-model="nuevoDocenteForm.especialidad" type="text" class="form-input" placeholder="Ej: Programación web, Base de datos, Redes..." style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+            </div>
+          </div>
+          <p style="font-size: 11.5px; color: #64748b; margin: 0 0 16px;">
+            * La contraseña inicial de acceso del nuevo docente será por defecto su número de documento.
+          </p>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+          <button type="button" class="btn btn-outline" @click="modalAgregarDocenteAbierto = false" style="padding: 9px 18px; font-size: 13px; font-weight: 600;">Cancelar</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="(modoAsignar === 'existente' && !docenteSeleccionadoId) || guardandoDocente"
+            @click="confirmarAgregarDocente"
+            style="padding: 9px 20px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;"
+          >
+            <span>{{ guardandoDocente ? 'Guardando...' : (modoAsignar === 'existente' ? 'Asignar al Equipo' : 'Guardar y Asignar') }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL ELEGANTE: CONFIRMACIÓN PARA DESVINCULAR DOCENTE -->
+    <div v-if="modalDesvincularAbierto" class="modal-overlay" @click.self="cerrarModalDesvincularDocente">
+      <div class="modal" style="max-width: 460px; background: #ffffff; border-radius: 14px; padding: 26px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;">
+        <div style="display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px;">
+          <div style="width: 44px; height: 44px; border-radius: 10px; background: #fee2e2; color: #ef4444; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Desvincular Docente del Equipo</h3>
+            <p style="margin: 3px 0 0; font-size: 13px; color: #64748b;">Ficha {{ fichaSeleccionada?.codigoFicha }}</p>
+          </div>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 16px;">
+          <p style="margin: 0 0 4px; font-size: 14px; font-weight: 700; color: #0f172a;">
+            {{ docenteADesvincular?.nombres }} {{ docenteADesvincular?.apellidos }}
+          </p>
+          <p style="margin: 0; font-size: 12.5px; color: #64748b;">
+            {{ docenteADesvincular?.correo || 'Sin correo registrado' }}
+            <span v-if="docenteADesvincular?.especialidad"> | {{ docenteADesvincular?.especialidad }}</span>
+          </p>
+        </div>
+
+        <p style="font-size: 13.5px; color: #475569; line-height: 1.5; margin-bottom: 22px;">
+          ¿Estás seguro de quitar a este docente del equipo de trabajo? Ya no podrá registrar asistencias ni iniciar sesiones en este grupo. Las asistencias registradas previamente <strong>se conservarán</strong>.
+        </p>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" class="btn btn-outline" @click="cerrarModalDesvincularDocente" :disabled="desvinculandoDocente" style="padding: 9px 18px; font-size: 13px; font-weight: 600;">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            class="btn"
+            @click="confirmarDesvincularDocente"
+            :disabled="desvinculandoDocente"
+            style="background: #dc2626; color: #ffffff; border: none; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>{{ desvinculandoDocente ? 'Desvinculando...' : 'Sí, desvincular' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    </template>
 
   </div>
 </template>
