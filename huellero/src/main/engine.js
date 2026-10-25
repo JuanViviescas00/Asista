@@ -434,11 +434,17 @@ export async function getEstudiantesFicha(fichaId) {
     return { ok: false, error: 'Ficha no especificada' }
   }
 
-  const { backendUrl } = getConfig()
+  const { backendUrl, deviceId, token } = getConfig()
+
+  const headers = { ...headersDocente() }
+  if (deviceId && token) {
+    headers['x-device-id'] = String(deviceId)
+    headers['x-device-token'] = String(token)
+  }
 
   let res
   try {
-    res = await fetch(`${backendUrl}/api/estudiantes?fichaId=${encodeURIComponent(fichaId)}`, { signal: AbortSignal.timeout(10000) })
+    res = await fetch(`${backendUrl}/api/estudiantes?fichaId=${encodeURIComponent(fichaId)}`, { headers, signal: AbortSignal.timeout(10000) })
   } catch {
     return { ok: false, error: 'Sin conexión: no se pueden obtener los estudiantes' }
   }

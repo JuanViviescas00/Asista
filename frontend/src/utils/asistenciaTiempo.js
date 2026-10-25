@@ -1,8 +1,8 @@
 // Umbrales de tardanza medidos en MINUTOS desde la hora de inicio de la clase.
 // Deben coincidir con backend/services/asistenciaService.js.
-export const TOLERANCIA_MINUTOS = 5
-export const LIMITE_TARDANZA_1_HORA = 65
-export const LIMITE_TARDANZA_2_HORAS = 125
+export const TOLERANCIA_MINUTOS = 10
+export const LIMITE_TARDANZA_1_HORA = 60
+export const LIMITE_TARDANZA_2_HORAS = 120
 
 /**
  * Calcula los minutos transcurridos entre la hora de inicio de la clase y el
