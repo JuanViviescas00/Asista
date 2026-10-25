@@ -743,6 +743,10 @@ const horasClaseFicha = computed(() => {
 function horasAuto(reg) {
   const max = horasClaseFicha.value
   if (!reg) return 0
+  if (reg.excusa) {
+    const h = Number(reg.horasTardanza) || 0
+    return (h > 0 && h < max) ? h : max
+  }
   if (reg.estado === 'Falta') return max
   if (reg.estado === 'Tardanza') return Math.min(Number(reg.horasTardanza) || 1, max)
   return 0
@@ -760,6 +764,17 @@ function actualizarEstadoPorHoras(reg, n) {
   reg.horasFallidas = limitado
 
   if (reg.excusa) {
+    if (limitado === 0) {
+      reg.excusa = false
+      reg.motivoExcusa = ''
+      reg.estado = 'Presente'
+      reg.horasTardanza = 0
+      reg.tiempoTardanza = '0 horas'
+      if (!reg.horaMarcacion || reg.horaMarcacion === '—') {
+        reg.horaMarcacion = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      }
+      return
+    }
     reg.estado = 'Excusada'
     if (limitado > 0 && limitado < max) {
       reg.horasTardanza = limitado
@@ -866,7 +881,9 @@ function inicializarAsistenciaDia() {
     const hora = existente ? (existente.hora || '') : (new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
-      : { horas: 0, texto: '0 horas' }
+      : (estado === 'Excusada'
+        ? { horas: Number(existente.horasTardanza) || 0, texto: existente.tiempoTardanza || '0 horas' }
+        : { horas: 0, texto: '0 horas' })
 
     // Verificación de propiedad docente (Solo lectura para otros docentes)
     const instructorAsignado = existente?.instructorId
@@ -1109,6 +1126,21 @@ async function marcarFalta(estId) {
     return
   }
 
+  if (reg.excusa) {
+    // Desmarcar la falla justificada: vuelve a Presente
+    const previo = reg.previo
+    reg.estado = previo?.estado || 'Presente'
+    reg.horaMarcacion = previo?.horaMarcacion || new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    reg.horasTardanza = previo?.horasTardanza || 0
+    reg.tiempoTardanza = previo?.tiempoTardanza || '0 horas'
+    reg.excusa = false
+    reg.motivoExcusa = ''
+    reg.previo = null
+    reg.horasFallidas = horasAuto(reg)
+    await sincronizarCambioNube(estId)
+    return
+  }
+
   if (reg.estado === 'Falta') {
     // Desmarcar la falla: vuelve a estar Presente
     const previo = reg.previo
@@ -1230,7 +1262,18 @@ async function toggleExcusa(estId) {
 
   reg.excusa = false
   reg.motivoExcusa = ''
-  reg.estado = reg.previo ? 'Falta' : 'Presente'
+  const h = Number(reg.horasTardanza) || 0
+  const max = horasClaseFicha.value
+  if (h > 0 && h < max) {
+    reg.estado = 'Tardanza'
+    reg.horasTardanza = h
+    reg.tiempoTardanza = `${h} ${h === 1 ? 'hora' : 'horas'}`
+  } else {
+    reg.estado = 'Falta'
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+    reg.horaMarcacion = '—'
+  }
   reg.horasFallidas = horasAuto(reg)
 
   await sincronizarCambioNube(estId)
@@ -1813,7 +1856,7 @@ function descargarExcel(data, nombreArchivo) {
                     <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
-                        :checked="asistenciaDia[est._id]?.estado === 'Falta'"
+                        :checked="asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.excusa"
                         :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                         @change="marcarFalta(est._id)"
                       />
@@ -1975,7 +2018,7 @@ function descargarExcel(data, nombreArchivo) {
                     <button
                       type="button"
                       class="btn-mob-falta"
-                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
+                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.excusa }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="marcarFalta(est._id)"
                       :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Marcar falla'"
