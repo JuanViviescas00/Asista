@@ -12,9 +12,10 @@ const ORIGENES_FIJOS = [
 
 function obtenerOrigenesEnv() {
   return [
-    process.env.CORS_ORIGINS,
     process.env.CORS_ORIGIN,
+    process.env.CORS_ORIGINS,
     process.env.ALLOWED_ORIGINS,
+    process.env.ORIGENES_PERMITIDOS,
     process.env.RENDER_EXTERNAL_URL,
   ]
     .filter(Boolean)
