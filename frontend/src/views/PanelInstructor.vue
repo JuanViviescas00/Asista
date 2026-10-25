@@ -37,8 +37,10 @@ const historialAnomalias = computed(() => {
 const esLiderEnFichaSeleccionada = computed(() => {
   if (!fichaSeleccionada.value) return false
   if (usuario.value?.rol === 'Administrador') return true
+  if (fichaSeleccionada.value.esLider === true) return true
   const liderId = String(fichaSeleccionada.value.instructorLiderId?._id || fichaSeleccionada.value.instructorLiderId || '')
-  return liderId && liderId === String(usuario.value?.id)
+  const miId = String(usuario.value?.id || usuario.value?._id || '')
+  return Boolean(liderId && miId && liderId === miId)
 })
 
 const todosLosInstructores = ref([])
@@ -48,7 +50,8 @@ const guardandoDocente = ref(false)
 
 async function cargarTodosLosInstructores() {
   try {
-    todosLosInstructores.value = await api.instructores.getAll()
+    const res = await api.instructores.getAll()
+    todosLosInstructores.value = Array.isArray(res) ? res : (res?.data || [])
   } catch (err) {
     console.error('Error al cargar instructores:', err)
   }
@@ -57,18 +60,16 @@ async function cargarTodosLosInstructores() {
 const docentesDisponiblesParaFicha = computed(() => {
   if (!fichaSeleccionada.value) return []
   const liderId = String(fichaSeleccionada.value.instructorLiderId?._id || fichaSeleccionada.value.instructorLiderId || '')
-  const asignadosIds = (fichaSeleccionada.value.instructores || []).map(i => String(i._id || i))
+  const asignadosIds = (fichaSeleccionada.value.instructores || []).map(i => String(i._id || i.id || i))
   return (todosLosInstructores.value || []).filter(doc => {
-    const id = String(doc._id)
-    return id !== liderId && !asignadosIds.includes(id)
+    const id = String(doc._id || doc.id)
+    return id && id !== liderId && !asignadosIds.includes(id)
   })
 })
 
 function abrirModalAgregarDocente() {
   docenteSeleccionadoId.value = ''
-  if (todosLosInstructores.value.length === 0) {
-    cargarTodosLosInstructores()
-  }
+  cargarTodosLosInstructores()
   modalAgregarDocenteAbierto.value = true
 }
 
@@ -2194,6 +2195,7 @@ function descargarExcel(data, nombreArchivo) {
           </button>
         </div>
       </div>
+    </div>
 
     <!-- MODAL PARA ASIGNAR DOCENTE AL EQUIPO (LÍDER/ADMIN) -->
     <div v-if="modalAgregarDocenteAbierto" class="modal-overlay" @click.self="modalAgregarDocenteAbierto = false">
@@ -2209,7 +2211,7 @@ function descargarExcel(data, nombreArchivo) {
           <label style="display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Docente Disponible</label>
           <select v-model="docenteSeleccionadoId" class="form-input" style="width: 100%; height: 42px; border-radius: 8px; font-size: 13px; padding: 0 10px;">
             <option value="" disabled>Selecciona un docente...</option>
-            <option v-for="inst in docentesDisponiblesParaFicha" :key="inst._id" :value="inst._id">
+            <option v-for="inst in docentesDisponiblesParaFicha" :key="inst._id || inst.id" :value="inst._id || inst.id">
               {{ inst.nombres }} {{ inst.apellidos || '' }} ({{ inst.correo || inst.especialidad || 'Docente' }})
             </option>
           </select>
@@ -2218,19 +2220,18 @@ function descargarExcel(data, nombreArchivo) {
           </p>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px;">
-          <button class="btn btn-outline" @click="modalAgregarDocenteAbierto = false" style="padding: 8px 16px; font-size: 13px; font-weight: 600;">Cancelar</button>
+          <button type="button" class="btn btn-outline" @click="modalAgregarDocenteAbierto = false" style="padding: 8px 16px; font-size: 13px; font-weight: 600;">Cancelar</button>
           <button
+            type="button"
             class="btn btn-primary"
             :disabled="!docenteSeleccionadoId || guardandoDocente"
             @click="confirmarAgregarDocente"
-            style="padding: 8px 18px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;"
+            style="padding: 8px 18px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;"
           >
             <span>{{ guardandoDocente ? 'Asignando...' : 'Asignar Docente' }}</span>
           </button>
         </div>
       </div>
-    </div>
-
     </div>
     </template>
 

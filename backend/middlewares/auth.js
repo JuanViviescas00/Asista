@@ -90,13 +90,21 @@ export function verificarRol(rolesPermitidos = []) {
  * @param {Array<string>} rolesPermitidos Lista de roles permitidos (ej. ['Administrador'])
  */
 export function verificarRolOLider(rolesPermitidos = []) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!rolesPermitidos || rolesPermitidos.length === 0) {
       return next()
     }
 
     const rolUsuario = req.usuario?.rol
-    const esLider = req.usuario?.esLider === true
+    let esLider = req.usuario?.esLider === true
+
+    if (rolUsuario === 'Instructor' && !esLider && (req.usuario?.id || req.usuario?._id)) {
+      try {
+        const Ficha = (await import('../models/Ficha.js')).default
+        const liderDeFicha = await Ficha.exists({ instructorLiderId: req.usuario.id || req.usuario._id })
+        if (liderDeFicha) esLider = true
+      } catch (_) {}
+    }
 
     const permitidoPorRol = rolUsuario && rolesPermitidos.includes(rolUsuario)
     const permitidoPorLider = rolUsuario === 'Instructor' && esLider

@@ -1,5 +1,34 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-24 23:25] Corrección del Modal de Asignar Instructores y Rediseño Espacioso de Filtros de Estudiantes
+
+- **Fecha y Hora:** 2026-10-24 23:25:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Modal Asignar Docentes:* En `PanelInstructor.vue`, el botón "Asignar Docente" no respondía visualmente ni mostraba el modal interactivo de selección de instructores.
+  2. *Filtros de Estudiantes:* En `Estudiantes.vue`, los campos de búsqueda avanzada estaban "muy acosados" (cramped/apretados) en un grid de columnas rígidas de 200px con enorme espacio vacío desaprovechado a la derecha, recortando los nombres largos de los programas de formación.
+- **Causa Raíz:**
+  1. El contenedor `<div v-if="modalAgregarDocenteAbierto" class="modal-overlay">` había quedado anidado por error dentro de la etiqueta `<div v-if="showInhabilitarModal">`. Dado que `showInhabilitarModal` permanecía en `false`, Vue nunca montaba ni renderizaba el modal en el DOM al hacer clic. Adicionalmente, el middleware `verificarRolOLider` requería validación dinámica contra BD en caso de tokens sin el claim `esLider: true`.
+  2. La clase `.busqueda-grid` de `main.css` forzaba `grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))`. Para los instructores (que solo tienen Ficha y Búsqueda), esto ocupaba apenas ~440px en la esquina izquierda, dejando más de 700px en blanco y comprimiendo el texto del programa.
+- **Solución Aplicada:**
+  1. *Desacople del Modal en `PanelInstructor.vue`*: Se corrigió el cierre de etiquetas HTML para que `modalAgregarDocenteAbierto` sea un modal independiente de nivel superior. Se robusteció `esLiderEnFichaSeleccionada` para verificar `ficha.esLider`, `usuario.id` y `usuario._id`. Se actualizó `abrirModalAgregarDocente()` para recargar siempre la lista de instructores disponibles.
+  2. *Validación Dinámica en `backend/middlewares/auth.js` y `fichaController.js`*: Si un docente es instructor, `verificarRolOLider` comprueba dinámicamente si lidera alguna ficha en la base de datos si el flag en el token no estuviera presente.
+  3. *Rediseño de Filtros en `Estudiantes.vue`*:
+     - Diseñado el layout `busqueda-filtros-grid` con soporte específico para `grid-instructor` y `grid-admin`.
+     - Para instructores: distribución equilibrada ocupando el 100% del ancho del card (Ficha 1.8fr con espacio completo para código y programa sin recortes, Búsqueda 1.4fr con botón de limpieza rápida, y filtro de Estado 1fr).
+     - Controles con altura cómoda de 44px, tipografía clara, bordes sutiles con foco institucional (#007832) e iconos SVG representativos sin emojis.
+- **Archivos Modificados:**
+  - `backend/controllers/fichaController.js`
+  - `backend/middlewares/auth.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Estudiantes.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación exitosa con `npm run build:prod` (628 ms, 0 errores).
+  - Verificación del árbol de componentes en el DOM asegurando que ambos modales sean hermanos directos.
+  - Comprobación de que no se realizó push al repositorio remoto según las instrucciones del usuario.
+
+---
+
 ## [2026-10-24 23:05] Filtro de Anomalías en Historial, Registro Unitario de Estudiantes y Asignación de Equipo Docente
 
 - **Fecha y Hora:** 2026-10-24 23:05:00 -05:00

@@ -252,8 +252,9 @@ export async function addInstructorAFicha(req, res) {
     const ficha = await Ficha.findById(id)
     if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
 
+    const userId = String(req.usuario?.id || req.usuario?._id || '')
     const esAdmin = req.usuario?.rol === 'Administrador'
-    const esLider = String(ficha.instructorLiderId) === String(req.usuario?.id)
+    const esLider = Boolean(userId && String(ficha.instructorLiderId) === userId)
 
     if (!esAdmin && !esLider) {
       return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede agregar docentes al equipo.' })
@@ -287,8 +288,9 @@ export async function removeInstructorDeFicha(req, res) {
     const ficha = await Ficha.findById(id)
     if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
 
+    const userId = String(req.usuario?.id || req.usuario?._id || '')
     const esAdmin = req.usuario?.rol === 'Administrador'
-    const esLider = String(ficha.instructorLiderId) === String(req.usuario?.id)
+    const esLider = Boolean(userId && String(ficha.instructorLiderId) === userId)
 
     if (!esAdmin && !esLider) {
       return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede remover docentes del equipo.' })
