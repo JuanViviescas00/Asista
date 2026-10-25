@@ -7,12 +7,23 @@ import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
 import { calcularResumenDesdeAsistencias } from '../services/asistenciaService.js'
 import { construirFilasResumenPorEstudiante } from '../utils/inasistenciaResumen.js'
-import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textUtils.js'
+import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma, normalizarTipoDocumento } from '../utils/textUtils.js'
+import Instructor from '../models/Instructor.js'
+import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 
 export async function getFichas(req, res) {
   try {
     const { instructorId } = req.query
     const filter = {}
+    // Un aprendiz solo ve la ficha a la que pertenece
+    if (req.usuario?.rol === 'Estudiante') {
+      const Estudiante = (await import('../models/Estudiante.js')).default
+      const est = await Estudiante.findById(req.usuario.estudianteId || req.usuario.id).select('fichaId')
+      if (!est?.fichaId) return res.json([])
+      const q = [{ codigoFicha: String(est.fichaId) }]
+      if (mongoose.Types.ObjectId.isValid(String(est.fichaId))) q.push({ _id: est.fichaId })
+      filter.$or = q
+    }
     if (instructorId) {
       filter.$or = [
         { instructorLiderId: instructorId },
@@ -32,6 +43,12 @@ export async function getFichas(req, res) {
 export async function getMisFichas(req, res) {
   try {
     const { instructorId } = req.params
+    if (req.usuario?.rol !== 'Administrador' && String(req.usuario?.id) !== String(instructorId)) {
+      return res.status(403).json({ error: 'Solo puedes consultar tus propias fichas' })
+    }
+    if (!mongoose.Types.ObjectId.isValid(String(instructorId))) {
+      return res.status(400).json({ error: 'instructorId inválido' })
+    }
     const fichas = await Ficha.find({
       $or: [
         { instructorLiderId: instructorId },
@@ -63,22 +80,23 @@ export async function getPlantillasFicha(req, res) {
     const deviceId = req.headers['x-device-id']
     const token = req.headers['x-device-token']
 
-    // Autenticación del dispositivo (mismo patrón que POST /api/asistencias/sync
-    // y el HELLO del WebSocket): deviceId + token contra tokenHash con bcryptjs.
-    // No usa JWT de usuario porque quien llama es la app local del huellero.
-    if (!deviceId || !token) {
-      return res.status(401).json({ error: 'deviceId y token son requeridos' })
-    }
-    const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
-    if (!dispositivo) {
-      return res.status(401).json({ error: 'Dispositivo no registrado' })
-    }
-    if (dispositivo.activo !== true) {
-      return res.status(403).json({ error: 'Dispositivo inactivo' })
-    }
-    const tokenValido = await bcryptjs.compare(String(token), dispositivo.tokenHash)
-    if (!tokenValido) {
-      return res.status(401).json({ error: 'Token de dispositivo inválido' })
+    // Autenticación: permitido para usuarios con sesión JWT activa (req.usuario)
+    // o para dispositivos físicos mediante deviceId + token contra tokenHash con bcryptjs.
+    if (!req.usuario) {
+      if (!deviceId || !token) {
+        return res.status(401).json({ error: 'deviceId y token son requeridos o sesión de usuario activa' })
+      }
+      const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
+      if (!dispositivo) {
+        return res.status(401).json({ error: 'Dispositivo no registrado' })
+      }
+      if (dispositivo.activo !== true) {
+        return res.status(403).json({ error: 'Dispositivo inactivo' })
+      }
+      const tokenValido = await bcryptjs.compare(String(token), dispositivo.tokenHash)
+      if (!tokenValido) {
+        return res.status(401).json({ error: 'Token de dispositivo inválido' })
+      }
     }
 
     // Resuelve el id (ObjectId o codigoFicha) a los posibles valores de fichaId
@@ -235,6 +253,117 @@ export async function importarFichas(req, res) {
     }
     const result = await Ficha.insertMany(fichas)
     res.status(201).json({ ok: true, count: result.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+
+export async function addInstructorAFicha(req, res) {
+  try {
+    const { id } = req.params
+    let { instructorId, nuevoDocente } = req.body
+
+    const ficha = await Ficha.findById(id)
+    if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
+
+    const userId = String(req.usuario?.id || req.usuario?._id || '')
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    const esLider = Boolean(userId && String(ficha.instructorLiderId) === userId)
+
+    if (!esAdmin && !esLider) {
+      return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede agregar docentes al equipo.' })
+    }
+
+    // Si viene nuevoDocente, crearlo o reutilizarlo si ya existe
+    if (nuevoDocente && !instructorId) {
+      const { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad, password } = nuevoDocente
+      if (!nombres || !apellidos || !numeroDocumento || !correo) {
+        return res.status(400).json({ error: 'Nombres, apellidos, número de documento y correo son obligatorios para el nuevo docente.' })
+      }
+
+      const docNorm = normalizarNumeroDocumento(numeroDocumento)
+      const correoNorm = String(correo).trim().toLowerCase()
+
+      const existe = await Instructor.findOne({
+        $or: [{ numeroDocumento: docNorm }, { correo: correoNorm }]
+      })
+
+      if (existe) {
+        instructorId = existe._id
+      } else {
+        const clavePlana = password || claveInicialInstructor(docNorm)
+        if (String(clavePlana).length < 6) {
+          return res.status(400).json({ error: 'La contraseña inicial no es válida: el número de documento debe tener al menos 6 dígitos.' })
+        }
+        const hashedPassword = await hashPassword(clavePlana)
+
+        const nuevoInst = new Instructor({
+          nombres: capitalizarTexto(nombres),
+          apellidos: capitalizarTexto(apellidos),
+          tipoDocumento: normalizarTipoDocumento(tipoDocumento || 'CC'),
+          numeroDocumento: docNorm,
+          correo: correoNorm,
+          telefono: String(telefono || '').trim(),
+          especialidad: capitalizarTexto(especialidad || 'Docente'),
+          password: hashedPassword,
+          rol: 'Instructor',
+          primerLogin: true,
+          estado: 'Activo'
+        })
+        await nuevoInst.save()
+        instructorId = nuevoInst._id
+      }
+    }
+
+    if (!instructorId) {
+      return res.status(400).json({ error: 'Se requiere el ID del instructor a agregar o los datos del nuevo docente.' })
+    }
+
+    if (String(ficha.instructorLiderId) === String(instructorId)) {
+      return res.status(400).json({ error: 'El docente seleccionado ya es el líder de esta ficha.' })
+    }
+
+    const yaAsignado = (ficha.instructores || []).some(i => String(i) === String(instructorId))
+    if (yaAsignado) {
+      return res.status(400).json({ error: 'El docente ya se encuentra en el equipo de trabajo de esta ficha.' })
+    }
+
+    ficha.instructores.push(instructorId)
+    await ficha.save()
+
+    const fichaActualizada = await Ficha.findById(id)
+      .populate('instructorLiderId', 'nombres apellidos correo telefono especialidad')
+      .populate('instructores', 'nombres apellidos correo telefono especialidad')
+
+    res.json(fichaActualizada)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}
+
+export async function removeInstructorDeFicha(req, res) {
+  try {
+    const { id, instructorId } = req.params
+    const ficha = await Ficha.findById(id)
+    if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
+
+    const userId = String(req.usuario?.id || req.usuario?._id || '')
+    const esAdmin = req.usuario?.rol === 'Administrador'
+    const esLider = Boolean(userId && String(ficha.instructorLiderId) === userId)
+
+    if (!esAdmin && !esLider) {
+      return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede remover docentes del equipo.' })
+    }
+
+    ficha.instructores = (ficha.instructores || []).filter(i => String(i) !== String(instructorId))
+    await ficha.save()
+
+    const fichaActualizada = await Ficha.findById(id)
+      .populate('instructorLiderId', 'nombres apellidos correo telefono especialidad')
+      .populate('instructores', 'nombres apellidos correo telefono especialidad')
+
+    res.json(fichaActualizada)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

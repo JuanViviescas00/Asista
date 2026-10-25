@@ -13,7 +13,7 @@ El sistema tiene 3 componentes desacoplados:
 | Componente | Descripción |
 | :--- | :--- |
 | **`huellero/`** | App de escritorio (Electron + Vue 3) que se ejecuta en el computador del aula, conectado físicamente al lector DigitalPersona U.are.U 4500. Hace la captura y comparación biométrica en el cliente usando `koffi` (FFI) y las DLLs nativas de DigitalPersona. |
-| **`backend/`** | API REST y servidor de tiempo real (Node.js + Express + Socket.IO). Persiste en **MongoDB Atlas** y genera respaldos en **SQLite**. |
+| **`backend/`** | API REST y servidor de tiempo real (Node.js + Express + Socket.IO). Persistencia centralizada en la nube con **MongoDB Atlas**. |
 | **`frontend/`** | Panel web (Vue 3 + Quasar + Vite) para administradores e instructores: gestión de fichas, aprendices, reportes, dispositivos y monitoreo en vivo. |
 
 ```mermaid
@@ -26,7 +26,6 @@ flowchart LR
     subgraph Backend[backend/ — API]
         API[REST + Socket.IO]
         Mongo[(MongoDB Atlas)]
-        SQLite[(SQLite)]
     end
     subgraph Frontend[frontend/ — Panel web]
         Panel[Admin / instructores / reportes]
@@ -35,7 +34,6 @@ flowchart LR
     Huellero <-->|REST + WebSockets| Backend
     Frontend <-->|REST + WebSockets| Backend
     API --> Mongo
-    API --> SQLite
 ```
 
 El hardware biométrico y sus DLLs viven únicamente en `huellero/`, de modo que el backend y el frontend no dependen de drivers de Windows.
@@ -65,7 +63,7 @@ El hardware biométrico y sus DLLs viven únicamente en `huellero/`, de modo que
 - **Node.js 22** (los Dockerfiles usan `node:22-bookworm-slim` / `node:22-alpine`; no hay `.nvmrc` ni campo `engines`).
 - npm.
 - Para la app de escritorio: Windows 10/11 (64 bits) y lector U.are.U 4500. El driver, el SDK y el VC++ se instalan manualmente en desarrollo (ver [GUIA_INSTALACION.md](./GUIA_INSTALACION.md)).
-- En una PC nueva, `setup_huellas.bat` (raíz) instala las dependencias de `backend`, `frontend` y `huellero` y verifica los componentes nativos (DLLs, koffi, SQLite).
+- En una PC nueva, `setup_huellas.bat` (raíz) instala las dependencias de `backend`, `frontend` y `huellero` y verifica los componentes nativos (DLLs biométricas y koffi FFI).
 
 ### Comandos (tomados de cada `package.json`)
 
@@ -107,7 +105,7 @@ npm run dist        # genera el instalador (ver más abajo)
 
 ### Variables de entorno
 
-El backend lee sus variables desde `backend/.env` (el repositorio **no** incluye un `.env.example`; crea el archivo manualmente). Nombres de variables usadas por el código:
+El backend lee sus variables desde `backend/.env` (puedes basarte en la plantilla oficial `backend/.env.example`). Nombres de variables usadas por el código:
 
 | Variable | Descripción |
 | :--- | :--- |
@@ -119,10 +117,16 @@ El backend lee sus variables desde `backend/.env` (el repositorio **no** incluye
 | `GMAIL_PASS` | Contraseña de aplicación de ese correo. |
 | `TZ` | Zona horaria (por defecto `America/Bogota`). |
 | `SOFIA_ENCRYPTION_KEY` | Clave maestra del cifrado AES-256-GCM de credenciales Sofia Plus. |
-| `CRON_SCHEDULE` | Programación del cron de exportación SQLite. |
+| `CRON_SCHEDULE` | Programación del cron nocturno institucional (por defecto `0 0 * * *`). |
 | `CRON_TIMEZONE` | Zona horaria de los cron. |
 | `ENABLE_SOFIA_SYNC` | Habilita la sincronización con Sofia Plus. |
-| `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus. |
+| `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus (`0 0 * * 6` - Sábado 12:00 AM). |
+| `CORS_ORIGIN` | Control de orígenes permitidos (`*` por defecto, o lista separada por comas; alias `ALLOWED_ORIGINS`). |
+| `SEED_ADMIN_EMAIL` | Correo del administrador inicial si la base de datos está vacía (`senahuellero@gmail.com`). |
+| `SEED_ADMIN_PASSWORD` | Contraseña inicial en texto plano que se hasheará en bcrypt (`sena2026ADSO`). |
+| `SEED_ADMIN_NAME` | Nombre visible del administrador por defecto (`Administrador`). |
+| `ENABLE_RPA_ROBOT` | Dispara el Robot RPA de inasistencias tras encolar (`true` por defecto). |
+| `RPA_DRY_RUN` | Modo seguro sin guardar en Sofia Plus (`false` por defecto / modo real activo). |
 
 Variables opcionales de la app de escritorio (`huellero/`):
 
@@ -226,9 +230,8 @@ HuelleroActualizado/
 │   ├── controllers/       # Lógica de los endpoints
 │   ├── models/            # Modelos Mongoose
 │   ├── routes/            # Enrutadores REST (/api/...)
-│   ├── services/          # Socket.IO, cron, SQLite, correo, cifrado
+│   ├── services/          # Socket.IO, cron, correo, cifrado, seguridad
 │   ├── middlewares/       # Autenticación JWT, validación, rate limiting
-│   ├── data/              # SQLite exportado por docente (ignorado por Git)
 │   └── Dockerfile(.dev)
 ├── frontend/              # Panel web (Vue 3 + Quasar + Vite)
 │   ├── src/               # views, components, services, router, ...

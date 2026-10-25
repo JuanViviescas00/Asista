@@ -2,7 +2,7 @@ import DiaFestivo from '../models/DiaFestivo.js'
 import Ficha from '../models/Ficha.js'
 import Estudiante from '../models/Estudiante.js'
 import Asistencia from '../models/Asistencia.js'
-import { upsertAsistenciasBatchSQLite } from '../services/sqliteExport.js'
+
 
 async function aplicarInhabilitacionDiaFestivo(diaDoc) {
   try {
@@ -53,24 +53,6 @@ async function aplicarInhabilitacionDiaFestivo(diaDoc) {
     })
 
     await Asistencia.bulkWrite(operaciones)
-
-    const sqliteRows = estudiantes.map(est => {
-      const fDoc = fichaMap.get(String(est.fichaId))
-      return {
-        fichaCodigo: fDoc?.codigoFicha || String(est.fichaId),
-        nombrePrograma: fDoc?.nombrePrograma || '',
-        jornada: fDoc?.jornada || '',
-        documentoAprendiz: est.numeroDocumento || '',
-        nombreAprendiz: `${est.nombres || ''} ${est.apellidos || ''}`.trim(),
-        correoAprendiz: est.correo || '',
-        fecha: fecha,
-        estado: 'Inhabilitada',
-        hora: '—',
-        horasTardanza: 0,
-        tiempoTardanza: '0 horas'
-      }
-    })
-    upsertAsistenciasBatchSQLite(sqliteRows)
   } catch (err) {
     console.error('[DiaFestivo] Error aplicando inhabilitación automática:', err)
   }

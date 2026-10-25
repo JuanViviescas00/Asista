@@ -9,6 +9,7 @@ import { hashPassword, claveInicialInstructor } from '../services/passwordServic
 import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
+import { ejecutarRPAInasistencias, obtenerEstadoRPA } from '../services/rpaService.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -95,13 +96,17 @@ export async function updateInstructor(req, res) {
       if (String(req.usuario.id) !== String(req.params.id)) {
         return res.status(403).json({ error: 'Solo puedes actualizar tu propio perfil de instructor' })
       }
-      delete req.body.esLider
-      delete req.body.rol
-      delete req.body.fichas
-      delete req.body.activo
     }
 
-    const data = { ...req.body }
+    // Un instructor solo puede editar datos de contacto y su clave de Sofía Plus.
+    const CAMPOS_AUTOEDICION = ['nombres', 'apellidos', 'telefono', 'correo', 'especialidad', 'passwordSofiaPlus']
+    const data = {}
+    for (const [campo, valor] of Object.entries(req.body)) {
+      if (esAdmin || CAMPOS_AUTOEDICION.includes(campo)) data[campo] = valor
+    }
+    delete data.codigoRecuperacion
+    delete data.expiraCodigoRecuperacion
+    delete data.intentosCodigoRecuperacion
     if (data.nombres) data.nombres = capitalizarTexto(data.nombres)
     if (data.apellidos) data.apellidos = capitalizarTexto(data.apellidos)
     if (data.tipoDocumento) data.tipoDocumento = normalizarTipoDocumento(data.tipoDocumento)
@@ -273,9 +278,22 @@ export async function importarInstructores(req, res) {
 }
 
 // Obtener credenciales para bot RPA de Sofia Plus por ID
+function puedeVerCredenciales(req, instructor) {
+  return req.usuario?.rol === 'Administrador' || String(req.usuario?.id) === String(instructor._id)
+}
+
 export async function getCredencialesSofia(req, res) {
   try {
+    if (!mongoose.Types.ObjectId.isValid(String(req.params.id))) {
+      return res.status(400).json({ ok: false, error: 'ID inválido' })
+    }
     const instructor = await Instructor.findById(req.params.id)
+    if (!instructor) {
+      return res.status(404).json({ ok: false, error: 'Instructor no encontrado' })
+    }
+    if (!puedeVerCredenciales(req, instructor)) {
+      return res.status(403).json({ ok: false, error: 'Solo puedes acceder a tus propios datos' })
+    }
     if (!instructor) {
       return res.status(404).json({ ok: false, error: 'Instructor no encontrado' })
     }
@@ -307,6 +325,9 @@ export async function getCredencialesSofiaPorDocumento(req, res) {
     const instructor = await Instructor.findOne({ numeroDocumento: String(documento).trim() })
     if (!instructor) {
       return res.status(404).json({ ok: false, error: 'Instructor no encontrado con ese documento' })
+    }
+    if (!puedeVerCredenciales(req, instructor)) {
+      return res.status(403).json({ ok: false, error: 'Solo puedes acceder a tus propios datos' })
     }
 
     if (!instructor.passwordSofiaPlus) {
@@ -504,52 +525,77 @@ export async function getTodosInasistenciasParaRPA(req, res) {
   }
 }
 
-// Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus
+// Confirmar y bloquear asistencia tras subida exitosa a Sofia Plus (soporta individual o lote de IDs agrupados)
 export async function confirmarSubidaSofia(req, res) {
   try {
-    const { asistenciaId, inasistenciaId, estudianteId, fichaId, fecha } = req.body
+    const { asistenciaId, inasistenciaId, asistenciaIds, estudianteId, fichaId, fecha } = req.body
 
-    const idBuscado = inasistenciaId || asistenciaId
-    if (!idBuscado && (!estudianteId || !fecha)) {
-      return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId o (estudianteId y fecha)' })
+    const idsList = Array.isArray(asistenciaIds) && asistenciaIds.length > 0
+      ? asistenciaIds
+      : (inasistenciaId || asistenciaId ? [inasistenciaId || asistenciaId] : [])
+
+    if (idsList.length === 0 && (!estudianteId || !fecha)) {
+      return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId, asistenciaIds o (estudianteId y fecha)' })
     }
 
-    const query = idBuscado ? { _id: idBuscado } : { estudianteId, fecha }
+    const query = idsList.length > 0 ? { _id: { $in: idsList } } : { estudianteId, fecha }
     if (fichaId) query.fichaId = fichaId
 
-    // Actualizar Inasistencia marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
-    // Idempotente: doble confirmación no falla ni duplica
-    const inasistenciaActualizada = await Inasistencia.findOneAndUpdate(
+    // Actualizar Inasistencias marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
+    const updateResult = await Inasistencia.updateMany(
       query,
-      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } },
-      { new: true }
+      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } }
     )
 
-    if (!inasistenciaActualizada) {
-      return res.status(404).json({ ok: false, error: 'Registro de inasistencia no encontrado' })
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({ ok: false, error: 'Registro(s) de inasistencia no encontrado(s)' })
     }
 
-    // Actualizar o marcar en la colección SofiaPlusSync si existe
-    await SofiaPlusSync.findOneAndUpdate(
-      { $or: [{ inasistenciaId: inasistenciaActualizada._id }, { asistenciaId: inasistenciaActualizada._id }] },
-      { $set: { estadoSync: 'subido', fechaSubida: new Date(), inasistenciaId: inasistenciaActualizada._id } },
-      { upsert: false }
-    )
+    // Actualizar o marcar en la colección SofiaPlusSync si existen
+    if (idsList.length > 0) {
+      await SofiaPlusSync.updateMany(
+        { $or: [{ inasistenciaId: { $in: idsList } }, { asistenciaId: { $in: idsList } }] },
+        { $set: { estadoSync: 'subido', fechaSubida: new Date() } }
+      )
+    }
 
     res.json({
       ok: true,
-      mensaje: 'Inasistencia confirmada y sincronizada con Sofia Plus exitosamente',
-      asistencia: {
-        id: inasistenciaActualizada._id,
-        fecha: inasistenciaActualizada.fecha,
-        subidoSofia: inasistenciaActualizada.estadoCarga === 'SUBIDA',
-        fechaSubidaSofia: inasistenciaActualizada.fechaSubidaSofia
-      }
+      mensaje: 'Inasistencia(s) confirmada(s) y sincronizada(s) con Sofia Plus exitosamente',
+      actualizados: updateResult.modifiedCount
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
   }
 }
 
+export async function ejecutarRobotRPA(req, res) {
+  try {
+    const { doc, fecha, ficha, dryRun, limite, headless } = req.body || {}
+    const resultado = await ejecutarRPAInasistencias({
+      doc,
+      fecha,
+      ficha,
+      dryRun,
+      limite,
+      headless
+    })
 
+    if (!resultado.ok) {
+      return res.status(400).json(resultado)
+    }
+    res.json(resultado)
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}
 
+// Consultar el estado actual de ejecución del Robot RPA
+export function getEstadoRobotRPA(req, res) {
+  try {
+    const estado = obtenerEstadoRPA()
+    res.json({ ok: true, estado })
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message })
+  }
+}

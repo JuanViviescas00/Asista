@@ -4,14 +4,20 @@ import Inasistencia from '../models/Inasistencia.js'
 import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
-import { upsertAsistenciaSQLite } from '../services/sqliteExport.js'
+
 
 export async function getExcusas(req, res) {
   try {
-    const { estado, fichaId } = req.query
+    const { estado, fichaId, estudianteId } = req.query
     const filter = {}
-    if (estado) filter.estado = estado
-    if (fichaId) filter.fichaId = fichaId
+    if (estado) filter.estado = String(estado)
+    if (fichaId) filter.fichaId = String(fichaId)
+    if (estudianteId) filter.estudianteId = String(estudianteId)
+    // Un aprendiz solo ve sus propias excusas
+    if (req.usuario?.rol === 'Estudiante') {
+      delete filter.fichaId
+      filter.estudianteId = String(req.usuario.estudianteId || req.usuario.id)
+    }
     const excusas = await Excusa.find(filter).sort({ createdAt: -1 })
     res.json(excusas)
   } catch (err) {
@@ -21,7 +27,12 @@ export async function getExcusas(req, res) {
 
 export async function createExcusa(req, res) {
   try {
-    const excusa = new Excusa(req.body)
+    // Solo campos permitidos: el estado siempre inicia en 'Pendiente'
+    const { estudianteId, fichaId, fechaInasistencia, motivo } = req.body
+    if (req.usuario?.rol === 'Estudiante' && String(estudianteId) !== String(req.usuario.estudianteId || req.usuario.id)) {
+      return res.status(403).json({ error: 'Solo puedes radicar excusas a tu nombre' })
+    }
+    const excusa = new Excusa({ estudianteId, fichaId, fechaInasistencia, motivo, estado: 'Pendiente' })
     await excusa.save()
     res.status(201).json(excusa)
   } catch (err) {
@@ -31,7 +42,11 @@ export async function createExcusa(req, res) {
 
 export async function updateExcusa(req, res) {
   try {
-    const excusa = await Excusa.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const permitidos = {}
+    for (const campo of ['fechaInasistencia', 'motivo', 'motivoRechazo']) {
+      if (req.body[campo] !== undefined) permitidos[campo] = String(req.body[campo])
+    }
+    const excusa = await Excusa.findByIdAndUpdate(req.params.id, permitidos, { new: true, runValidators: true })
     if (!excusa) return res.status(404).json({ error: 'Excusa no encontrada' })
     res.json(excusa)
   } catch (err) {
@@ -95,27 +110,6 @@ export async function aprobarExcusa(req, res) {
     )
 
     await Estudiante.findByIdAndUpdate(excusa.estudianteId, { estadoAsistencia: 'Excusada' })
-
-    // 3. Sincronizar en SQLite
-    try {
-      if (estudianteDoc && fichaDoc) {
-        upsertAsistenciaSQLite({
-          fichaCodigo: fichaDoc.codigoFicha || String(excusa.fichaId),
-          nombrePrograma: fichaDoc.nombrePrograma || '',
-          jornada: fichaDoc.jornada || '',
-          documentoAprendiz: estudianteDoc.numeroDocumento || '',
-          nombreAprendiz: `${estudianteDoc.nombres || ''} ${estudianteDoc.apellidos || ''}`.trim(),
-          correoAprendiz: estudianteDoc.correo || '',
-          fecha: excusa.fechaInasistencia,
-          estado: 'Excusada',
-          hora: '—',
-          horasTardanza: 0,
-          tiempoTardanza: '0 horas'
-        })
-      }
-    } catch (sqliteErr) {
-      console.warn('[SQLite] Error al actualizar excusa en SQLite:', sqliteErr.message)
-    }
 
     res.json({ ok: true, excusa, inasistencia })
   } catch (err) {

@@ -3,6 +3,7 @@ import 'dotenv/config'
 import http from 'http'
 import path from 'path'
 import fs from 'fs'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import express from 'express'
 import cors from 'cors'
@@ -21,6 +22,9 @@ import clasesRoutes from './routes/clases.js'
 import enrolamientoRoutes from './routes/enrolamiento.js'
 import dispositivosRoutes from './routes/dispositivos.js'
 import programasRoutes from './routes/programas.js'
+import { sanitizarEntrada } from './middlewares/sanitize.js'
+import { apiLimiter } from './middlewares/rateLimiter.js'
+import { esOrigenPermitido } from './utils/corsOrigins.js'
 import { initSocket } from './services/socketService.js'
 import { hashPassword } from './services/passwordService.js'
 import { iniciarCronJobs } from './services/cronService.js'
@@ -34,30 +38,42 @@ app.set('trust proxy', 1)
 
 initSocket(httpServer)
 
+app.disable('x-powered-by')
+
 // Middlewares de seguridad perimetral
 app.use(helmet({
-  crossOriginResourcePolicy: false,
-  contentSecurityPolicy: false,
-  frameguard: false, // Permite que suites de pruebas (TestSprite, Cypress) carguen la app en visor/iframe
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
+      'img-src': ["'self'", 'data:', 'blob:'],
+      // Socket.IO + SDK web del lector (habla con el servicio local de DigitalPersona)
+      'connect-src': ["'self'", 'ws:', 'wss:', 'https://127.0.0.1:*', 'https://localhost:*'],
+      'frame-ancestors': ["'self'"],
+      'object-src': ["'none'"],
+      'base-uri': ["'self'"],
+      'form-action': ["'self'"],
+      'upgrade-insecure-requests': null,
+    },
+  },
+  frameguard: { action: 'sameorigin' },
+  crossOriginEmbedderPolicy: false,
 }))
-const ORIGENES_PERMITIDOS = [
-  'https://huelleroactualizado-1.onrender.com',
-]
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin) return callback(null, true)
-    if (ORIGENES_PERMITIDOS.includes(origin)) return callback(null, true)
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
-    if (/^https?:\/\/[a-z0-9-]+-\d+\.(use\.devtunnels\.ms|app\.github\.dev|trycloudflare\.com)$/i.test(origin)) return callback(null, true)
-    if (/^https?:\/\/([a-z0-9-]+\.)?testsprite\.com$/i.test(origin)) return callback(null, true)
-    // Para suites de pruebas automatizadas y navegadores headless, permitir acceso
-    return callback(null, true)
+    callback(null, esOrigenPermitido(origin))
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-device-id', 'x-device-token'],
+  maxAge: 600,
 }))
 app.use(express.json({ limit: '10mb' }))
+app.use(sanitizarEntrada)
+app.use('/api', apiLimiter)
 
 const MONGO_OPTS = {
   serverSelectionTimeoutMS: 15000,
@@ -90,18 +106,24 @@ mongoose.connect(process.env.MONGODB_URI, MONGO_OPTS)
   })
 
 async function iniciarServidor() {
-  let admin = await Admin.findOne({ correo: 'senahuellero@gmail.com' })
-  if (!admin) {
-    const passwordHash = await hashPassword('sena2026ADSO')
+  const correoAdmin = (process.env.ADMIN_EMAIL || 'senahuellero@gmail.com').trim().toLowerCase()
+  let admin = await Admin.findOne({ correo: correoAdmin })
+  if (!admin && (await Admin.countDocuments()) === 0) {
+    // Nunca usar una contraseña fija publicada en el repositorio:
+    // se toma de ADMIN_PASSWORD o se genera una aleatoria que se muestra una sola vez.
+    const passwordInicial = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url')
     admin = await new Admin({
       nombre: 'Administrador',
       rol: 'Administrador',
       telefono: '',
-      correo: 'senahuellero@gmail.com',
-      password: passwordHash,
+      correo: correoAdmin,
+      password: await hashPassword(passwordInicial),
     }).save()
-    console.log('Admin por defecto creado con contraseña cifrada en bcrypt.')
-  } else if (!admin.password.startsWith('$2a$') && !admin.password.startsWith('$2b$')) {
+    console.log(`Admin inicial creado: ${correoAdmin}`)
+    if (!process.env.ADMIN_PASSWORD) {
+      console.log(`Contraseña temporal generada (cámbiala al ingresar): ${passwordInicial}`)
+    }
+  } else if (admin && !admin.password.startsWith('$2a$') && !admin.password.startsWith('$2b$')) {
     // Si la contraseña anterior estaba en texto plano, encriptarla automáticamente
     admin.password = await hashPassword(admin.password)
     await admin.save()
@@ -140,7 +162,7 @@ app.use('/api/programas', programasRoutes)
 // Servir estáticos del frontend compilado (Single Service para Render)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const publicPath = path.join(__dirname, 'public')
-app.use(express.static(publicPath))
+app.use(express.static(publicPath, { dotfiles: 'ignore' }))
 
 // Redirección SPA: si no es una petición /api, servir index.html de Vue
 app.get('*', (req, res) => {
@@ -156,4 +178,16 @@ app.get('*', (req, res) => {
     message: 'Backend API Asista en ejecución. El frontend no está compilado en este servicio.',
     timestamp: new Date().toISOString()
   })
+})
+
+// Manejador de errores final (JSON mal formado, payload excesivo, etc.):
+// no expone trazas internas al cliente.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = err.status || err.statusCode || 500
+  if (status >= 500) console.error('[Error]', err)
+  const mensaje = status === 400 ? 'Solicitud mal formada'
+    : status === 413 ? 'El contenido enviado es demasiado grande'
+      : 'Error interno del servidor'
+  res.status(status).json({ error: mensaje })
 })

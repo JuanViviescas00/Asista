@@ -1,6 +1,6 @@
 # ==============================================================================
 # ASISTA - SISTEMA DE CONTROL DE ASISTENCIA BIOMÉTRICA (SENA)
-# Dockerfile Multi-Etapa de Producción Optimizado para Coolify, VPS y Nube
+# Dockerfile Multi-Etapa de Producción (Monolito: Express sirve API + SPA)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -10,54 +10,59 @@ FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copiar manifiestos de paquetes e instalar dependencias
+# Instalación reproducible a partir del lockfile
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci --no-audit --no-fund
 
-# Copiar código fuente y generar bundle estático de producción
 COPY frontend/ ./
 RUN npm run build
 
 # ------------------------------------------------------------------------------
-# ETAPA 2: Servidor Backend de Producción (Node.js Express + SQLite + Socket.IO)
+# ETAPA 2: Dependencias de producción del backend (compila módulos nativos)
 # ------------------------------------------------------------------------------
-FROM node:22-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS backend-deps
 
 WORKDIR /app
 
-# Instalar dependencias esenciales de compilación para módulos nativos (ej. better-sqlite3)
-# y curl para el healthcheck de Coolify / Docker
+# Toolchain solo para compilar better-sqlite3 si no hay binario precompilado.
+# Se queda en esta etapa: NO llega a la imagen final.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar dependencias de producción del backend
 COPY backend/package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 
-# Copiar código del backend
-COPY backend/ ./
+# ------------------------------------------------------------------------------
+# ETAPA 3: Imagen final mínima, sin compiladores y con usuario sin privilegios
+# ------------------------------------------------------------------------------
+FROM node:22-bookworm-slim AS runner
 
-# Inyectar el frontend compilado en la carpeta de estáticos del backend
-COPY --from=frontend-builder /app/frontend/dist ./public
+# Puerto configurable: en build (--build-arg PORT=4650) o en runtime (variable PORT)
+ARG PORT=3000
+ENV NODE_ENV=production \
+    PORT=${PORT} \
+    TZ=America/Bogota
 
-# Directorio persistente para la base de datos relacional SQLite local
-RUN mkdir -p /app/data
+WORKDIR /app
 
-# Configuración de entorno
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV TZ=America/Bogota
+COPY --from=backend-deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node backend/ ./
+COPY --from=frontend-builder --chown=node:node /app/frontend/dist ./public
 
-# Puerto expuesto por defecto (detectado automáticamente por Coolify)
-EXPOSE 3000
+# Directorio persistente para las bases SQLite (montado como volumen).
+# Es lo único escribible por la aplicación.
+RUN mkdir -p /app/data/docentes && chown -R node:node /app/data
 
-# Healthcheck para monitorización de estado en Coolify / Docker
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-3000}/api/health || exit 1
+# Nunca ejecutar Node como root dentro del contenedor
+USER node
 
-# Comando de inicio del servidor en producción
+EXPOSE ${PORT}
+
+# Healthcheck con Node (sin depender de curl en la imagen)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "index.js"]

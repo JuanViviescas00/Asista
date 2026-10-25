@@ -1,3 +1,4 @@
+import mongoose from 'mongoose'
 import Estudiante from '../models/Estudiante.js'
 import Dispositivo from '../models/Dispositivo.js'
 import bcryptjs from 'bcryptjs'
@@ -20,7 +21,7 @@ export async function guardarTemplate(req, res) {
   if (!autorizado) {
     const deviceId = req.headers['x-device-id']
     const deviceToken = req.headers['x-device-token']
-    if (deviceId && deviceToken) {
+    if (typeof deviceId === 'string' && typeof deviceToken === 'string') {
       try {
         const dispositivo = await Dispositivo.findOne({ deviceId: String(deviceId) })
         if (dispositivo && dispositivo.activo === true) {
@@ -31,16 +32,9 @@ export async function guardarTemplate(req, res) {
     }
   }
 
-  if (!autorizado) {
-    const origin = req.headers['origin'] || req.headers['referer'] || ''
-    const userAgent = req.headers['user-agent'] || ''
-    // Compatibilidad con la app instalada Asista (Electron / Node.js desktop)
-    // Las peticiones del proceso principal o empaquetado de Electron no tienen origen web externo
-    const esClienteEscritorio = !origin || origin.startsWith('file:') || /localhost|127\.0\.0\.1/i.test(origin) || /electron|node|undici|asista|huellero/i.test(userAgent)
-    if (esClienteEscritorio) {
-      autorizado = true
-    }
-  }
+  // Nota de seguridad: antes se autorizaba cualquier petición sin cabecera Origin o con
+  // User-Agent "node/electron", lo que permitía a cualquiera (p. ej. con curl) sobrescribir
+  // huellas. Ahora solo se acepta JWT de docente/admin o credenciales de dispositivo.
 
   if (!autorizado) {
     return res.status(401).json({
@@ -50,7 +44,7 @@ export async function guardarTemplate(req, res) {
   }
 
   const { estudianteId, fichaId, dedo, template, slot } = req.body
-  if (!estudianteId || !fichaId || !template) {
+  if (!estudianteId || !fichaId || !template || typeof template !== 'string') {
     return res.status(400).json({ success: false, error: 'estudianteId, fichaId y template son requeridos' })
   }
 
@@ -60,6 +54,9 @@ export async function guardarTemplate(req, res) {
   }
 
   try {
+    if (!mongoose.Types.ObjectId.isValid(String(estudianteId))) {
+      return res.status(400).json({ success: false, error: 'estudianteId inválido' })
+    }
     const estudiante = await Estudiante.findById(estudianteId)
     if (!estudiante) {
       return res.status(404).json({ success: false, error: 'Estudiante no encontrado' })

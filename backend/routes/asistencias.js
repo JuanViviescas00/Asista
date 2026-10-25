@@ -1,12 +1,13 @@
 import { Router } from 'express'
 import * as asistenciaController from '../controllers/asistenciaController.js'
 import { validarCamposRequeridos, validarFecha } from '../middlewares/validator.js'
-import { autenticarJWT, verificarRol, autenticarOpcional } from '../middlewares/auth.js'
+import { autenticarJWT, verificarRol } from '../middlewares/auth.js'
+import { dispositivoLimiter } from '../middlewares/rateLimiter.js'
 
 const router = Router()
 
 // Consulta de Asistencias (permitido para Kiosco de Aula y paneles autenticados)
-router.get('/', autenticarOpcional, validarFecha('fecha'), asistenciaController.getAsistencias)
+router.get('/', autenticarJWT, validarFecha('fecha'), asistenciaController.getAsistencias)
 // Registro manual de asistencia (restringido a Administrador o Instructor autenticado)
 router.post('/',
   autenticarJWT,
@@ -35,7 +36,7 @@ router.post('/reactivar-jornada',
 
 // Sincronización idempotente de asistencias pendientes del huellero local.
 // Autenticación por deviceId + token (dentro del controller, no con JWT de usuario).
-router.post('/sync', asistenciaController.syncAsistencias)
+router.post('/sync', dispositivoLimiter, asistenciaController.syncAsistencias)
 
 // Gestión de base de datos SQLite offline
 router.get('/sqlite/download', autenticarJWT, verificarRol(['Administrador']), asistenciaController.downloadSqlite)

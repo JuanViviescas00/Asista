@@ -3,25 +3,59 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: asista-app
+    image: asista-app:latest
     restart: unless-stopped
+    # La app escucha en el puerto definido por PORT (por defecto 3000).
+    # En Coolify el "puerto interno" del dominio debe ser el mismo valor de PORT.
+    # No se publica en el host: Traefik enruta el dominio al contenedor.
+    # Para uso local sin proxy, descomenta "ports".
+    expose:
+      - "${PORT:-3000}"
     ports:
-      - "${PORT:-3000}:3001"
+      - "${PORT:-3000}:${PORT:-3000}"
     environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - TZ=America/Bogota
-      - MONGODB_URI=${MONGODB_URI}
-      - JWT_SECRET=${JWT_SECRET}
-      - SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY}
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      TZ: America/Bogota
+      # Obligatorias: docker compose falla con un mensaje claro si faltan.
+      MONGODB_URI: ${MONGODB_URI:?Define MONGODB_URI en el archivo .env}
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET (minimo 32 caracteres) en el archivo .env}
+      SOFIA_ENCRYPTION_KEY: ${SOFIA_ENCRYPTION_KEY:?Define SOFIA_ENCRYPTION_KEY en el archivo .env}
+      # Opcionales
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_PASS: ${GMAIL_PASS:-}
+      ENABLE_SOFIA_SYNC: ${ENABLE_SOFIA_SYNC:-}
+      CRON_SCHEDULE: ${CRON_SCHEDULE:-}
+      CRON_SOFIA_SCHEDULE: ${CRON_SOFIA_SCHEDULE:-}
     volumes:
       - asista-data:/app/data
+    # Endurecimiento del contenedor
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 20s
 
 volumes:
   asista-data:

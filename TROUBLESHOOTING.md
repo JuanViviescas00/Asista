@@ -1,5 +1,145 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-24 23:25] Corrección del Modal de Asignar Instructores y Rediseño Espacioso de Filtros de Estudiantes
+
+- **Fecha y Hora:** 2026-10-24 23:25:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Modal Asignar Docentes:* En `PanelInstructor.vue`, el botón "Asignar Docente" no respondía visualmente ni mostraba el modal interactivo de selección de instructores.
+  2. *Filtros de Estudiantes:* En `Estudiantes.vue`, los campos de búsqueda avanzada estaban "muy acosados" (cramped/apretados) en un grid de columnas rígidas de 200px con enorme espacio vacío desaprovechado a la derecha, recortando los nombres largos de los programas de formación.
+- **Causa Raíz:**
+  1. El contenedor `<div v-if="modalAgregarDocenteAbierto" class="modal-overlay">` había quedado anidado por error dentro de la etiqueta `<div v-if="showInhabilitarModal">`. Dado que `showInhabilitarModal` permanecía en `false`, Vue nunca montaba ni renderizaba el modal en el DOM al hacer clic. Adicionalmente, el middleware `verificarRolOLider` requería validación dinámica contra BD en caso de tokens sin el claim `esLider: true`.
+  2. La clase `.busqueda-grid` de `main.css` forzaba `grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))`. Para los instructores (que solo tienen Ficha y Búsqueda), esto ocupaba apenas ~440px en la esquina izquierda, dejando más de 700px en blanco y comprimiendo el texto del programa.
+- **Solución Aplicada:**
+  1. *Desacople del Modal en `PanelInstructor.vue`*: Se corrigió el cierre de etiquetas HTML para que `modalAgregarDocenteAbierto` sea un modal independiente de nivel superior. Se robusteció `esLiderEnFichaSeleccionada` para verificar `ficha.esLider`, `usuario.id` y `usuario._id`. Se actualizó `abrirModalAgregarDocente()` para recargar siempre la lista de instructores disponibles.
+  2. *Validación Dinámica en `backend/middlewares/auth.js` y `fichaController.js`*: Si un docente es instructor, `verificarRolOLider` comprueba dinámicamente si lidera alguna ficha en la base de datos si el flag en el token no estuviera presente.
+  3. *Rediseño de Filtros en `Estudiantes.vue`*:
+     - Diseñado el layout `busqueda-filtros-grid` con soporte específico para `grid-instructor` y `grid-admin`.
+     - Para instructores: distribución equilibrada ocupando el 100% del ancho del card (Ficha 1.8fr con espacio completo para código y programa sin recortes, Búsqueda 1.4fr con botón de limpieza rápida, y filtro de Estado 1fr).
+     - Controles con altura cómoda de 44px, tipografía clara, bordes sutiles con foco institucional (#007832) e iconos SVG representativos sin emojis.
+- **Archivos Modificados:**
+  - `backend/controllers/fichaController.js`
+  - `backend/middlewares/auth.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Estudiantes.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Compilación exitosa con `npm run build:prod` (628 ms, 0 errores).
+  - Verificación del árbol de componentes en el DOM asegurando que ambos modales sean hermanos directos.
+  - Comprobación de que no se realizó push al repositorio remoto según las instrucciones del usuario.
+
+---
+
+## [2026-10-24 23:05] Filtro de Anomalías en Historial, Registro Unitario de Estudiantes y Asignación de Equipo Docente
+
+- **Fecha y Hora:** 2026-10-24 23:05:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. *Historial de Asistencias:* En `PanelInstructor.vue`, las filas con estado "Presente" saturaban la tabla y la exportación con información redundante. Se requería mostrar únicamente anomalías (`Falta`, `Tardanza`, `Excusada`, `Ausente`, `Retardo`).
+  2. *Vista de Estudiantes:*
+     - Los filtros de búsqueda avanzada aparecían colapsados por defecto (`busquedaAvanzadaAbierta = false`), provocando que los instructores vieran una pantalla vacía sin aprendices hasta expandir y buscar manualmente.
+     - No existía botón ni mecanismo para que un instructor líder pudiera registrar aprendices de manera unitaria (manual) sin tener que recurrir a la importación masiva por Excel.
+  3. *Equipo Docente:* En `PanelInstructor.vue`, se requería que el docente líder de la ficha pudiera agregar docentes comunes al equipo de trabajo de dicha ficha y desvincularlos si era necesario.
+- **Causa Raíz:**
+  1. El historial mostraba todas las asistencias directas sin filtrar por estado ni anomalías.
+  2. En `Estudiantes.vue`, el botón `Nuevo Estudiante` tenía la directiva `v-if="!esInstructor"`, bloqueándolo exclusivamente para Administradores; además, el selector de ficha en el modal estaba deshabilitado (`:disabled="esInstructor"`).
+  3. No existían rutas ni controladores en el backend para que un docente líder agregara o removiera docentes en el array `ficha.instructores`.
+- **Solución Aplicada:**
+  1. *Backend - Gestión de Equipo Docente y Creación Unitaria:*
+     - En `backend/controllers/fichaController.js`, se implementaron `addInstructorAFicha` y `removeInstructorDeFicha` validando que el solicitante sea Administrador o el docente líder de la ficha (`ficha.instructorLiderId`).
+     - En `backend/routes/fichas.js`, se expusieron `POST /:id/instructores` y `DELETE /:id/instructores/:instructorId` protegidas con `verificarRolOLider(['Administrador'])`.
+     - En `backend/routes/estudiantes.js`, se actualizó `POST /` con `verificarRolOLider(['Administrador'])`.
+     - En `backend/controllers/estudianteController.js`, se añadió la validación para que los instructores solo puedan registrar aprendices en fichas donde sean líderes.
+  2. *Servicio API Frontend:*
+     - En `frontend/src/services/index.js`, se agregaron `api.fichas.agregarInstructor(id, instructorId)` y `api.fichas.eliminarInstructor(id, instructorId)`.
+  3. *Frontend - Historial de Asistencias (`PanelInstructor.vue`):*
+     - Creado el computed `historialAnomalias`, filtrando únicamente por `['Falta', 'Tardanza', 'Excusada', 'Ausente', 'Retardo']`.
+     - Actualizada la tabla y la función `exportarHistorial()` para consumir exclusivamente `historialAnomalias`.
+  4. *Frontend - Equipo Docente (`PanelInstructor.vue`):*
+     - Añadido botón "+ Asignar Docente" visible para el docente líder o admin.
+     - Creado modal para seleccionar un docente disponible de la institución y vincularlo a la ficha.
+     - Añadido botón de desvinculación rápida en las tarjetas de docentes comunes para el docente líder.
+  5. *Frontend - Estudiantes (`Estudiantes.vue`):*
+     - `busquedaAvanzadaAbierta` configurado en `true` por defecto.
+     - Auto-selección de la primera ficha asignada para instructores en `loadFichas()`, cargando sus aprendices de inmediato.
+     - Habilitado el botón "Nuevo Estudiante" para docentes líderes (`puedeCrearEstudiante`).
+     - En el modal de creación, el selector de ficha se limita a las fichas donde el docente es líder (`fichasLider`).
+- **Archivos Modificados:**
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/fichaController.js`
+  - `backend/routes/estudiantes.js`
+  - `backend/routes/fichas.js`
+  - `frontend/src/services/index.js`
+  - `frontend/src/views/Estudiantes.vue`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de compilación exitosa con `npm run build:prod`.
+  - Pruebas de API local en backend y validación de endpoints HTTP y carga en base de datos.
+  - Comprobación de que no se realizó ningún push a git remoto conforme a la directiva del usuario.
+
+---
+
+## [2026-10-23 23:10] Actualización de Reglas de Tardanza Escalonada y Auto-cierre al Fin de Jornada
+
+- **Fecha y Hora:** 2026-10-23 23:10:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario solicitó ajustar la escala de tiempos de tardanza:
+    * Mantener el tiempo de gracia en 10 minutos (Presente).
+    * Tardanza de 1 hora: desde el minuto 11 hasta los 60 minutos de haber iniciado la clase.
+    * Tardanza de 2 horas: desde el minuto 61 hasta los 120 minutos (2 horas) de haber iniciado la clase.
+    * Falta: marcaciones pasados los 120 minutos desde el inicio de clase.
+  - El auto-cierre de clase activa (que estaba fijado estáticamente en 3 horas) debe extenderse a la duración total de la jornada formativa (6 horas para jornadas diurnas/mixtas y 5 horas para jornada nocturna).
+- **Causa Raíz:**
+  - Los umbrales anteriores acumulaban el tiempo de gracia sobre las horas reloj (70 min y 130 min en backend, y 65/125 min en frontend), generando desfases con las horas académicas reales.
+  - El límite de 3 horas cerraba prematuramente clases activas en jornadas formativas completas de 5 o 6 horas.
+- **Solución Aplicada:**
+  1. *Unificación de Umbrales:* Configurado `TOLERANCIA_MINUTOS = 10`, `LIMITE_TARDANZA_1_HORA = 60` y `LIMITE_TARDANZA_2_HORAS = 120` tanto en `backend/services/asistenciaService.js` como en `frontend/src/utils/asistenciaTiempo.js`.
+  2. *Auto-cierre Dinámico por Jornada:* En `backend/services/cronService.js`, `backend/controllers/claseController.js` y `backend/services/socketService.js`, el límite de auto-cierre ahora se calcula dinámicamente con `topeHorasPorJornada(jornada)` (6 horas en el día, 5 horas en la noche), emitiendo motivo `AUTO_CIERRE_FIN_JORNADA`.
+- **Archivos Modificados:**
+  - `backend/services/asistenciaService.js`
+  - `frontend/src/utils/asistenciaTiempo.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/claseController.js`
+  - `backend/services/socketService.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis en Node.js (`node -c`).
+  - Compilación exitosa del frontend (`npm run build:prod`).
+
+---
+
+## [2026-10-23 21:40] Desacoplamiento y Retiro Integral de SQLite y Dependencias de Compilación C++ (node-gyp / Python3)
+
+- **Fecha y Hora:** 2026-10-23 21:40:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Se identificó que SQLite (`better-sqlite3`) y sus servicios asociados (`sqliteExport.js`) actuaban como un "espejo de solo escritura" sin lectura ni consumo en el frontend, kiosco o lógica del negocio.
+  - La presencia de `better-sqlite3` obligaba a instalar herramientas de compilación C++ (`python3`, `make`, `g++`) en el contenedor Docker mediante `node-gyp`, inflando la imagen en más de 200 MB y aumentando los tiempos de despliegue.
+  - Se solicitó retirar SQLite del backend y optimizar la imagen Docker, aplicando los cambios exclusivamente en la rama de trabajo `juan`.
+- **Causa Raíz:**
+  - Residuo arquitectónico de etapas tempranas donde se proyectaba almacenamiento local en SQLite por docente. En la arquitectura actual, MongoDB Atlas cubre el 100% de la persistencia institucional y el kiosco opera con colas JSON atómicas (`store.js`), mientras que las descargas de usuario se realizan en Excel (.xlsx) y PDF.
+- **Solución Aplicada:**
+  1. *Desinstalación de dependencias:* Removido `better-sqlite3` de `backend/package.json` y sincronizado `package-lock.json`.
+  2. *Retiro de servicio y sincronizadores:* Eliminado `backend/services/sqliteExport.js` y llamadas directas en `asistenciaController.js`, `diaFestivoController.js`, `excusaController.js` y `cronService.js`.
+  3. *Endpoints legados:* Los endpoints de descarga y sincronización SQLite en `asistenciaController.js` responden código HTTP 410 (Gone / Descontinuado) informando el uso de Excel/PDF.
+  4. *Optimización del Dockerfile:* Eliminada la instalación de `python3`, `make` y `g++`, manteniendo únicamente `curl` para el healthcheck; removida la creación de la carpeta local efímera `/app/data`.
+  5. *Ajuste de docker-compose.yml:* Eliminado el volumen local innecesario `asista-data:/app/data`.
+- **Archivos Modificados:**
+  - `backend/package.json`
+  - `package-lock.json`
+  - `backend/services/sqliteExport.js` (eliminado)
+  - `backend/controllers/asistenciaController.js`
+  - `backend/controllers/diaFestivoController.js`
+  - `backend/controllers/excusaController.js`
+  - `backend/services/cronService.js`
+  - `Dockerfile`
+  - `docker-compose.yml`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Verificación de sintaxis de todos los controladores y servicios (`node -c`).
+  - Compilación exitosa del monolito (`npm run build:prod`) sin errores.
+  - Comprobación de integridad del monorepo y empaquetado de producción.
+
+---
+
 ## [2026-10-22 21:55] Workflow de CI/CD para Unificación de Ramas (Backend/Frontend) y Compilación del Monolito
 
 - **Fecha y Hora:** 2026-10-22 21:55:00 -05:00
@@ -916,3 +1056,352 @@
   - TROUBLESHOOTING.md
 - **Verificacion:**
   - Ramas locales y remotas alineadas. Regla de integracion validada en .github/workflows/monolito-sync.yml.
+---
+
+## [2026-10-24 10:55] Integración del Módulo RPA de Inasistencias en el Repositorio Principal y Conexión con el Cron
+
+- **Fecha y Hora:** 2026-10-24 10:55:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. El robot RPA de reporte de inasistencias en Sofia Plus se encontraba en una carpeta externa independiente (`Practica_RPA`), por lo cual el backend y el programador cron semanal no podían invocarlo de forma autónoma.
+  2. El usuario solicitó expresamente que el robot RPA dentro del repositorio principal fuera **exclusivo para el registro y reporte de inasistencias**, descartando bots de descarga de notas y certificados.
+- **Causa Raíz:**
+  Desacoplamiento físico de los scripts de RPA respecto al repositorio principal del Huellero y ausencia de un servicio puente en el backend para orquestar la ejecución desatendida del proceso Playwright.
+- **Solución Aplicada:**
+  1. **Incorporación del Módulo RPA Exclusivo (`rpa/`):** Se creó la carpeta `rpa/` en la raíz del proyecto conteniendo exclusivamente el orquestador `bot_inasistencias_sofia.js`, su configuración `package.json`, `.env.example`, `.gitignore` y `README.md`.
+  2. **Configuración de Workspace:** Se añadió `"rpa"` al array `workspaces` en el `package.json` raíz y se agregó el script `"rpa:inasistencias": "npm run inasistencias --prefix rpa"`.
+  3. **Servicio Puente Backend (`backend/services/rpaService.js`):** Se implementó `ejecutarRPAInasistencias` y `obtenerEstadoRPA` con control de concurrencia (bloqueo de ejecuciones paralelas), paso de argumentos CLI (`--batch`, `--auto`, `--headless`, `--confirmar-registro`), captura de logs en tiempo real y reporte de código de salida.
+  4. **Conexión al Cron Semanal (`backend/services/cronService.js`):** Se integró el disparo del robot en el cron nocturno de Sofia Plus (`0 0 * * 6` - medianoche del sábado), ejecutándose automáticamente tras encolar las inasistencias listas.
+  5. **Endpoints de Administración:** Se expusieron `POST /api/instructores/ejecutar-rpa` y `GET /api/instructores/estado-rpa` en `backend/routes/instructores.js` y `backend/controllers/instructorController.js` para control y auditoría por parte del Administrador.
+- **Archivos Modificados:**
+  - `package.json`
+  - `.gitignore`
+  - `backend/services/rpaService.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/routes/instructores.js`
+  - `rpa/bot_inasistencias_sofia.js`
+  - `rpa/package.json`
+  - `rpa/.env.example`
+  - `rpa/.gitignore`
+  - `rpa/README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis validada con `node -c` en todos los archivos modificados (código 0).
+  - Prueba de ejecución del bot en modo batch y dry-run conectando exitosamente con la API de Asista (`http://localhost:3000/api/instructores/todos-inasistencias-rpa`) y detectando inasistencias.
+  - Compilación de producción frontend con `npm run build` exitosa en 2.12s con 0 errores.
+---
+
+## [2026-10-24 11:00] Configuración de Registro Real de Novedades, Agrupación de Excusas por Rango y Verificación de Login de Docentes
+
+- **Fecha y Hora:** 2026-10-24 11:00:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. **Activación de Registro Real:** Configurar el robot RPA para que opere por defecto en Modo Real (`dryRun: false`), realizando efectivamente el clic en "Registrar Novedad" en Sofia Plus y bloqueando la asistencia en MongoDB tras la confirmación exitosa.
+  2. **Agrupación y Suma de Excusas/Faltas por Aprendiz:** Si un docente tiene más de una inasistencia o excusa para el mismo aprendiz en la misma ficha, el robot debe consolidarlas en un único formulario en Sofia Plus, sumando el total de horas fallidas y enviando la fecha inicial (`formNovedadAprendiz:fechaEjecucion`) a la fecha final (`formNovedadAprendiz:fechaFin`).
+  3. **Verificación de Inicio de Sesión de Instructores:** Confirmar el flujo completo de autenticación de docentes en Sofia Plus y mantener disponible la herramienta `bot_sofia_login.js` para pruebas directas.
+- **Causa Raíz:**
+  El robot procesaba cada inasistencia en formularios individuales separados (1 por cada fecha), generando múltiples registros repetitivos en Sofia Plus para aprendices con fallas continuas o acumuladas en la misma semana.
+- **Solución Aplicada:**
+  1. **Función `agruparInasistenciasPorAprendiz` en `rpa/bot_inasistencias_sofia.js`:** Consolida registros por ficha, aprendiz y tipo de novedad, calculando la fecha más antigua como fecha de inicio, la fecha más reciente como fecha de fin, la sumatoria total de horas y una justificación compuesta descriptiva.
+  2. **Soporte de Lotes (`asistenciaIds`) en Backend:** Se actualizó `confirmarSubidaSofia` en `backend/controllers/instructorController.js` para aceptar un array `asistenciaIds`, marcando atómicamente todos los registros agrupados con `estadoCarga: 'SUBIDA'` y `fechaSubidaSofia: new Date()`, lo cual activa el candado visual (🔒) en el panel docente.
+  3. **Modo Real por Defecto:** Se configuró `envDryRun = process.env.RPA_DRY_RUN === 'true'` (falso por defecto), permitiendo que tanto el cron como las llamadas de backend radiquen cambios reales en Sofia Plus a menos que se use la bandera explícita `--dry-run`.
+  4. **Preservación de Login Independiente:** Se incorporó `rpa/bot_sofia_login.js` con los scripts `login:docente` en `rpa/package.json` y `rpa:login` en el `package.json` raíz.
+- **Archivos Modificados:**
+  - `rpa/bot_inasistencias_sofia.js`
+  - `rpa/bot_sofia_login.js`
+  - `rpa/package.json`
+  - `package.json`
+  - `backend/controllers/instructorController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis con `node -c` en todos los archivos JS modificados (código 0).
+  - Verificación del árbol de trabajo local sin realizar push a repositorios remotos según la instrucción del usuario.
+---
+
+## [2026-10-24 12:05] Estandarización de Variables de Entorno, Fallbacks Automáticos en Docker/Coolify y CORS Dinámico
+
+- **Fecha y Hora:** 2026-10-24 12:05:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. Al desplegar en plataformas PaaS como Coolify o Docker Compose, el sistema exigía la variable `SOFIA_ENCRYPTION_KEY`, generando dudas sobre su valor y riesgo de incompatibilidad con las contraseñas de Sofia Plus ya cifradas en MongoDB Atlas.
+  2. La política CORS en `backend/index.js` tenía URLs quemadas en código (`onrender.com`) en lugar de gobernarse de forma dinámica por variables de entorno.
+  3. Ausencia de un archivo de referencia oficial `backend/.env.example` que documentara exhaustivamente cada variable del sistema.
+- **Causa Raíz:**
+  Falta de valores de respaldo por defecto (*fallbacks*) en la configuración de `docker-compose.yml` y acoplamiento estático de orígenes CORS en el código fuente del backend.
+- **Solución Aplicada:**
+  1. **Fallback Inteligente en `docker-compose.yml`:** Se configuró `SOFIA_ENCRYPTION_KEY=${SOFIA_ENCRYPTION_KEY:-${JWT_SECRET}}`. Si el usuario no define la variable en Coolify, Docker utiliza automáticamente el valor de `JWT_SECRET`, garantizando que las contraseñas previamente guardadas en la base de datos se descifren sin ningún error.
+  2. **CORS Dinámico con Variable `CORS_ORIGIN`:** En `backend/index.js`, se reemplazó el array estático por la lectura de `process.env.CORS_ORIGIN` (`*` por defecto para desarrollo/Coolify, o lista de dominios separados por comas para producción restringida), manteniendo siempre el acceso para la app de escritorio y llamadas internas sin cabecera origin.
+  3. **Creación de `backend/.env.example`:** Plantilla comentada y auto-explicativa con todas las variables de entorno del servidor (base de datos, JWT, AES, CORS, Nodemailer, cron y RPA).
+  4. **Alineación en `backend/.env` y `README.md`:** Se añadieron las variables con sus valores de referencia para desarrollo local y se actualizó la tabla de documentación.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `backend/.env`
+  - `backend/.env.example`
+  - `docker-compose.yml`
+  - `README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis de `backend/index.js` validada con `node -c` (código 0).
+  - Script de prueba verificó que las 4 contraseñas existentes de Sofia Plus en MongoDB Atlas se descifran exitosamente tanto con `SOFIA_ENCRYPTION_KEY` como con el fallback de `JWT_SECRET`.
+  - Despliegue sin push a repositorios remotos según las instrucciones del usuario.
+
+
+---
+
+## [2026-10-24 16:40] Parametrización Total de Orígenes Permitidos y Variables de Semilla (Seed) de Administrador
+
+- **Fecha y Hora:** 2026-10-24 16:40:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  1. En `huellero/src/main/config.js`, los valores de respaldo por defecto de `backendUrl` y `wsUrl` apuntaban de forma estática a una URL quemada de Render (`https://huelleroactualizado-1.onrender.com`).
+  2. La función de inicialización y sembrado de la cuenta de administrador en `backend/index.js` (`iniciarServidor()`) utilizaba credenciales quemadas en código (`senahuellero@gmail.com` y `sena2026ADSO`).
+  3. Soporte para múltiples nomenclaturas de variables para orígenes CORS (`CORS_ORIGIN`, `ALLOWED_ORIGINS`, `ORIGENES_PERMITIDOS`).
+- **Causa Raíz:**
+  Presencia de valores legados de Render quemados en código fuente y falta de desacoplamiento de las credenciales de semilla (seed) en el backend.
+- **Solución Aplicada:**
+  1. **Variables de Semilla en Backend:** Se parametrizaron `SEED_ADMIN_EMAIL` (`ADMIN_EMAIL`), `SEED_ADMIN_PASSWORD` (`ADMIN_PASSWORD`), `SEED_ADMIN_NAME` y `SEED_ADMIN_TELEFONO` en `backend/index.js`, manteniendo los valores institucionales históricos como valores de fallback.
+  2. **Flexibilidad en Orígenes CORS:** Se unificó la lectura de orígenes permitidos con fallback para `CORS_ORIGIN`, `ALLOWED_ORIGINS` y `ORIGENES_PERMITIDOS`.
+  3. **Limpieza de URLs de Render en Desktop:** En `huellero/src/main/config.js`, se sustituyeron los fallbacks estáticos de Render por `http://localhost:3000` y `ws://localhost:3000`, gobernados por `HUELLERO_BACKEND_URL` y `HUELLERO_WS_URL`.
+  4. **Documentación Oficial:** Se actualizaron `docker-compose.yml`, `backend/.env.example`, `backend/.env` y `README.md`.
+- **Archivos Modificados:**
+  - `backend/index.js`
+  - `backend/.env`
+  - `backend/.env.example`
+  - `docker-compose.yml`
+  - `huellero/src/main/config.js`
+  - `README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis validada con `node -c` en `backend/index.js` y `huellero/src/main/config.js` (código 0).
+  - Verificación de ausencia de URLs quemadas de Render en el código fuente del proyecto.
+
+
+---
+
+## [2026-10-24 22:20] Integración y Verificación Local de Cambios de Layouts Remotos (Commit 7b77d3f de Oscar)
+
+- **Fecha y Hora:** 2026-10-24 22:20:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  El equipo remoto realizó un push a `origin/main` (`7b77d3f` por oscar20981 seguido de la compilación CI `215bc7c`), pero los cambios no eran visibles en el entorno local del usuario porque la rama de trabajo (`juan`) no los había incorporado. Se requirió inspeccionar el historial de Git, fusionar las modificaciones e implementarlas localmente sin realizar push.
+- **Causa Raíz:**
+  Divergencia entre la rama local `juan` y la rama remota `origin/main` posterior a la subida de los nuevos layouts y estilos frontend.
+- **Solución Aplicada:**
+  1. **Fetch Completo:** Se ejecutó `git fetch --all --prune` identificando los commits `7b77d3f` (Oscar: modificación de layouts) y `215bc7c` (CI Monolito build) en `origin/main`, además de `fix/security` de Jorge en ramas remotas separadas.
+  2. **Merge Sin Conflictos:** Se realizó la fusión de `origin/main` en la rama local `juan` (`git merge --no-commit origin/main`), integrando limpiamente los 14 archivos frontend modificados (vistas `PanelInstructor.vue`, `PanelEstudiante.vue`, `Reportes.vue`, nuevos estilos CSS y assets de excusas).
+  3. **Preservación de Configuraciones Críticas:** Se mantuvieron intactas las variables parametrizadas de Docker y backend (`SOFIA_ENCRYPTION_KEY`, `CORS_ORIGIN`, `ALLOWED_ORIGINS`, `SEED_ADMIN_*`) y el mapeo estandarizado de puertos (`3000:3000`).
+  4. **Compilación de Producción:** Se ejecutó `npm run build:prod` verificando la transformación exitosa de 324 módulos Vite en 1.58s sin errores.
+  5. **Cumplimiento de Directiva de Seguridad:** No se realizó ningún push a repositorios remotos (`origin` ni `asista`).
+- **Archivos Modificados / Integrados:**
+  - `frontend/src/assets/con-excusa-icon.png`
+  - `frontend/src/assets/historial-aprendiz-icon.png`
+  - `frontend/src/assets/sin-excusa-icon.png`
+  - `frontend/src/composables/useAuth.js`
+  - `frontend/src/layouts/DefaultLayout.vue`
+  - `frontend/src/styles/login.css`
+  - `frontend/src/styles/main.css`
+  - `frontend/src/styles/panelEstudiante.css`
+  - `frontend/src/styles/panelInstructor.css`
+  - `frontend/src/views/Estudiantes.vue`
+  - `frontend/src/views/Login.vue`
+  - `frontend/src/views/PanelEstudiante.vue`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `frontend/src/views/Reportes.vue`
+  - `docker-compose.yml`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Fusión limpia en Git (0 conflictos de código).
+  - Compilación de frontend con `npm run build:prod` exitosa en 1.58 segundos.
+  - Estado de Git limpio y verificado localmente en commit de fusión.
+
+
+---
+
+## [2026-10-24 22:30] Corrección de Error de Inasistencias no Visibles en Entorno Local (getFichaIdList is not defined)
+
+- **Fecha y Hora:** 2026-10-24 22:30:00 -05:00
+- **Descripción del Problema / Bug:**
+  En el entorno local, las inasistencias y registros de asistencia no se visualizaban ni se cargaban desde MongoDB Atlas al seleccionar una ficha o consultar reportes, quedando las tablas e historiales vacíos (`[]`).
+- **Causa Raíz:**
+  En el commit `071e460` (descontinuación de SQLite), se removieron por error las importaciones de servicios auxiliares en `backend/controllers/asistenciaController.js` (`getFichaIdList`, `getHoyString`, `emitirAsistenciaRegistrada`, `calcularEstadoCarga`, `asegurarJornada`). Cuando el frontend consultaba `GET /api/asistencias?fichaId=...`, el servidor lanzaba un error HTTP 500 (`getFichaIdList is not defined`), haciendo que el cliente capturara el fallo y retornara un array vacío silenciosamente.
+- **Solución Aplicada:**
+  Se restauraron las importaciones requeridas de `asistenciaService.js`, `socketService.js`, `jornadaUtils.js`, `inasistenciaEstado.js` y `jornadaService.js` en `backend/controllers/asistenciaController.js`.
+- **Archivos Modificados:**
+  - `backend/controllers/asistenciaController.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Petición HTTP directa a `http://localhost:3000/api/asistencias?fichaId=6ab1c00a31d01b2c49e68ce8` devolvió satisfactoriamente los 48 registros de asistencias e inasistencias de la ficha.
+  - Petición a `fichaId=6acec5daaaf924acea01c5fb` devolvió las 4 inasistencias registradas.
+  - Sin push a repositorios remotos según la instrucción del usuario.
+
+
+---
+
+## [2026-10-24 23:48] Modal Elegante de Desvinculacion, Modo Dual para Agregar Docentes y Optimizacion de Filtros de Estudiantes
+
+- **Fecha y Hora:** 2026-10-24 23:48:00 -05:00
+- **Descripcion del Problema / Bug:**
+  1. En Estudiantes.vue, los filtros estaban apretados e incluian un filtro por estado del aprendiz que congestionaba la interfaz y resultaba redundante para la busqueda frecuente.
+  2. En PanelInstructor.vue, la desvinculacion de docentes de una ficha utilizaba un confirm nativo del navegador muy basico (window.confirm), careciendo de un diseno acorde al sistema y sin mostrar el detalle del docente afectado ni advertencias claras.
+  3. En la asignacion de docentes al equipo de la ficha, solo se permitia seleccionar docentes ya creados mediante un dropdown select, sin opcion de registrar un nuevo docente con todos sus datos pertinentes (Nombres, Apellidos, Documento, Correo, Telefono, Especialidad).
+- **Causa Raiz:**
+  - Ausencia de modal personalizado para la confirmacion de retiro de docentes en el equipo de la ficha.
+  - El backend ddInstructorAFicha unicamente procesaba instructorId existente y la ruta POST /instructores requeria exclusivamente rol Administrador.
+  - La cuadricula de filtros en Estudiantes.vue repartia el espacio en 3 columnas forzadas por la presencia del filtro de estado.
+- **Solucion Aplicada:**
+  1. **Modal Elegante de Desvinculacion (PanelInstructor.vue):** Se implemento un modal de confirmacion visual con estilo de advertencia (#fee2e2/#dc2626), que presenta los datos completos del docente a desvincular (nombre completo, correo, especialidad) y explica con claridad que las asistencias registradas previamente se conservaran intactas.
+  2. **Modo Dual para Asignar Docentes (PanelInstructor.vue + ichaController.js):**
+     - Se integraron tabs interactivos en el modal: 'Docente Existente' (select desplegable con docentes registrados no asignados) y '+ Registrar Nuevo Docente' (formulario completo de 2 columnas con Nombres, Apellidos, Tipo y Numero de Documento, Correo institucional, Telefono y Especialidad).
+     - En ackend/controllers/fichaController.js, se amplio ddInstructorAFicha para recibir 
+uevoDocente, validando campos, normalizando datos, generando hash bcrypt con la clave inicial del instructor y asignandolo directamente a la ficha.
+     - En ackend/routes/instructores.js, se permitio el registro a lideres mediante erificarRolOLider(['Administrador']).
+     - En rontend/src/services/index.js, se adapto pi.fichas.agregarInstructor para admitir tanto string como objeto payload { instructorId } / { nuevoDocente }.
+  3. **Optimizacion de Filtros en Estudiantes (Estudiantes.vue):**
+     - Se eliminaron los campos de filtro por estado de aprendiz.
+     - Se actualizo la cuadricula CSS a 2 columnas equilibradas (minmax(320px, 1.3fr) minmax(280px, 1fr) con width: 100%), permitiendo que el selector de ficha y el buscador por nombres/documento aprovechen todo el ancho sin verse apretados.
+- **Archivos Modificados:**
+  - ackend/controllers/fichaController.js
+  - ackend/routes/instructores.js
+  - rontend/src/services/index.js
+  - rontend/src/views/Estudiantes.vue
+  - rontend/src/views/PanelInstructor.vue
+  - TROUBLESHOOTING.md
+- **Verificacion:**
+  - Compilacion de produccion con 
+pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias criticas).
+  - Restauracion del directorio ackend/public/ para no ensuciar el control de versiones.
+  - Registro sin push a ramas remotas conforme a la restriccion estricta.
+
+
+---
+
+## [2026-10-25 00:01] Corrección de Error 404 en /plantillas-biometricas al Seleccionar Ficha
+
+- **Fecha y Hora:** 2026-10-25 00:01:00 -05:00
+- **Descripción del Problema / Bug:**
+  Al seleccionar una ficha en el panel del instructor (`PanelInstructor.vue`), la consola del navegador arrojaba un error 404 (Not Found):
+  `GET http://localhost:3000/api/fichas/<id>/plantillas-biometricas 404 (Not Found)`
+  seguido de:
+  `Error bio: Error: Ruta de API no encontrada PanelInstructor.vue:424`
+  Adicionalmente se observaba el mensaje `Unchecked runtime.lastError: Uncaught ReferenceError: w is not defined :5173/#/:1` en la línea 1 del documento proveniente de una extensión del navegador.
+- **Causa Raíz:**
+  1. En el backend (`backend/routes/fichas.js`), la ruta existente para obtener plantillas de la ficha estaba nombrada como `/:id/plantillas`, mientras que el servicio frontend (`frontend/src/services/index.js`) consultaba `/:id/plantillas-biometricas`, provocando el error 404.
+  2. El controlador `getPlantillasFicha` (`backend/controllers/fichaController.js`) requería de forma estricta los headers `x-device-id` y `x-device-token` del hardware biométrico Anviz, rechazando a usuarios autenticados con JWT (como instructores y administradores navegando en la web).
+- **Solución Aplicada:**
+  1. En `backend/routes/fichas.js`, se expuso tanto `/:id/plantillas` como el alias `/:id/plantillas-biometricas` protegido con el middleware `autenticarOpcional`.
+  2. En `backend/controllers/fichaController.js`, se flexibilizó `getPlantillasFicha` permitiendo el acceso directo si la petición cuenta con una sesión JWT activa (`req.usuario`), o de forma alternativa validando credenciales de dispositivo (`x-device-id` / `x-device-token`).
+  3. En `frontend/src/views/PanelInstructor.vue`, se controló la captura de excepciones con fallback limpio (`.catch(() => [])`) para evitar trazas rojas innecesarias en la consola.
+- **Archivos Modificados:**
+  - `backend/controllers/fichaController.js`
+  - `backend/routes/fichas.js`
+  - `frontend/src/views/PanelInstructor.vue`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Consulta HTTP con token JWT de instructor hacia `http://localhost:3000/api/fichas/6ab1c00a31d01b2c49e68ce8/plantillas-biometricas` devolvió exitosamente `Status 200 OK` con el array de 24 registros biométricos de aprendices.
+  - Compilación de frontend con `npm run build:prod` completada sin errores en 649ms.
+  - Sin push a ramas remotas.
+
+
+---
+
+## [2026-10-25 00:25] Integración Completa de Parches de Seguridad desde Rama fix/security
+
+- **Fecha y Hora:** 2026-10-25 00:25:00 -05:00
+- **Descripción del Problema / Bug:**
+  Integración exhaustiva del endurecimiento de seguridad perimetral, prevención de ataques NoSQL injection, mitigación de Broken Access Control (IDOR), control estricto de roles en WebSockets y seguridad en contenedores Docker provenientes de los commits remotos de la rama `fix/security` (`1c4b580` y `5b210db`), preservando al 100% las funcionalidades frontend recientes, la configuración de líderes/docentes en fichas y el uso nativo de MongoDB.
+- **Causa Raíz:**
+  La rama remota `origin/fix/security` introdujo parches de seguridad indispensables contra inyecciones y accesos cruzados, pero un `git merge` estándar habría sobrescrito cambios del frontend, rutas de endpoints de líderes y configuraciones locales. Se requería una integración selectiva, precisa y verificada.
+- **Solución Aplicada:**
+  1. *Sanitización NoSQL y Prototipos:* Creación de `backend/middlewares/sanitize.js` contra operadores Mongo (`$gt`, `$ne`, etc.) y claves maliciosas (`__proto__`, `constructor`).
+  2. *Control de Orígenes CORS y WebSockets:* Creación de `backend/utils/corsOrigins.js` para validación dinámica de dominios e integración en handshake de Socket.IO con validación de pertenencia a salas (`ficha_<id>`).
+  3. *Autenticación y Permisos:*
+     - Generación segura de secretos JWT (`resolverSecretoJWT` con mínimo 32 caracteres) y firma `HS256`.
+     - Endurecimiento de `cambiarPassword` tomando identidad exclusivamente de `req.usuario.id`.
+     - Límite de 5 intentos fallidos y códigos de recuperación con `crypto.randomInt` sin exponer PIN en respuestas.
+     - Aislamiento de perfiles (aprendices solo consultan sus asistencias/excusas; docentes solo acceden a sus fichas).
+     - Validación de credenciales para endpoints de enrolamiento y dispositivos biométricos.
+  4. *Cifrado de Credenciales:* `backend/services/cryptoService.js` con AES-256-GCM estricto (falla segura sin exponer texto plano) y fallback a `LEGACY_SECRET`.
+  5. *Seguridad en Docker:*
+     - Multi-stage build con `USER node` (sin privilegios root) y healthcheck nativo con `fetch`.
+     - `docker-compose.yml` endurecido con `read_only: true`, `tmpfs: /tmp`, `cap_drop: [ALL]`, `no-new-privileges:true` y mapeo de puertos local activo (`3000:3000`).
+     - Actualización de `.dockerignore`, `.gitignore`, `.env.example`, `frontend/Dockerfile` y `frontend/nginx.conf`.
+  6. *Corrección de Sintaxis:* Reparación de bloque `try` duplicado en `backend/controllers/instructorController.js` detectado durante la auditoría de módulos.
+- **Archivos Modificados:**
+  - `.dockerignore`
+  - `.env.example`
+  - `.gitignore`
+  - `Dockerfile`
+  - `backend/.dockerignore`
+  - `backend/Dockerfile`
+  - `backend/controllers/adminController.js`
+  - `backend/controllers/asistenciaController.js`
+  - `backend/controllers/authController.js`
+  - `backend/controllers/enrolamientoController.js`
+  - `backend/controllers/estudianteController.js`
+  - `backend/controllers/excusaController.js`
+  - `backend/controllers/fichaController.js`
+  - `backend/controllers/instructorController.js`
+  - `backend/controllers/permisoDatosController.js`
+  - `backend/index.js`
+  - `backend/middlewares/auth.js`
+  - `backend/middlewares/rateLimiter.js`
+  - `backend/middlewares/sanitize.js`
+  - `backend/models/Admin.js`
+  - `backend/models/Instructor.js`
+  - `backend/routes/asistencias.js`
+  - `backend/routes/auth.js`
+  - `backend/routes/clases.js`
+  - `backend/routes/dispositivos.js`
+  - `backend/routes/enrolamiento.js`
+  - `backend/routes/estudiantes.js`
+  - `backend/routes/excusas.js`
+  - `backend/routes/fichas.js`
+  - `backend/routes/instructores.js`
+  - `backend/routes/jornadas.js`
+  - `backend/services/cryptoService.js`
+  - `backend/services/emailService.js`
+  - `backend/services/socketService.js`
+  - `backend/utils/corsOrigins.js`
+  - `docker-compose.yml`
+  - `frontend/.dockerignore`
+  - `frontend/Dockerfile`
+  - `frontend/nginx.conf`
+  - `frontend/src/components/ModalPrimerLoginInstructor.vue`
+  - `frontend/src/views/AdminPerfil.vue`
+  - `huellero/src/main/engine.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Verificación sintáctica y de importación de todos los módulos backend (41 archivos validados exitosamente con Node ESM).
+  - Compilación de producción con `npm run build:prod` completada en 597ms sin errores.
+  - Validación de arranque de servidor y middleware de seguridad perimetral.
+  - Ningún push remoto realizado (todo conservado en commits locales de la rama `juan`).
+
+
+---
+
+## [2026-10-25 00:38] Depuración y Actualización de Documentación: Retiro de SQLite y Archivos No Técnicos
+
+- **Fecha y Hora:** 2026-10-25 00:38:00 -05:00
+- **Descripción del Problema / Bug:**
+  Depuración y actualización integral de la documentación del proyecto. Se eliminaron referencias obsoletas a SQLite en la documentación técnica y scripts de arranque, y se removieron de `docs/` los archivos no técnicos de plan de negocio/emprendimiento ajenos al alcance del proyecto final de software.
+- **Causa Raíz:**
+  La arquitectura del sistema evolucionó hacia la persistencia 100% en MongoDB Atlas y cola atómica JSON en el kiosco desktop (`store.js`), descontinuando SQLite. No obstante, los documentos `README.md`, `setup_huellas.bat`, `docs/PRD.md`, `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md` y `CONSOLIDADO_CAMBIOS_Y_BUGS.md` aún describían la exportación de bases de datos SQLite como activa, generando confusión técnica. Adicionalmente, persistían en `docs/` plantillas de planes de negocio no pertinentes para la entrega de software.
+- **Solución Aplicada:**
+  1. *Depuración de SQLite en Documentación:*
+     - `README.md`: Diagrama de flujo Mermaid, tabla de componentes, variables de entorno y estructura de directorios actualizados a MongoDB Atlas y reportes oficiales en Excel/PDF.
+     - `setup_huellas.bat`: Removidas verificaciones de `better-sqlite3` y referencias en texto de instalación de backend.
+     - `docs/PRD.md` y `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`: Requerimientos funcionales y no funcionales actualizados a resiliencia mediante cola atómica local y persistencia cloud.
+     - `CONSOLIDADO_CAMBIOS_Y_BUGS.md`: Normalización de diagramas y tecnologías hacia la arquitectura actual.
+  2. *Depuración de Documentos No Relevantes:*
+     - Eliminación con control de versiones de: `docs/MODELO_CANVAS_SENA.md`, `docs/MODULO_1_PLAN_DE_NEGOCIO.md`, `docs/MODULO_5_ORGANIZACION.md` y `docs/MODULO_6_METAS_SOCIALES.md`.
+- **Archivos Modificados:**
+  - `README.md`
+  - `setup_huellas.bat`
+  - `docs/PRD.md`
+  - `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`
+  - `CONSOLIDADO_CAMBIOS_Y_BUGS.md`
+  - `docs/MODELO_CANVAS_SENA.md` (eliminado)
+  - `docs/MODULO_1_PLAN_DE_NEGOCIO.md` (eliminado)
+  - `docs/MODULO_5_ORGANIZACION.md` (eliminado)
+  - `docs/MODULO_6_METAS_SOCIALES.md` (eliminado)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Búsqueda global `git grep -i "sqlite"` confirmó 0 ocurrencias en `README.md`, `setup_huellas.bat`, `docs/PRD.md` y `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`.
+  - Carpeta `docs/` consolidada únicamente con especificaciones técnicas, requerimientos, arquitectura, guías de instalación y diagnósticos del hardware lector.
+  - Consolidado en commits locales en la rama `juan` sin push a repositorios remotos.
