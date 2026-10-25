@@ -71,3 +71,32 @@ node rpa/bot_inasistencias_sofia.js --doc 1098765432
 # Ejecutar en modo real desatendido (producción)
 node rpa/bot_inasistencias_sofia.js --batch --auto --confirmar-registro --headless
 ```
+
+---
+
+## 🔑 Autenticación del Robot frente a la API (RPA_API_KEY)
+
+Los endpoints de Asista que consume el robot (`/api/instructores/todos-inasistencias-rpa`,
+`/api/instructores/documento/:documento/inasistencias-rpa` y
+`/api/instructores/confirmar-subida-sofia`) requieren autenticación. El robot envía una
+clave compartida en la cabecera `x-rpa-key`, que debe coincidir con `RPA_API_KEY` definida
+en el backend.
+
+Configura la misma clave en ambos lados:
+
+1. En `rpa/.env` (usado por el robot):
+   ```
+   RPA_API_KEY=<clave-larga-y-aleatoria>
+   ```
+2. En `backend/.env` (usado por la API):
+   ```
+   RPA_API_KEY=<la-misma-clave>
+   ```
+
+Genera una clave aleatoria con:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Si el robot se ejecuta sin `RPA_API_KEY` definida, aborta al inicio con un mensaje de error.

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import * as instructorController from '../controllers/instructorController.js'
 import { validarCamposRequeridos, validarEmail } from '../middlewares/validator.js'
-import { autenticarJWT, verificarRol, verificarRolOLider, autenticarOpcional } from '../middlewares/auth.js'
+import { autenticarJWT, verificarRol, verificarRolOLider, autenticarOpcional, autenticarRPA } from '../middlewares/auth.js'
 
 const router = Router()
 
@@ -38,9 +38,9 @@ router.post('/importar',
 // Endpoints de automatización RPA
 router.get('/:id/credenciales-sofia', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getCredencialesSofia)
 router.get('/documento/:documento/credenciales-sofia', autenticarJWT, verificarRol(['Administrador', 'Instructor']), instructorController.getCredencialesSofiaPorDocumento)
-router.get('/todos-inasistencias-rpa', autenticarOpcional, instructorController.getTodosInasistenciasParaRPA)
-router.get('/documento/:documento/inasistencias-rpa', autenticarOpcional, instructorController.getInasistenciasParaRPA)
-router.post('/confirmar-subida-sofia', autenticarOpcional, instructorController.confirmarSubidaSofia)
+router.get('/todos-inasistencias-rpa', autenticarRPA, instructorController.getTodosInasistenciasParaRPA)
+router.get('/documento/:documento/inasistencias-rpa', autenticarRPA, instructorController.getInasistenciasParaRPA)
+router.post('/confirmar-subida-sofia', autenticarRPA, instructorController.confirmarSubidaSofia)
 router.post('/ejecutar-rpa', autenticarJWT, verificarRol(['Administrador']), instructorController.ejecutarRobotRPA)
 router.get('/estado-rpa', autenticarJWT, verificarRol(['Administrador']), instructorController.getEstadoRobotRPA)
 
