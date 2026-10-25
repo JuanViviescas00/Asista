@@ -2,27 +2,48 @@
  * Lista blanca de orígenes para CORS (Express y Socket.IO).
  * - Peticiones sin Origin (huellero Electron, curl, mismo origen en GET) se permiten:
  *   CORS solo protege navegadores; la autenticación la hace JWT / token de dispositivo.
- * - Producción: dominio de Render + los definidos en CORS_ORIGINS (separados por coma).
+ * - Producción: dominios de Render (*.onrender.com), RENDER_EXTERNAL_URL y los definidos en CORS_ORIGIN / CORS_ORIGINS.
  * - Desarrollo: además localhost y túneles de desarrollo.
  */
 const ORIGENES_FIJOS = [
+  'https://asista.onrender.com',
   'https://huelleroactualizado-1.onrender.com',
 ]
 
-const ORIGENES_ENV = String(process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map((o) => o.trim().replace(/\/$/, ''))
-  .filter(Boolean)
+function obtenerOrigenesEnv() {
+  return [
+    process.env.CORS_ORIGINS,
+    process.env.CORS_ORIGIN,
+    process.env.ALLOWED_ORIGINS,
+    process.env.RENDER_EXTERNAL_URL,
+  ]
+    .filter(Boolean)
+    .flatMap((val) => String(val).split(','))
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+}
 
 const ES_PRODUCCION = process.env.NODE_ENV === 'production'
 
 export function esOrigenPermitido(origin) {
   if (!origin) return true
-  if (ORIGENES_FIJOS.includes(origin) || ORIGENES_ENV.includes(origin)) return true
+
+  const origenesEnv = obtenerOrigenesEnv()
+
+  // Wildcard explícito en variables de entorno
+  if (origenesEnv.includes('*')) return true
+
+  // Coincidencia exacta en lista fija o en variables de entorno
+  if (ORIGENES_FIJOS.includes(origin) || origenesEnv.includes(origin)) return true
+
+  // Cualquier subdominio de Render (ej: https://asista.onrender.com, https://asista-pr-1.onrender.com)
+  if (/^https:\/\/[a-z0-9-]+(\.onrender\.com)$/i.test(origin)) return true
+
   if (!ES_PRODUCCION) {
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true
     if (/^https:\/\/[a-z0-9-]+-\d+\.(use\.devtunnels\.ms|app\.github\.dev)$/i.test(origin)) return true
   }
+
   return false
 }
 
