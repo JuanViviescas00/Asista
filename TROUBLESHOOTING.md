@@ -1405,3 +1405,24 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
   - Búsqueda global `git grep -i "sqlite"` confirmó 0 ocurrencias en `README.md`, `setup_huellas.bat`, `docs/PRD.md` y `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`.
   - Carpeta `docs/` consolidada únicamente con especificaciones técnicas, requerimientos, arquitectura, guías de instalación y diagnósticos del hardware lector.
   - Consolidado en commits locales en la rama `juan` sin push a repositorios remotos.
+
+
+---
+
+## [2026-10-25 00:50] Resolución de Despliegue en Render y Sincronización del Monolito en main
+
+- **Fecha y Hora:** 2026-10-25 00:50:00 -05:00
+- **Descripción del Problema / Bug:**
+  Al ingresar a la URL de producción en Render.com, la aplicación no reflejaba los cambios recientes (filtros de aprendices, asignación de docentes, anomalias y seguridad), manteniendo la interfaz visual antigua.
+- **Causa Raíz:**
+  El workflow de GitHub Actions (`monolito-sync.yml`) procesó los pushes concurrentes de `Backend` y `Frontend`. La integración de `Backend` se aplicó en `origin/main` (commit `68ab3d3`), pero la rama `Frontend` no alcanzó a fusionarse en el repositorio principal. Como Render despliega exclusivamente desde la rama `main` y sirve la carpeta de estáticos `backend/public/`, el servidor continuaba sirviendo el bundle HTML/JS antiguo de hace días.
+- **Solución Aplicada:**
+  1. Se fusionaron en local los cambios completos de frontend y backend hacia la rama `main`.
+  2. Se ejecutó la compilación de producción con `npm run build:prod`, generando el nuevo bundle de producción (`index-Bvpnp_MJ.js`, `index-CS_Me8kV.css`) dentro de `backend/public/`.
+  3. Se incluyó forzosamente `backend/public` en el commit del monolito (`3825240`) y se publicó directamente en `origin/main` y `asista/main`.
+- **Archivos Modificados:**
+  - Rama `main` (`backend/public/*` con el nuevo bundle estático y código fuente del frontend).
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Inspección de `main:backend/public/index.html` confirmó las referencias al bundle moderno con hash `index-Bvpnp_MJ.js`.
+  - Push exitoso a `origin/main` disparando el despliegue automático en la plataforma Render.
