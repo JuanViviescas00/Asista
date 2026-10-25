@@ -7,7 +7,9 @@ import mongoose from 'mongoose'
 import bcryptjs from 'bcryptjs'
 import { calcularResumenDesdeAsistencias } from '../services/asistenciaService.js'
 import { construirFilasResumenPorEstudiante } from '../utils/inasistenciaResumen.js'
-import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textUtils.js'
+import { capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma, normalizarTipoDocumento } from '../utils/textUtils.js'
+import Instructor from '../models/Instructor.js'
+import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
 
 export async function getFichas(req, res) {
   try {
@@ -244,10 +246,7 @@ export async function importarFichas(req, res) {
 export async function addInstructorAFicha(req, res) {
   try {
     const { id } = req.params
-    const { instructorId } = req.body
-    if (!instructorId) {
-      return res.status(400).json({ error: 'Se requiere el ID del instructor a agregar' })
-    }
+    let { instructorId, nuevoDocente } = req.body
 
     const ficha = await Ficha.findById(id)
     if (!ficha) return res.status(404).json({ error: 'Ficha no encontrada' })
@@ -258,6 +257,51 @@ export async function addInstructorAFicha(req, res) {
 
     if (!esAdmin && !esLider) {
       return res.status(403).json({ error: 'Solo el docente líder de la ficha o un administrador puede agregar docentes al equipo.' })
+    }
+
+    // Si viene nuevoDocente, crearlo o reutilizarlo si ya existe
+    if (nuevoDocente && !instructorId) {
+      const { nombres, apellidos, tipoDocumento, numeroDocumento, correo, telefono, especialidad, password } = nuevoDocente
+      if (!nombres || !apellidos || !numeroDocumento || !correo) {
+        return res.status(400).json({ error: 'Nombres, apellidos, número de documento y correo son obligatorios para el nuevo docente.' })
+      }
+
+      const docNorm = normalizarNumeroDocumento(numeroDocumento)
+      const correoNorm = String(correo).trim().toLowerCase()
+
+      const existe = await Instructor.findOne({
+        $or: [{ numeroDocumento: docNorm }, { correo: correoNorm }]
+      })
+
+      if (existe) {
+        instructorId = existe._id
+      } else {
+        const clavePlana = password || claveInicialInstructor(docNorm)
+        if (String(clavePlana).length < 6) {
+          return res.status(400).json({ error: 'La contraseña inicial no es válida: el número de documento debe tener al menos 6 dígitos.' })
+        }
+        const hashedPassword = await hashPassword(clavePlana)
+
+        const nuevoInst = new Instructor({
+          nombres: capitalizarTexto(nombres),
+          apellidos: capitalizarTexto(apellidos),
+          tipoDocumento: normalizarTipoDocumento(tipoDocumento || 'CC'),
+          numeroDocumento: docNorm,
+          correo: correoNorm,
+          telefono: String(telefono || '').trim(),
+          especialidad: capitalizarTexto(especialidad || 'Docente'),
+          password: hashedPassword,
+          rol: 'Instructor',
+          primerLogin: true,
+          estado: 'Activo'
+        })
+        await nuevoInst.save()
+        instructorId = nuevoInst._id
+      }
+    }
+
+    if (!instructorId) {
+      return res.status(400).json({ error: 'Se requiere el ID del instructor a agregar o los datos del nuevo docente.' })
     }
 
     if (String(ficha.instructorLiderId) === String(instructorId)) {

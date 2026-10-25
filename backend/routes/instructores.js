@@ -11,7 +11,7 @@ router.get('/', autenticarJWT, instructorController.getInstructores)
 // Mutaciones de instructores (restringidas a Administrador)
 router.post('/',
   autenticarJWT,
-  verificarRol(['Administrador']),
+  verificarRolOLider(['Administrador']),
   validarCamposRequeridos(['nombres', 'apellidos', 'numeroDocumento', 'correo']),
   validarEmail('correo'),
   instructorController.createInstructor

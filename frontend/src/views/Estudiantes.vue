@@ -394,18 +394,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           </div>
         </div>
 
-        <div class="filtro-campo campo-estado">
-          <label>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-            Estado Aprendiz
-          </label>
-          <select v-model="filtroEstado" class="filtro-input">
-            <option value="Todos">Todos los estados</option>
-            <option value="Activo">Activos</option>
-            <option value="Inactivo">Inactivos</option>
-            <option value="Retirado">Retirados</option>
-          </select>
-        </div>
+
       </template>
 
       <template v-else>
@@ -438,18 +427,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           </select>
         </div>
 
-        <div class="filtro-campo campo-estado">
-          <label>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-            Estado
-          </label>
-          <select v-model="filtroEstado" class="filtro-input">
-            <option value="Todos">Todos</option>
-            <option value="Activo">Activos</option>
-            <option value="Inactivo">Inactivos</option>
-            <option value="Retirado">Retirados</option>
-          </select>
-        </div>
+
 
         <div class="filtro-campo campo-asistencia">
           <label>
@@ -472,9 +450,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
         <h3>Listado de Estudiantes</h3>
         <span v-if="criteriosActivos > 0" class="badge badge-primary">{{ estudiantesFiltrados.length }} resultado(s)</span>
-        <select v-if="!esInstructor" v-model="filtroEstado" class="filtro-select">
-          <option value="Todos">Todos</option><option value="Activo">Activos</option><option value="Inactivo">Inactivos</option><option value="Retirado">Retirados</option>
-        </select>
+        
       </div>
       <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante" style="display: inline-flex; align-items: center; gap: 6px;">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -647,7 +623,8 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   width: 100%;
 }
 .busqueda-filtros-grid.grid-instructor {
-  grid-template-columns: minmax(320px, 1.8fr) minmax(260px, 1.4fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(320px, 1.3fr) minmax(280px, 1fr);
+  width: 100%;
 }
 .busqueda-filtros-grid.grid-admin {
   grid-template-columns: minmax(260px, 1.8fr) minmax(180px, 1.3fr) minmax(150px, 1fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr) minmax(130px, 0.8fr);

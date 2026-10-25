@@ -1229,3 +1229,41 @@
   - Petición HTTP directa a `http://localhost:3000/api/asistencias?fichaId=6ab1c00a31d01b2c49e68ce8` devolvió satisfactoriamente los 48 registros de asistencias e inasistencias de la ficha.
   - Petición a `fichaId=6acec5daaaf924acea01c5fb` devolvió las 4 inasistencias registradas.
   - Sin push a repositorios remotos según la instrucción del usuario.
+
+
+---
+
+## [2026-10-24 23:48] Modal Elegante de Desvinculacion, Modo Dual para Agregar Docentes y Optimizacion de Filtros de Estudiantes
+
+- **Fecha y Hora:** 2026-10-24 23:48:00 -05:00
+- **Descripcion del Problema / Bug:**
+  1. En Estudiantes.vue, los filtros estaban apretados e incluian un filtro por estado del aprendiz que congestionaba la interfaz y resultaba redundante para la busqueda frecuente.
+  2. En PanelInstructor.vue, la desvinculacion de docentes de una ficha utilizaba un confirm nativo del navegador muy basico (window.confirm), careciendo de un diseno acorde al sistema y sin mostrar el detalle del docente afectado ni advertencias claras.
+  3. En la asignacion de docentes al equipo de la ficha, solo se permitia seleccionar docentes ya creados mediante un dropdown select, sin opcion de registrar un nuevo docente con todos sus datos pertinentes (Nombres, Apellidos, Documento, Correo, Telefono, Especialidad).
+- **Causa Raiz:**
+  - Ausencia de modal personalizado para la confirmacion de retiro de docentes en el equipo de la ficha.
+  - El backend ddInstructorAFicha unicamente procesaba instructorId existente y la ruta POST /instructores requeria exclusivamente rol Administrador.
+  - La cuadricula de filtros en Estudiantes.vue repartia el espacio en 3 columnas forzadas por la presencia del filtro de estado.
+- **Solucion Aplicada:**
+  1. **Modal Elegante de Desvinculacion (PanelInstructor.vue):** Se implemento un modal de confirmacion visual con estilo de advertencia (#fee2e2/#dc2626), que presenta los datos completos del docente a desvincular (nombre completo, correo, especialidad) y explica con claridad que las asistencias registradas previamente se conservaran intactas.
+  2. **Modo Dual para Asignar Docentes (PanelInstructor.vue + ichaController.js):**
+     - Se integraron tabs interactivos en el modal: 'Docente Existente' (select desplegable con docentes registrados no asignados) y '+ Registrar Nuevo Docente' (formulario completo de 2 columnas con Nombres, Apellidos, Tipo y Numero de Documento, Correo institucional, Telefono y Especialidad).
+     - En ackend/controllers/fichaController.js, se amplio ddInstructorAFicha para recibir 
+uevoDocente, validando campos, normalizando datos, generando hash bcrypt con la clave inicial del instructor y asignandolo directamente a la ficha.
+     - En ackend/routes/instructores.js, se permitio el registro a lideres mediante erificarRolOLider(['Administrador']).
+     - En rontend/src/services/index.js, se adapto pi.fichas.agregarInstructor para admitir tanto string como objeto payload { instructorId } / { nuevoDocente }.
+  3. **Optimizacion de Filtros en Estudiantes (Estudiantes.vue):**
+     - Se eliminaron los campos de filtro por estado de aprendiz.
+     - Se actualizo la cuadricula CSS a 2 columnas equilibradas (minmax(320px, 1.3fr) minmax(280px, 1fr) con width: 100%), permitiendo que el selector de ficha y el buscador por nombres/documento aprovechen todo el ancho sin verse apretados.
+- **Archivos Modificados:**
+  - ackend/controllers/fichaController.js
+  - ackend/routes/instructores.js
+  - rontend/src/services/index.js
+  - rontend/src/views/Estudiantes.vue
+  - rontend/src/views/PanelInstructor.vue
+  - TROUBLESHOOTING.md
+- **Verificacion:**
+  - Compilacion de produccion con 
+pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias criticas).
+  - Restauracion del directorio ackend/public/ para no ensuciar el control de versiones.
+  - Registro sin push a ramas remotas conforme a la restriccion estricta.
