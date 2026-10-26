@@ -6,9 +6,6 @@ import { socket, unirseASalaFicha, salirDeSalaFicha } from '../services/index.js
 import { calcularMinutosTranscurridos, calcularEstadoPorTiempo } from '../utils/asistenciaTiempo.js'
 import { useAsistenciaDraftStore } from '../stores/asistenciaDraft.js'
 import '../styles/panelInstructor.css'
-import iconoTomarAsistencia from '../assets/tomar-asistencia-icon.png'
-import iconoHistorial from '../assets/historial-icon.png'
-import iconoEquipoDocente from '../assets/equipo-docente-icon.png'
 
 const INTERVALO_COLA_OFFLINE_MS = 5000
 
@@ -1596,7 +1593,16 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'asistencia'"
               title="Tomar Asistencia"
             >
-              <img :src="iconoTomarAsistencia" alt="Tomar Asistencia" class="tab-icon-img" width="16" height="16" />
+              <svg class="tab-icon-color" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="34" height="34" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="5" y="9" width="32" height="30" rx="5" fill="#E8F5E0" stroke="#2F8C00" stroke-width="2.5"/>
+  <path d="M5 18h32" stroke="#2F8C00" stroke-width="2.5"/>
+  <path d="M5 14a5 5 0 0 1 5-5h22a5 5 0 0 1 5 5v4H5z" fill="#39A900" stroke="#2F8C00" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M13 5v7M29 5v7" stroke="#2F8C00" stroke-width="3"/>
+  <path d="M11 25l2 2 3.5-4M20 25l2 2 3.5-4M11 33l2 2 3.5-4" stroke="#39A900" stroke-width="2.2"/>
+  <circle cx="35" cy="34" r="10" fill="#ffffff" stroke="#2F8C00" stroke-width="2.5"/>
+  <path d="M35 28.5V34l3.5 2.5" stroke="#2F8C00" stroke-width="2.5"/>
+</svg>
+              <span class="tab-label">Asistencia</span>
             </button>
             <button
               class="tab-btn"
@@ -1604,7 +1610,8 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'editar_asistencia'"
               title="Historial"
             >
-              <img :src="iconoHistorial" alt="Historial" class="tab-icon-img" width="16" height="16" />
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>
+              <span class="tab-label">Historial</span>
             </button>
             <button
               class="tab-btn"
@@ -1612,7 +1619,8 @@ function descargarExcel(data, nombreArchivo) {
               @click="vistaFicha = 'docentes'"
               title="Equipo Docente"
             >
-              <img :src="iconoEquipoDocente" alt="Equipo Docente" class="tab-icon-img" width="16" height="16" />
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span class="tab-label">Equipo</span>
             </button>
 
             <!-- Botón-switch de pase de lista: rojo = apagado, verde = encendido -->
