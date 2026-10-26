@@ -122,7 +122,12 @@ export async function finalizar(req, res) {
       fichaId: String(claseFinalizada.fichaId),
     })
 
-    res.json({ success: true, clase: claseFinalizada, enviadoPorWebSocket: enviado })
+    res.json({
+      success: true,
+      clase: claseFinalizada,
+      enviadoPorWebSocket: enviado,
+      faltasCreadas: resultado.creados || 0,
+    })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
