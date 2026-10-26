@@ -1128,6 +1128,13 @@ async function marcarFalta(estId) {
   }
 
   if (reg.excusa) {
+    if (Number(reg.horasFallidas) < horasClaseFicha.value) {
+      reg.horasTardanza = 0
+      reg.tiempoTardanza = '0 horas'
+      reg.horasFallidas = horasAuto(reg)
+      await sincronizarCambioNube(estId)
+      return
+    }
     // Desmarcar la falla justificada: vuelve a Presente
     const previo = reg.previo
     reg.estado = previo?.estado || 'Presente'
@@ -1856,7 +1863,7 @@ function descargarExcel(data, nombreArchivo) {
                     <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
-                        :checked="asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.excusa"
+                        :checked="asistenciaDia[est._id]?.estado === 'Falta' || (asistenciaDia[est._id]?.excusa && Number(asistenciaDia[est._id]?.horasFallidas) >= horasClaseFicha)"
                         :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                         @change="marcarFalta(est._id)"
                       />
@@ -1891,15 +1898,15 @@ function descargarExcel(data, nombreArchivo) {
                       class="badge badge-warning badge-excusa-tip"
                       tabindex="0"
                       role="button"
-                      :aria-label="'Excusada: ' + (asistenciaDia[est._id]?.motivoExcusa || 'sin descripción')"
+                      :aria-label="'Excusada: ' + (asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará &quot;Con excusa&quot; a Sofía Plus')"
                       @click="editarExcusa(est._id)"
                       @keydown.enter="editarExcusa(est._id)"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                       Excusada
                       <span class="excusa-tooltip" role="tooltip">
-                        <strong>Motivo de la excusa</strong>
-                        <span>{{ asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada' }}</span>
+                        <strong>Descripción para Sofía Plus</strong>
+                        <span>{{ asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará "Con excusa" a Sofía Plus' }}</span>
                         <em v-if="asistenciaDia[est._id]?.esMio && !asistenciaDia[est._id]?.subidoSofia">Clic para editar</em>
                       </span>
                     </span>
@@ -1985,7 +1992,7 @@ function descargarExcel(data, nombreArchivo) {
                   <div class="mob-status-badge">
                     <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
                     <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada'" @click="editarExcusa(est._id)">Excusada</span>
+                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará &quot;Con excusa&quot; a Sofía Plus'" @click="editarExcusa(est._id)">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
                     <span v-else class="badge-mob-pres">Presente</span>
@@ -2018,7 +2025,7 @@ function descargarExcel(data, nombreArchivo) {
                     <button
                       type="button"
                       class="btn-mob-falta"
-                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.excusa }"
+                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' || (asistenciaDia[est._id]?.excusa && Number(asistenciaDia[est._id]?.horasFallidas) >= horasClaseFicha) }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="marcarFalta(est._id)"
                       :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Marcar falla'"
