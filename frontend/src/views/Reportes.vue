@@ -64,6 +64,7 @@ onMounted(async () => {
     console.error('Error al cargar datos de reportes:', e)
     mensajeError.value = 'No se pudieron cargar las fichas. Intenta recargar la página.'
   }
+  consultarEstadoRutaDesercion()
 })
 
 const fichaSeleccionada = computed(() =>
@@ -187,6 +188,9 @@ async function generarReporte() {
     }
     // Si el resultado es un solo aprendiz, se muestra su calendario de una vez
     calendarioEst.value = tipoReporte.value === 'aprendiz' && lista.length === 1 ? lista[0] : null
+    if (tipoReporte.value === 'desercion') {
+      await consultarEstadoRutaDesercion()
+    }
   } catch (e) {
     console.error(e)
     mensajeError.value = 'No se pudo generar el reporte. Intenta de nuevo.'
@@ -601,16 +605,32 @@ const filasRutaPaginadas = computed(() => {
   return filasRuta.value.slice(inicio, inicio + FILAS_RUTA_POR_PAGINA)
 })
 
-// Activar cuando exista el endpoint POST /reportes/ruta-desercion/reportar
-const REPORTAR_HABILITADO = false
+// Estado de los correos globales para poder reportar
+const reporteListo = ref(false)
+const reporteFalta = reactive({ coordinador: false, bienestar: false })
+
+async function consultarEstadoRutaDesercion() {
+  try {
+    const estado = await api.reportes.estadoRutaDesercion()
+    reporteListo.value = !!estado?.listo
+    reporteFalta.coordinador = !!estado?.falta?.coordinador
+    reporteFalta.bienestar = !!estado?.falta?.bienestar
+  } catch (e) {
+    console.error('Error al consultar el estado de la ruta de deserción:', e)
+    reporteListo.value = false
+  }
+}
 
 // Modal de confirmación "Reportar a ruta de deserción"
 const modalReporteAbierto = ref(false)
 const reporteTarget = ref(null)
 const enviandoReporte = ref(false)
 const reportadoMap = reactive({})
+const reporteError = ref('')
 
 function abrirModalReporteDesercion(fila) {
+  if (!reporteListo.value) return
+  reporteError.value = ''
   reporteTarget.value = fila
   modalReporteAbierto.value = true
 }
@@ -619,6 +639,7 @@ function cerrarModalReporteDesercion() {
   if (enviandoReporte.value) return
   modalReporteAbierto.value = false
   reporteTarget.value = null
+  reporteError.value = ''
 }
 
 function formatoCorto(iso) {
@@ -630,22 +651,39 @@ function formatoCorto(iso) {
   }
 }
 
-function reportadoFecha(fila) {
+function reportadoInfo(fila) {
   const id = fila?.estudiante?._id
   if (!id) return null
-  return reportadoMap[id] || fila.ultimoReporte || null
+  const info = reportadoMap[id]
+  if (info) {
+    if (typeof info === 'string') return { fecha: info, simulado: false }
+    return { fecha: info.fecha || null, simulado: !!info.simulado }
+  }
+  if (fila.ultimoReporte) return { fecha: fila.ultimoReporte, simulado: false }
+  return null
+}
+
+function reportadoFecha(fila) {
+  return reportadoInfo(fila)?.fecha || null
+}
+
+function reportadoSimulado(fila) {
+  return reportadoInfo(fila)?.simulado || false
 }
 
 async function enviarReporteDesercion() {
   const fila = reporteTarget.value
   if (!fila) return
   enviandoReporte.value = true
+  reporteError.value = ''
   try {
     const res = await api.reportes.reportarDesercion({
       estudianteId: fila.estudiante._id,
       fichaId: reporte.value?.ficha?._id,
     })
-    if (res?.reportadoEn) reportadoMap[fila.estudiante._id] = res.reportadoEn
+    if (res?.reportadoEn) {
+      reportadoMap[fila.estudiante._id] = { fecha: res.reportadoEn, simulado: !!res.simulado }
+    }
     if (res?.simulado) {
       const dest = Array.isArray(res.destinatarios)
         ? res.destinatarios.join(', ')
@@ -658,7 +696,8 @@ async function enviarReporteDesercion() {
     modalReporteAbierto.value = false
     reporteTarget.value = null
   } catch (e) {
-    showToast(e?.message || 'No se pudo enviar el reporte', 'error')
+    reporteError.value = e?.message || 'No se pudo enviar el reporte'
+    showToast(reporteError.value, 'error')
   } finally {
     enviandoReporte.value = false
   }
@@ -891,15 +930,20 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                 <td class="rp-td-acc">
                   <div class="rp-acciones-celda">
                     <button type="button" class="rp-link" @click.stop="abrirDetalle(f)">Ver reporte de fallas</button>
-                    <template v-if="REPORTAR_HABILITADO">
-                      <button
-                        v-if="!reportadoFecha(f)"
-                        type="button"
-                        class="rp-btn rp-btn-reportar"
-                        @click.stop="abrirModalReporteDesercion(f)"
-                      >Reportar</button>
-                      <span v-else class="rp-reportado" title="Ya se envió el reporte a ruta de deserción">Reportado {{ formatoCorto(reportadoFecha(f)) }}</span>
-                    </template>
+                    <button
+                      v-if="!reportadoFecha(f)"
+                      type="button"
+                      class="rp-btn rp-btn-reportar"
+                      :disabled="!reporteListo"
+                      :title="reporteListo ? '' : 'El administrador debe configurar el correo del coordinador y el de bienestar al aprendiz en su Perfil'"
+                      @click.stop="abrirModalReporteDesercion(f)"
+                    >Reportar</button>
+                    <span
+                      v-else
+                      class="rp-reportado"
+                      :class="{ 'rp-reportado-simulado': reportadoSimulado(f) }"
+                      :title="reportadoSimulado(f) ? 'Simulación: no se envió ningún correo' : 'Ya se envió el reporte a ruta de deserción'"
+                    >{{ reportadoSimulado(f) ? 'Simulado' : 'Reportado' }} {{ formatoCorto(reportadoFecha(f)) }}</span>
                   </div>
                 </td>
               </tr>
@@ -1106,6 +1150,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
           <p class="rp-reporte-texto">
             ¿Seguro que quieres reportar a este aprendiz en la ruta de deserción? Se notificará por correo al coordinador, bienestar al aprendiz y al equipo ejecutor de la ficha.
           </p>
+          <p v-if="reporteError" class="rp-reporte-error" role="alert">{{ reporteError }}</p>
           <div class="rp-reporte-acciones">
             <button type="button" class="rp-btn rp-btn-secundario" :disabled="enviandoReporte" @click="cerrarModalReporteDesercion">Cancelar</button>
             <button type="button" class="rp-btn rp-btn-primario" :disabled="enviandoReporte" @click="enviarReporteDesercion">
@@ -1322,6 +1367,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
 .rp-btn-reportar:hover:not(:disabled) { background: #a33622; }
 .rp-btn-reportar:disabled { opacity: .45; cursor: not-allowed; }
 .rp-reportado { padding: 5px 10px; border-radius: 999px; background: #f2f9ed; color: #2c8300; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.rp-reportado-simulado { background: #fff7e0; color: #9a6b00; }
+.rp-reporte-error { margin: 16px 0 0; padding: 10px 14px; background: #fbeae6; border: 1px solid #f3cfc6; color: #c4432b; border-radius: 8px; font-size: 13px; font-weight: 600; }
 
 .rp-paginacion { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px; }
 .rp-pag-flecha {

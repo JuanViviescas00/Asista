@@ -107,6 +107,13 @@
   color: #7C857A;
 }
 
+.admin-profile-help {
+  margin: -10px 0 20px;
+  font-size: 13px;
+  color: #7C857A;
+  line-height: 1.55;
+}
+
 .admin-profile-button {
   padding: 13px 24px;
   border-radius: 8px;

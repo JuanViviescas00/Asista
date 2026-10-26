@@ -199,6 +199,12 @@ const api = {
 
   reportes: {
     reportarDesercion(body) { return request('/reportes/ruta-desercion/reportar', { method: 'POST', body: JSON.stringify(body) }) },
+    estadoRutaDesercion() { return request('/reportes/ruta-desercion/estado') },
+  },
+
+  configuracion: {
+    getCorreosReporte() { return request('/configuracion/correos-reporte') },
+    updateCorreosReporte(body) { return request('/configuracion/correos-reporte', { method: 'PUT', body: JSON.stringify(body) }) },
   },
 }
 
