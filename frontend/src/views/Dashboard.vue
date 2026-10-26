@@ -242,11 +242,11 @@ onMounted(() => loadDiasFestivos())
   <div v-if="estudiantesEnRiesgo.length > 0" class="card alerta-card">
     <div class="card-header">
       <h3 style="color: #dc2626;">Alerta de Riesgo de Desercion</h3>
-      <span class="badge badge-danger">{{ estudiantesEnRiesgo.length }} estudiantes</span>
+      <span class="badge badge-danger">{{ estudiantesEnRiesgo.length }} aprendices</span>
     </div>
     <div class="table-container">
       <table>
-        <thead><tr><th>Estudiante</th><th>% Asistencia</th><th>Fallas</th><th>Fallas Seguidas</th><th>Horas Falladas</th><th>Alerta</th></tr></thead>
+        <thead><tr><th>Aprendiz</th><th>% Asistencia</th><th>Fallas</th><th>Fallas Seguidas</th><th>Horas Falladas</th><th>Alerta</th></tr></thead>
         <tbody>
           <tr v-for="a in estudiantesEnRiesgo" :key="a.estudiante._id" class="fila-error">
             <td><strong>{{ a.estudiante.nombres }} {{ a.estudiante.apellidos }}</strong><div style="font-size: 11px; color: var(--text-secondary);">{{ a.estudiante.numeroDocumento }}</div></td>
@@ -262,7 +262,7 @@ onMounted(() => loadDiasFestivos())
   </div>
 
   <div v-if="filtroFicha && analisisEstudiantes.length > 0" class="card">
-    <div class="card-header"><h3>Grafico de Porcentaje de Asistencia por Estudiante</h3></div>
+    <div class="card-header"><h3>Grafico de Porcentaje de Asistencia por Aprendiz</h3></div>
     <div class="grafico-barras">
       <div v-for="a in analisisEstudiantes" :key="a.estudiante._id" class="barra-item">
         <div class="barra-label">{{ a.estudiante.nombres.split(' ')[0] }} {{ a.estudiante.apellidos.split(' ')[0] }}</div>
@@ -279,14 +279,14 @@ onMounted(() => loadDiasFestivos())
     </div>
 
     <div v-if="!filtroFicha" class="empty-state"><p>Selecciona una ficha y un rango de fechas para ver el registro de asistencias.</p></div>
-    <div v-else-if="estudiantesDeFichaTodos.length === 0" class="empty-state"><p>No hay estudiantes en esta ficha.</p></div>
+    <div v-else-if="estudiantesDeFichaTodos.length === 0" class="empty-state"><p>No hay aprendices en esta ficha.</p></div>
     <div v-else-if="fechasUnicas.length === 0" class="empty-state"><p>No hay registros de asistencia para esta ficha en el rango de fechas seleccionado.</p></div>
 
     <div v-else class="table-container" style="max-height: 500px; overflow-y: auto;">
       <table>
         <thead>
           <tr>
-            <th style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">Estudiante</th>
+            <th style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">Aprendiz</th>
             <th v-for="fecha in fechasUnicas" :key="fecha" style="position: sticky; top: 0; background: #f8fafc; z-index: 1; text-align: center; min-width: 100px;">{{ fecha.slice(5) }}</th>
           </tr>
         </thead>
@@ -313,7 +313,7 @@ onMounted(() => loadDiasFestivos())
       <h2>Registrar Asistencia</h2>
       <div class="form-grid">
         <div class="form-group"><label>Ficha</label><select v-model="registroForm.fichaId" @change="registroForm.estudianteId = null"><option :value="null" disabled>Selecciona una ficha</option><option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }}</option></select></div>
-        <div class="form-group"><label>Estudiante</label><select v-model="registroForm.estudianteId"><option :value="null" disabled>Selecciona un estudiante</option><option v-for="e in todosEstudiantes.filter(e => e.fichaId === registroForm.fichaId && e.estado === 'Activo')" :key="e._id" :value="e._id">{{ e.nombres }} {{ e.apellidos }}</option></select></div>
+        <div class="form-group"><label>Aprendiz</label><select v-model="registroForm.estudianteId"><option :value="null" disabled>Selecciona un aprendiz</option><option v-for="e in todosEstudiantes.filter(e => e.fichaId === registroForm.fichaId && e.estado === 'Activo')" :key="e._id" :value="e._id">{{ e.nombres }} {{ e.apellidos }}</option></select></div>
         <div class="form-group"><label>Fecha</label><input v-model="registroForm.fecha" type="date" /></div>
         <div class="form-group"><label>Estado</label><select v-model="registroForm.estado"><option value="Presente">Presente</option><option value="Tardanza">Tardanza</option><option value="Falta">Falta</option></select></div>
         <div class="form-group"><label>Hora</label><input v-model="registroForm.hora" type="time" /></div>

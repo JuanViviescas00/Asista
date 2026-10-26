@@ -394,10 +394,10 @@ const textoBarra = { tarde: 'LLEGADA TARDE', excusa: 'EXCUSA', falla: 'FALLA' }
 
 function nombreInstructor(reg) {
   const i = reg?.instructorId
-  if (!i) return 'Sin docente asignado'
-  if (typeof i === 'object') return `${i.nombres || ''} ${i.apellidos || ''}`.trim() || 'Docente'
+  if (!i) return 'Sin instructor asignado'
+  if (typeof i === 'object') return `${i.nombres || ''} ${i.apellidos || ''}`.trim() || 'Instructor'
   const inst = instructores.value.find((x) => String(x._id) === String(i))
-  return inst ? `${inst.nombres} ${inst.apellidos}` : 'Docente'
+  return inst ? `${inst.nombres} ${inst.apellidos}` : 'Instructor'
 }
 
 // Motivo de la excusa de un registro: se busca por aprendiz + fecha (se prefiere la aprobada)
@@ -844,7 +844,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
         <StatCard icon="percent" label="Asistencia General" :value="`${resumenFicha.porcentajeGeneral}%`" variant="verde" />
         <StatCard icon="x-circle" label="Deserción (3 seguidas o 5 acumuladas)" :value="`${resumenFicha.desertores}`" variant="rojo" />
         <StatCard icon="clock" label="En ruta (2 seguidas o 3 acumuladas)" :value="`${resumenFicha.enRutaNivel}`" variant="ambar" />
-        <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenFicha.docentes" variant="morado" />
+        <StatCard icon="user-check" label="Instructores en Ficha" :value="resumenFicha.docentes" variant="morado" />
         <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenFicha.sesiones" variant="indigo" />
       </div>
       <p v-if="resumenFicha" class="rp-nota rp-nota-stats">Las tarjetas resumen toda la ficha en el periodo consultado. Asistencia general: promedio de asistencia de los aprendices con registros. Cada presente suma 1 día, cada tardanza suma 0,5 día y las faltas no suman.</p>
@@ -1071,7 +1071,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                 {{ r.estado === 'Excusada' ? 'Excusada' : etiquetaEstado(r.estado) }}
                 <span v-if="r.estado === 'Tardanza'" class="badge badge-danger rp-badge-det">Sin excusa</span>
               </span>
-              <span class="rp-pop-lbl">Docente:</span>
+              <span class="rp-pop-lbl">Instructor:</span>
               <span class="rp-pop-val">{{ nombreInstructor(r) }}</span>
               <template v-if="r.estado === 'Tardanza' && Number(r.horasTardanza) > 0">
                 <span class="rp-pop-lbl">Tardanza:</span>
@@ -1119,7 +1119,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                   <th>Horas</th>
                   <th>Tipo</th>
                   <th>Motivo</th>
-                  <th>Docente</th>
+                  <th>Instructor</th>
                 </tr>
               </thead>
               <tbody>

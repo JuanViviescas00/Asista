@@ -497,7 +497,7 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
           <tr>
             <th>Código Ficha</th>
             <th>Ficha</th>
-            <th>Docente Líder</th>
+            <th>Instructor Líder</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -523,11 +523,11 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
             <tr v-if="expandidos[f._id]" class="fichas-detalle-fila">
               <td colspan="4">
                 <div class="fichas-detalle">
-                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Aula</span><span>{{ f.aulaAsignada || '—' }}</span></div>
+                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Ambiente</span><span>{{ f.aulaAsignada || '—' }}</span></div>
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Jornada</span><span><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></span></div>
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Estado</span><span><span class="fichas-badge" :class="estaActiva(f) ? 'fichas-badge-success' : 'fichas-badge-inactive'">{{ estaActiva(f) ? 'Activa' : 'Inactiva' }}</span></span></div>
                   <div class="fichas-detalle-item" v-if="f.instructores && f.instructores.length">
-                    <span class="fichas-detalle-label">Docentes de Apoyo</span>
+                    <span class="fichas-detalle-label">Instructores de Apoyo</span>
                     <span>{{ formatDocentesComunes(f.instructores) }}</span>
                   </div>
                 </div>
@@ -607,40 +607,40 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
           </select>
         </div>
         <div class="fichas-form-group">
-          <label>Aula Asignada *</label>
-          <input v-model="fichaForm.aulaAsignada" type="text" placeholder="Ej: Aula 302 - Bloque A" />
+          <label>Ambiente Asignado *</label>
+          <input v-model="fichaForm.aulaAsignada" type="text" placeholder="Ej: Ambiente 302 - Bloque A" />
         </div>
 
         <!-- BUSCADOR DE DOCENTES -->
         <div class="fichas-form-group fichas-form-group-wide">
-          <label> Filtrar / Buscar Docente en la Lista</label>
+          <label> Filtrar / Buscar Instructor en la Lista</label>
           <input
             v-model="busquedaDocente"
             type="text"
-            placeholder="Escribe el nombre, apellido, documento o especialidad del docente..."
+            placeholder="Escribe el nombre, apellido, documento o especialidad del instructor..."
             class="fichas-instructor-search"
           />
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label> Docente Líder de la Ficha (Obligatorio) *</label>
+          <label> Instructor Líder de la Ficha (Obligatorio) *</label>
           <select v-model="fichaForm.instructorLiderId" class="fichas-leader-select">
-            <option :value="null" disabled>Selecciona al Docente Líder...</option>
+            <option :value="null" disabled>Selecciona al Instructor Líder...</option>
             <option v-for="i in instructoresFiltrados" :key="i._id" :value="i._id">
                {{ i.nombres }} {{ i.apellidos }} — {{ i.especialidad }}
             </option>
           </select>
           <p v-if="instructoresFiltrados.length === 0" class="fichas-warning-text">
-            No se encontraron docentes con la búsqueda "{{ busquedaDocente }}".
+            No se encontraron instructores con la búsqueda "{{ busquedaDocente }}".
           </p>
           <p v-if="liderYaEsLiderEnOtraFicha" class="fichas-warning-text">
-             <strong>Aviso de Liderazgo:</strong> Este docente ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
+             <strong>Aviso de Liderazgo:</strong> Este instructor ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
           </p>
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label> Docentes Comunes Asignados (Opcional)</label>
-          <p class="fichas-help-text">Selecciona los docentes adicionales que dictan clases en esta ficha:</p>
+          <label> Instructores Comunes Asignados (Opcional)</label>
+          <p class="fichas-help-text">Selecciona los instructores adicionales que dictan clases en esta ficha:</p>
           <div class="fichas-instructor-check-grid">
             <label
               v-for="i in instructoresFiltrados"
@@ -661,7 +661,7 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
               </span>
             </label>
             <div v-if="instructoresFiltrados.length === 0" class="fichas-no-instructors">
-              No se encontraron docentes que coincidan con la búsqueda.
+              No se encontraron instructores que coincidan con la búsqueda.
             </div>
           </div>
         </div>

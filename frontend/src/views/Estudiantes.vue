@@ -50,7 +50,7 @@ async function loadEstudiantes() {
     }
     estudiantes.value = await api.estudiantes.getAll(params)
   } catch (e) {
-    showToastFn('Error al cargar estudiantes', 'error')
+    showToastFn('Error al cargar aprendices', 'error')
   }
 }
 
@@ -213,13 +213,13 @@ async function guardarEstudiante() {
     }
     if (editingId.value) {
       await api.estudiantes.update(editingId.value, body)
-      showToastFn('Estudiante actualizado correctamente')
+      showToastFn('Aprendiz actualizado correctamente')
     } else {
       body.estado = 'Activo'
       body.motivo = ''
       body.estadoAsistencia = 'Sin registro'
       await api.estudiantes.create(body)
-      showToastFn('Estudiante creado correctamente')
+      showToastFn('Aprendiz creado correctamente')
     }
     await loadEstudiantes()
     closeModal()
@@ -250,7 +250,7 @@ async function confirmarRetirar() {
     await loadEstudiantes()
     showRetirarModal.value = false
     const label = retirarTipo.value === 'Retirado' ? 'retirado' : 'inhabilitado'
-    showToastFn(`Estudiante ${label} correctamente. El historial se ha conservado.`)
+    showToastFn(`Aprendiz ${label} correctamente. El historial se ha conservado.`)
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -260,7 +260,7 @@ async function activarEstudiante(estudiante) {
   try {
     await api.estudiantes.update(estudiante._id, { estado: 'Activo', motivo: '' })
     await loadEstudiantes()
-    showToastFn('Estudiante activado correctamente')
+    showToastFn('Aprendiz activado correctamente')
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -269,13 +269,13 @@ async function activarEstudiante(estudiante) {
 async function eliminarEstudiante(id) {
   const est = estudiantes.value.find(e => e._id === id)
   if (est && est.estado !== 'Activo') {
-    showToastFn('No se puede eliminar un estudiante con historial. Usa la opcion Retirar en su lugar.', 'error')
+    showToastFn('No se puede eliminar un aprendiz con historial. Usa la opcion Retirar en su lugar.', 'error')
     return
   }
   try {
     await api.estudiantes.delete(id)
     await loadEstudiantes()
-    showToastFn('Estudiante eliminado correctamente')
+    showToastFn('Aprendiz eliminado correctamente')
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -339,12 +339,12 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
 <template>
   <div class="page-header">
-    <h1>Estudiantes</h1>
+    <h1>Aprendices</h1>
     <p v-if="esInstructor">
       Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
     </p>
     <p v-else>
-      Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
+      Gestiona los aprendices. Al inhabilitar o retirar se conserva la trazabilidad.
     </p>
     <div v-if="esInstructor" style="display: inline-block; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
       Fichas asignadas: {{ fichasList.length }}
@@ -462,19 +462,19 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   <div class="card">
     <div class="card-header">
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <h3>Listado de Estudiantes</h3>
+        <h3>Listado de Aprendices</h3>
         <span v-if="criteriosActivos > 0" class="badge badge-primary">{{ estudiantesFiltrados.length }} resultado(s)</span>
         
       </div>
-      <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante" style="display: inline-flex; align-items: center; gap: 6px;">
+      <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Aprendiz" style="display: inline-flex; align-items: center; gap: 6px;">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span>Nuevo Estudiante</span>
+        <span>Nuevo Aprendiz</span>
       </button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
       <p v-if="sinSeleccion">Usa la búsqueda avanzada para ver la información de los aprendices.</p>
-      <p v-else>{{ criteriosActivos > 0 ? 'No se encontraron estudiantes con los criterios de busqueda.' : 'No hay estudiantes registrados. Crea el primero usando el boton "Nuevo Estudiante".' }}</p>
+      <p v-else>{{ criteriosActivos > 0 ? 'No se encontraron aprendices con los criterios de busqueda.' : 'No hay aprendices registrados. Crea el primero usando el boton "Nuevo Aprendiz".' }}</p>
     </div>
 
     <div v-else class="table-container">
@@ -541,7 +541,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
   <div v-if="showRetirarModal" class="modal-overlay" @click.self="showRetirarModal = false">
     <div class="modal">
-      <h2>{{ retirarTipo === 'Retirado' ? 'Retirar' : 'Inhabilitar' }} Estudiante</h2>
+      <h2>{{ retirarTipo === 'Retirado' ? 'Retirar' : 'Inhabilitar' }} Aprendiz</h2>
       <p style="color: var(--text-secondary); margin-bottom: 16px;">Vas a {{ retirarTipo === 'Retirado' ? 'retirar' : 'inhabilitar' }} a <strong>{{ retirarTarget ? nombreCompleto(retirarTarget) : '' }}</strong>. Su historial y trazabilidad se conservaran, solo cambiara su estado.</p>
       <div class="form-group">
         <label>Motivo</label>
@@ -556,10 +556,10 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
   <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
     <div class="modal">
-      <h2>{{ editingId ? 'Editar Estudiante' : 'Nuevo Estudiante' }}</h2>
+      <h2>{{ editingId ? 'Editar Aprendiz' : 'Nuevo Aprendiz' }}</h2>
       <div class="form-grid">
-        <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del estudiante" /></div>
-        <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del estudiante" /></div>
+        <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del aprendiz" /></div>
+        <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del aprendiz" /></div>
         <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option v-for="t in TIPOS_DOCUMENTO" :key="t.codigo" :value="t.codigo">{{ t.descripcion }}</option></select></div>
         <div class="form-group"><label>Numero de Documento</label><input v-model="estudianteForm.numeroDocumento" type="text" placeholder="Numero de documento" /></div>
         <div class="form-group"><label>Correo Electronico</label><input v-model="estudianteForm.correo" type="email" placeholder="correo@ejemplo.com" /></div>
@@ -575,7 +575,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
             <option v-for="f in (esInstructor ? fichasLider : fichasList)" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
           </select>
           <p v-if="esInstructor && !editingId" style="font-size: 11px; color: #64748b; margin-top: 4px;">
-            Mostrando únicamente las fichas donde eres docente líder.
+            Mostrando únicamente las fichas donde eres instructor líder.
           </p>
         </div>
       </div>

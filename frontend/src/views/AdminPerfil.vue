@@ -85,7 +85,7 @@ onMounted(async () => {
         perfil.numeroDocumento = inst.numeroDocumento || ''
         perfil.correo = inst.correo || perfil.correo
         perfil.telefono = inst.telefono || ''
-        perfil.especialidad = inst.especialidad || 'Docente SENA'
+        perfil.especialidad = inst.especialidad || 'Instructor SENA'
         perfil.estado = inst.estado || 'Activo'
 
         const esLiderEnFicha = misFichas.some(f => f.esLider || String(f.instructorLiderId?._id || f.instructorLiderId) === String(inst._id))
@@ -301,7 +301,7 @@ async function procesarCambioPassword() {
 <template>
   <div class="admin-profile-page-header">
     <h1>{{ esInstructor ? 'Perfil Instructor' : 'Perfil del Administrador' }}</h1>
-    <p>{{ esInstructor ? 'Información personal y académica del docente' : 'Gestiona tu información personal y seguridad de la cuenta' }}</p>
+    <p>{{ esInstructor ? 'Información personal y académica del instructor' : 'Gestiona tu información personal y seguridad de la cuenta' }}</p>
   </div>
 
   <!-- Vista para Instructor / Maestro -->
@@ -384,7 +384,7 @@ async function procesarCambioPassword() {
     <div class="admin-profile-card-header">
       <h3>Correos para el reporte de ruta de deserción</h3>
     </div>
-    <p class="admin-profile-help">Estos correos reciben el reporte cuando un docente reporta a un aprendiz. El equipo ejecutor se toma automáticamente de la ficha del aprendiz.</p>
+    <p class="admin-profile-help">Estos correos reciben el reporte cuando un instructor reporta a un aprendiz. El equipo ejecutor se toma automáticamente de la ficha del aprendiz.</p>
     <div class="admin-profile-form-grid">
       <div class="admin-profile-form-group">
         <label>Correo del coordinador</label>

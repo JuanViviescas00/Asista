@@ -139,6 +139,7 @@ function irA(key) {
         <div class="sidebar-header">
           <div class="sidebar-header-top">
             <button
+              v-if="esInstructor"
               type="button"
               class="sidebar-logo-btn"
               :class="{ active: currentView === 'perfil' }"
@@ -146,13 +147,15 @@ function irA(key) {
               :title="tienePerfil ? 'Ir a Perfil' : null"
             >
               <img
-                v-if="esInstructor"
                 :src="instructorAvatar"
                 alt="Instructor"
                 class="sidebar-avatar-img"
               />
-              <img v-else :src="senaLogo" alt="Logo SENA" />
             </button>
+            <!-- Admin / Aprendiz: solo el logo SENA, sin botón ni borde -->
+            <div v-else class="sidebar-logo-plain">
+              <img :src="senaLogo" alt="Logo SENA" />
+            </div>
 
             <!-- Botón para contraer / desplegar el menú (solo escritorio) -->
             <button
