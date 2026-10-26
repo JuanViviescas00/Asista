@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../services/index.js'
 import { nombreProgramaLimpio, truncar, formatearNumeroDocumento, capitalizarTexto, TIPOS_DOCUMENTO, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
@@ -129,6 +129,23 @@ const estudiantesFiltrados = computed(() => {
   if (busqueda.estadoAsistencia) lista = lista.filter(e => e.estadoAsistencia === busqueda.estadoAsistencia)
   return lista
 })
+
+const FILAS_POR_PAGINA = 10
+const pagina = ref(1)
+const totalPaginas = computed(() => Math.max(1, Math.ceil(estudiantesFiltrados.value.length / FILAS_POR_PAGINA)))
+const paginaActual = computed(() => {
+  const inicio = (pagina.value - 1) * FILAS_POR_PAGINA
+  return estudiantesFiltrados.value.slice(inicio, inicio + FILAS_POR_PAGINA)
+})
+
+// Al cambiar cualquier filtro o búsqueda, vuelve a la página 1.
+watch(
+  [() => filtroEstado.value, () => busqueda.fichaId, () => busqueda.jornada, () => busqueda.documento, () => busqueda.nombres, () => busqueda.nombreDocumento, () => busqueda.estadoAsistencia],
+  () => { pagina.value = 1 }
+)
+
+// Si tras eliminar o filtrar la página queda vacía, ajusta a la última válida.
+watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
 
 const criteriosActivos = computed(() => {
   let count = 0
@@ -475,7 +492,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           </tr>
         </thead>
         <tbody>
-          <template v-for="e in estudiantesFiltrados" :key="e._id">
+          <template v-for="e in paginaActual" :key="e._id">
             <tr :class="{ 'fila-inactivo': e.estado !== 'Activo' }">
               <td><strong :title="nombreCompleto(e)">{{ truncar(nombreCompleto(e), 28) }}</strong></td>
               <td><strong>{{ getFichaCodigo(e.fichaId) }}</strong></td>
@@ -510,6 +527,15 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           </template>
         </tbody>
       </table>
+    </div>
+    <div v-if="estudiantesFiltrados.length > 0" class="paginacion">
+      <button class="pag-flecha" :disabled="pagina <= 1" @click="pagina--" title="Anterior" aria-label="Página anterior">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="pag-info">Página {{ pagina }} de {{ totalPaginas }} · {{ estudiantesFiltrados.length }} registros</span>
+      <button class="pag-flecha" :disabled="pagina >= totalPaginas" @click="pagina++" title="Siguiente" aria-label="Página siguiente">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
     </div>
   </div>
 
@@ -727,5 +753,43 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   .est-tabla { min-width: 620px; }
   .est-tabla th, .est-tabla td { padding: 12px 10px; }
   .est-detalle { grid-template-columns: 1fr; gap: 12px 16px; padding: 16px; }
+}
+
+/* Paginación en cliente */
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+.pag-flecha {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #d9e2d3;
+  color: #39A900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+.pag-flecha:hover:not(:disabled) {
+  background: #E8F5E0;
+  border-color: #39A900;
+}
+.pag-flecha:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.pag-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
 }
 </style>

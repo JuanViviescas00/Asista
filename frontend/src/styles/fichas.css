@@ -262,3 +262,41 @@
   color: #64748b;
   margin-top: 4px;
 }
+
+/* Paginación en cliente */
+.fichas-paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+.fichas-pag-flecha {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #d9e2d3;
+  color: #39A900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+.fichas-pag-flecha:hover:not(:disabled) {
+  background: #E8F5E0;
+  border-color: #39A900;
+}
+.fichas-pag-flecha:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.fichas-pag-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
+}

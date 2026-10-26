@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
 import { useAuth } from '../composables/useAuth.js'
@@ -433,6 +433,17 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
   const lidId = fichaForm.instructorLiderId
   return fichas.value.find(f => f._id !== editingId.value && (f.instructorLiderId?._id === lidId || f.instructorLiderId === lidId))
 })
+
+const FILAS_POR_PAGINA = 10
+const pagina = ref(1)
+const totalPaginas = computed(() => Math.max(1, Math.ceil(fichas.value.length / FILAS_POR_PAGINA)))
+const paginaActual = computed(() => {
+  const inicio = (pagina.value - 1) * FILAS_POR_PAGINA
+  return fichas.value.slice(inicio, inicio + FILAS_POR_PAGINA)
+})
+
+// Si tras eliminar o filtrar la página queda vacía, ajusta a la última válida.
+watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
 </script>
 
 <template>
@@ -485,7 +496,7 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
           </tr>
         </thead>
         <tbody>
-          <template v-for="f in fichas" :key="f._id">
+          <template v-for="f in paginaActual" :key="f._id">
             <tr :class="{ 'fichas-row-inactiva': !estaActiva(f) }">
               <td><strong>{{ f.codigoFicha }}</strong></td>
               <td><span class="fichas-badge fichas-badge-ficha" :title="nombreProgramaLimpio(f.nombrePrograma)">{{ acortarNombre(nombreProgramaLimpio(f.nombrePrograma)) }}</span></td>
@@ -519,6 +530,15 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
           </template>
         </tbody>
       </table>
+    </div>
+    <div v-if="fichas.length > 0" class="fichas-paginacion">
+      <button class="fichas-pag-flecha" :disabled="pagina <= 1" @click="pagina--" title="Anterior" aria-label="Página anterior">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="fichas-pag-info">Página {{ pagina }} de {{ totalPaginas }} · {{ fichas.length }} registros</span>
+      <button class="fichas-pag-flecha" :disabled="pagina >= totalPaginas" @click="pagina++" title="Siguiente" aria-label="Página siguiente">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
     </div>
   </div>
 
