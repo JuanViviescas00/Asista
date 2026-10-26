@@ -1,11 +1,8 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import api from '../services/index.js'
 import StatCard from '../components/StatCard.vue'
 import { mostrarAviso } from '../composables/useAviso.js'
-import iconoHistorial from '../assets/historial-aprendiz-icon.png'
-import iconoSinExcusa from '../assets/sin-excusa-icon.png'
-import iconoConExcusa from '../assets/con-excusa-icon.png'
 import '../styles/panelEstudiante.css'
 
 const userStr = sessionStorage.getItem('user_data')
@@ -18,7 +15,11 @@ const asistencias = ref([])
 const excusas = ref([])
 const loading = ref(true)
 const error = ref('')
-const filtroInasistencias = ref('todas') // 'todas', 'sin_excusa', 'con_excusa'
+const filtroTipo = ref('todas') // 'todas' | 'tardanzas' | 'fallas'
+const fechaDesde = ref('')
+const fechaHasta = ref('')
+const pagina = ref(1)
+const FILAS_POR_PAGINA = 10
 
 const showNuevaExcusaModal = ref(false)
 const nuevaExcusa = ref({
@@ -72,13 +73,13 @@ const horasPorJornada = computed(() => {
 })
 
 const resumen = computed(() => {
-  let presentes = 0, tardanzas = 0, fallasSinExcusa = 0, fallasConExcusa = 0
+  let horasRetardo = 0, presentes = 0, tardanzas = 0, fallasSinExcusa = 0, fallasConExcusa = 0
   const hDia = horasPorJornada.value
 
   asistencias.value.forEach(a => {
     const est = a.estado || a.tipo
     if (est === 'Presente' || est === 'Entrada') presentes++
-    else if (est === 'Tardanza' || est === 'Retardo') tardanzas++
+    else if (est === 'Tardanza' || est === 'Retardo') { tardanzas++; horasRetardo += Number(a.horasTardanza ?? a.horas) || 0 }
     else if (est === 'Excusada') fallasConExcusa++
     else if (est === 'Falta' || est === 'Ausente') fallasSinExcusa++
   })
@@ -90,6 +91,7 @@ const resumen = computed(() => {
   return {
     presentes,
     tardanzas,
+    horasRetardo,
     fallasSinExcusa,
     fallasConExcusa,
     horasSinExcusa,
@@ -100,20 +102,26 @@ const resumen = computed(() => {
 })
 
 const asistenciasFiltradas = computed(() => {
-  if (filtroInasistencias.value === 'sin_excusa') {
-    return asistencias.value.filter(a => {
-      const est = a.estado || a.tipo
-      return est === 'Falta' || est === 'Ausente'
-    })
-  }
-  if (filtroInasistencias.value === 'con_excusa') {
-    return asistencias.value.filter(a => {
-      const est = a.estado || a.tipo
-      return est === 'Excusada'
-    })
-  }
-  return asistencias.value
+  return asistencias.value.filter(a => {
+    const f = String(a.fecha || '').slice(0, 10)
+    if (fechaDesde.value && f < fechaDesde.value) return false
+    if (fechaHasta.value && f > fechaHasta.value) return false
+    const est = a.estado || a.tipo
+    const esTardanza = est === 'Tardanza' || est === 'Retardo'
+    if (filtroTipo.value === 'tardanzas') return esTardanza
+    if (filtroTipo.value === 'fallas') return !esTardanza
+    return true
+  })
 })
+
+function limpiarFechas() {
+  fechaDesde.value = ''
+  fechaHasta.value = ''
+}
+
+function horasTardanzaDe(asis) {
+  return Number(asis.horasTardanza ?? asis.horas) || 0
+}
 
 // --- Historial: quién registró la novedad ---
 function estadoDe(asis) {
@@ -180,6 +188,13 @@ const asistenciasOrdenadas = computed(() => {
     String(claveOrden(a, ordenCol.value)).localeCompare(String(claveOrden(b, ordenCol.value)), 'es', { numeric: true }) * dir
   )
 })
+
+const totalPaginas = computed(() => Math.max(1, Math.ceil(asistenciasOrdenadas.value.length / FILAS_POR_PAGINA)))
+const asistenciasPagina = computed(() => {
+  const inicio = (pagina.value - 1) * FILAS_POR_PAGINA
+  return asistenciasOrdenadas.value.slice(inicio, inicio + FILAS_POR_PAGINA)
+})
+watch([fechaDesde, fechaHasta, filtroTipo, ordenCol, ordenDir], () => { pagina.value = 1 })
 
 // Fecha -> descripción de la excusa aprobada (la más reciente primero)
 const motivosExcusaPorFecha = computed(() => {
@@ -256,7 +271,7 @@ async function radicarExcusa() {
             <strong>{{ ficha ? `${ficha.jornada} (${horasPorJornada}h/día)` : '—' }}</strong>
           </div>
           <div class="student-portal-info-item">
-            <span>Aula:</span>
+            <span>Ambiente:</span>
             <strong>{{ ficha ? ficha.aulaAsignada : '—' }}</strong>
           </div>
           <div class="student-portal-info-item">
@@ -276,38 +291,35 @@ async function radicarExcusa() {
       <div class="student-portal-main">
         <!-- MÉTRICAS DE HORAS E INASISTENCIAS -->
         <div class="student-portal-stats student-portal-stats-cards">
-          <StatCard icon="check-circle" label="Presentes" :value="resumen.presentes" variant="verde" />
-          <StatCard icon="clock" label="Tardanzas" :value="resumen.tardanzas" variant="ambar" />
-          <StatCard class="student-stat-doble" icon="x-circle" label="Sin Excusa" :value="`${resumen.fallasSinExcusa} ${resumen.fallasSinExcusa === 1 ? 'día' : 'días'} · ${resumen.horasSinExcusa}h`" variant="rojo" />
-          <StatCard class="student-stat-doble" icon="file-text" label="Con Excusa" :value="`${resumen.fallasConExcusa} ${resumen.fallasConExcusa === 1 ? 'día' : 'días'} · ${resumen.horasConExcusa}h`" variant="azul" />
+                    <StatCard class="student-stat-doble" icon="x-circle" label="Inasistencias" :value="`${resumen.fallasSinExcusa + resumen.fallasConExcusa} ${(resumen.fallasSinExcusa + resumen.fallasConExcusa) === 1 ? 'día' : 'días'} · ${resumen.totalHorasFalladas}h`" variant="rojo" />
+          <StatCard class="student-stat-doble" icon="clock" label="Horas de Retardo" :value="`${resumen.horasRetardo}h · ${resumen.tardanzas} ${resumen.tardanzas === 1 ? 'tardanza' : 'tardanzas'}`" variant="ambar" />
         </div>
 
-        <!-- FILTROS DE HISTORIAL -->
-        <div style="margin: 16px 0; display: flex; gap: 8px; flex-wrap: wrap;">
-          <button
-            class="btn btn-sm btn-outline student-history-btn"
-            :class="{ 'is-active': filtroInasistencias === 'todas' }"
-            @click="filtroInasistencias = 'todas'"
-            title="Todo el historial"
-          >
-            <img :src="iconoHistorial" alt="Historial" class="student-history-icon" />
+        <!-- FILTRO POR TIPO -->
+        <div class="sp-filtro-tipo" role="group" aria-label="Filtrar por tipo">
+          <button type="button" class="sp-tipo-btn sp-tipo-todas" :class="{ 'is-active': filtroTipo === 'todas' }" @click="filtroTipo = 'todas'" title="Todas (inasistencias y tardanzas)" aria-label="Todas">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>
+            <span>Todas</span>
           </button>
-          <button
-            class="btn btn-sm btn-outline student-history-btn student-sinexcusa-btn"
-            :class="{ 'is-active': filtroInasistencias === 'sin_excusa' }"
-            @click="filtroInasistencias = 'sin_excusa'"
-            title="Solo sin excusa"
-          >
-            <img :src="iconoSinExcusa" alt="Solo sin excusa" class="student-history-icon" />
+          <button type="button" class="sp-tipo-btn sp-tipo-falla" :class="{ 'is-active': filtroTipo === 'fallas' }" @click="filtroTipo = 'fallas'" title="Solo inasistencias" aria-label="Solo inasistencias">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span>Inasistencias</span>
           </button>
-          <button
-            class="btn btn-sm btn-outline student-history-btn student-conexcusa-btn"
-            :class="{ 'is-active': filtroInasistencias === 'con_excusa' }"
-            @click="filtroInasistencias = 'con_excusa'"
-            title="Solo con excusa"
-          >
-            <img :src="iconoConExcusa" alt="Solo con excusa" class="student-history-icon" />
+          <button type="button" class="sp-tipo-btn sp-tipo-tarde" :class="{ 'is-active': filtroTipo === 'tardanzas' }" @click="filtroTipo = 'tardanzas'" title="Solo tardanzas" aria-label="Solo tardanzas">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Tardanzas</span>
           </button>
+        </div>
+
+        <!-- FILTRO POR FECHA -->
+        <div class="sp-filtro-fecha">
+          <label>Desde
+            <input type="date" v-model="fechaDesde" :max="fechaHasta || undefined" />
+          </label>
+          <label>Hasta
+            <input type="date" v-model="fechaHasta" :min="fechaDesde || undefined" />
+          </label>
+          <button v-if="fechaDesde || fechaHasta" type="button" class="sp-filtro-limpiar" @click="limpiarFechas">Limpiar</button>
         </div>
 
         <!-- Tabla Historial de Asistencia -->
@@ -353,7 +365,7 @@ async function radicarExcusa() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="asis in asistenciasOrdenadas" :key="asis._id" :class="claseFila(asis)">
+                <tr v-for="asis in asistenciasPagina" :key="asis._id" :class="claseFila(asis)">
                   <td>
                     <span class="sp-hist-icono-texto">
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -374,7 +386,7 @@ async function radicarExcusa() {
                     </span>
                     <span v-else-if="asis.estado === 'Tardanza' || asis.tipo === 'Tardanza'" class="sp-pill sp-pill-warn">
                       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" fill="currentColor"/><line x1="12" y1="9.5" x2="12" y2="13.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="#fff"/></svg>
-                      Tardanza
+                      Tardanza ({{ horasTardanzaDe(asis) }} {{ horasTardanzaDe(asis) === 1 ? 'hr' : 'hrs' }})
                     </span>
                     <span v-else-if="asis.estado === 'Excusada'" class="sp-pill sp-pill-info">
                       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><line x1="12" y1="11" x2="12" y2="16.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.3" fill="#fff"/></svg>
@@ -404,11 +416,20 @@ async function radicarExcusa() {
                 </tr>
                 <tr v-if="asistenciasOrdenadas.length === 0">
                   <td colspan="5" class="student-portal-empty-cell">
-                    No se encontraron registros para el filtro seleccionado.
+                    No se encontraron registros con el filtro seleccionado.
                   </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div v-if="asistenciasOrdenadas.length > 0" class="sp-paginacion">
+            <button type="button" class="sp-pag-flecha" :disabled="pagina <= 1" @click="pagina--" title="Anterior" aria-label="Página anterior">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span class="sp-pag-info">Página {{ pagina }} de {{ totalPaginas }}</span>
+            <button type="button" class="sp-pag-flecha" :disabled="pagina >= totalPaginas" @click="pagina++" title="Siguiente" aria-label="Página siguiente">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
           </div>
         </div>
 

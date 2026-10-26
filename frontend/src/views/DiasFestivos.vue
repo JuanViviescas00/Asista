@@ -338,7 +338,7 @@ function esHoy(fecha) { return fecha === new Date().toISOString().slice(0, 10) }
       </div>
 
       <div class="holidays-info-note">
-        ℹ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel docente como en el reporte institucional SQLite.
+        ℹ Al guardar, se inhabilitará la toma de asistencia para las fichas y jornadas seleccionadas en esta fecha tanto en el panel instructor como en el reporte institucional SQLite.
       </div>
 
       <div class="holidays-modal-actions">

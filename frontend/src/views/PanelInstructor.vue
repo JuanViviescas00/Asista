@@ -103,13 +103,13 @@ async function confirmarAgregarDocente() {
     let nombreDoc = ''
     if (modoAsignar.value === 'existente') {
       if (!docenteSeleccionadoId.value) {
-        showToast('Debes seleccionar un docente de la lista', 'warning')
+        showToast('Debes seleccionar un instructor de la lista', 'warning')
         guardandoDocente.value = false
         return
       }
       payload = { instructorId: docenteSeleccionadoId.value }
       const found = todosLosInstructores.value.find(i => String(i._id || i.id) === String(docenteSeleccionadoId.value))
-      nombreDoc = found ? `${found.nombres} ${found.apellidos || ''}`.trim() : 'Docente'
+      nombreDoc = found ? `${found.nombres} ${found.apellidos || ''}`.trim() : 'Instructor'
     } else {
       const { nombres, apellidos, numeroDocumento, correo } = nuevoDocenteForm
       if (!nombres?.trim() || !apellidos?.trim() || !numeroDocumento?.trim() || !correo?.trim()) {
@@ -128,11 +128,11 @@ async function confirmarAgregarDocente() {
       misFichas.value[idx].instructores = fichaActualizada.instructores || []
     }
     await cargarTodosLosInstructores()
-    showToast(`Docente ${nombreDoc} asignado al equipo exitosamente.`, 'success')
+    showToast(`Instructor ${nombreDoc} asignado al equipo exitosamente.`, 'success')
     modalAgregarDocenteAbierto.value = false
     docenteSeleccionadoId.value = ''
   } catch (err) {
-    showToast(err.message || 'Error al agregar docente', 'error')
+    showToast(err.message || 'Error al agregar instructor', 'error')
   } finally {
     guardandoDocente.value = false
   }
@@ -154,7 +154,7 @@ async function confirmarDesvincularDocente() {
   desvinculandoDocente.value = true
   try {
     const docId = String(docenteADesvincular.value._id || docenteADesvincular.value.id || docenteADesvincular.value)
-    const nombre = docenteADesvincular.value.nombres ? `${docenteADesvincular.value.nombres} ${docenteADesvincular.value.apellidos || ''}`.trim() : 'este docente'
+    const nombre = docenteADesvincular.value.nombres ? `${docenteADesvincular.value.nombres} ${docenteADesvincular.value.apellidos || ''}`.trim() : 'este instructor'
     const fichaActualizada = await api.fichas.eliminarInstructor(fichaSeleccionada.value._id, docId)
     fichaSeleccionada.value.instructores = fichaActualizada.instructores || []
     const idx = misFichas.value.findIndex(f => String(f._id) === String(fichaSeleccionada.value._id))
@@ -162,10 +162,10 @@ async function confirmarDesvincularDocente() {
       misFichas.value[idx].instructores = fichaActualizada.instructores || []
     }
     await cargarTodosLosInstructores()
-    showToast(`Docente ${nombre} desvinculado de la ficha.`, 'info')
+    showToast(`Instructor ${nombre} desvinculado de la ficha.`, 'info')
     cerrarModalDesvincularDocente()
   } catch (err) {
-    showToast(err.message || 'Error al desvincular docente', 'error')
+    showToast(err.message || 'Error al desvincular instructor', 'error')
   } finally {
     desvinculandoDocente.value = false
   }
@@ -193,7 +193,7 @@ const tituloVista = computed(() => {
     return { icono: 'historial', titulo: 'Historial de Asistencias', subtitulo: detalle }
   }
   if (vistaFicha.value === 'docentes') {
-    return { icono: 'docentes', titulo: 'Equipo Docente', subtitulo: detalle }
+    return { icono: 'docentes', titulo: 'Equipo de Instructores', subtitulo: detalle }
   }
   return { icono: 'asistencia', titulo: 'Tomar Asistencia', subtitulo: detalle }
 })
@@ -349,7 +349,7 @@ async function iniciarSesionRemotaDocente() {
     })
     sesionRemotaActiva.value = true
     claseIniciadaAt.value = resultado?.clase?.iniciadaAt ? new Date(resultado.clase.iniciadaAt).getTime() : Date.now()
-    showToast('Clase activada: el lector del aula está listo para tomar asistencia.', 'success')
+    showToast('Clase activada: el lector del ambiente está listo para tomar asistencia.', 'success')
   } catch (e) {
     showToast(e.message || 'No se pudo activar la clase', 'error')
   }
@@ -540,7 +540,7 @@ const docenteResponsableDia = computed(() => {
   if (lider && String(lider._id || lider) === instIdStr) {
     return {
       id: instIdStr,
-      nombreCompleto: `${lider.nombres || ''} ${lider.apellidos || ''}`.trim() || 'Docente Líder',
+      nombreCompleto: `${lider.nombres || ''} ${lider.apellidos || ''}`.trim() || 'Instructor Líder',
       correo: lider.correo || '',
       especialidad: lider.especialidad || ''
     }
@@ -558,7 +558,7 @@ const docenteResponsableDia = computed(() => {
 
   return {
     id: instIdStr,
-    nombreCompleto: 'Docente a cargo',
+    nombreCompleto: 'Instructor a cargo',
     correo: '',
     especialidad: ''
   }
@@ -603,8 +603,8 @@ function irAHoy() {
 }
 
 function avisarJornadaAjena() {
-  const nombre = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
-  showToast(`Esta jornada fue registrada por ${nombre}. Solo ese docente puede modificarla.`, 'warning')
+  const nombre = docenteResponsableDia.value?.nombreCompleto || 'otro instructor'
+  showToast(`Esta jornada fue registrada por ${nombre}. Solo ese instructor puede modificarla.`, 'warning')
 }
 
 function abrirModalInhabilitar() {
@@ -848,7 +848,7 @@ async function onHorasChange(estId, ev) {
   const reg = asistenciaDia.value[estId]
   if (!reg) return
   if (!reg.esMio) {
-    showToast(`Solo de lectura: Registrado por Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    showToast(`Solo de lectura: Registrado por Prof. ${reg.nombreDocenteCreador || 'otro instructor'}.`, 'warning')
     ev.target.value = reg.horasFallidas || 0
     return
   }
@@ -888,7 +888,7 @@ function inicializarAsistenciaDia() {
     // Verificación de propiedad docente (Solo lectura para otros docentes)
     const instructorAsignado = existente?.instructorId
     const instructorAsignadoId = instructorAsignado ? String(instructorAsignado._id || instructorAsignado) : null
-    // Si otro docente ya es el responsable del día, ninguna fila es editable (ni siquiera las aún sin registro)
+    // Si otro instructor ya es el responsable del día, ninguna fila es editable (ni siquiera las aún sin registro)
     const jornadaAjena = !esAdmin && jornadaEsDeOtroDocente.value
     const esMio = !jornadaAjena && (!existente || !instructorAsignadoId || esAdmin || (currentUserId && instructorAsignadoId === currentUserId))
 
@@ -897,10 +897,10 @@ function inicializarAsistenciaDia() {
       if (typeof instructorAsignado === 'object' && instructorAsignado.nombres) {
         nombreDocenteCreador = `${instructorAsignado.nombres} ${instructorAsignado.apellidos || ''}`.trim()
       } else {
-        nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
+        nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro instructor'
       }
     } else if (!esMio && jornadaAjena) {
-      nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro docente'
+      nombreDocenteCreador = docenteResponsableDia.value?.nombreCompleto || 'otro instructor'
     }
 
     registros[est._id] = {
@@ -1000,6 +1000,8 @@ function construirItem(estId) {
     hTardanza = 0
     tTardanza = '0 horas'
   } else if (estadoFinal === 'Tardanza') {
+    // Tardanza manual (sin marcación de huella): no se guarda hora, igual que la falta manual.
+    if (!reg.horaMarcacion) horaMarcada = '—'
     hTardanza = reg.horasTardanza || reg.horasFallidas || 1
     tTardanza = `${hTardanza} ${hTardanza === 1 ? 'hora' : 'horas'}`
   }
@@ -1117,7 +1119,7 @@ async function marcarFalta(estId) {
   if (!reg) return
 
   if (!reg.esMio) {
-    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro instructor'}.`, 'warning')
     return
   }
 
@@ -1208,7 +1210,7 @@ function validarEdicionExcusa(estId) {
   if (!reg) return null
 
   if (!reg.esMio) {
-    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro docente'}.`, 'warning')
+    showToast(`Solo de lectura: Esta asistencia fue registrada por el Prof. ${reg.nombreDocenteCreador || 'otro instructor'}.`, 'warning')
     return null
   }
 
@@ -1441,7 +1443,7 @@ function exportarHistorial() {
       'Hora': asis.hora || '—',
       'Aprendiz': nombreEst,
       'Documento': docEst,
-      'Docente Responsable': nombreDocente,
+      'Instructor Responsable': nombreDocente,
       'Estado': asis.estado,
       'Tiempo de Tardanza': tardanzaStr,
       'Motivo Inhabilitación': asis.motivoInhabilitacion || '—',
@@ -1563,7 +1565,7 @@ function descargarExcel(data, nombreArchivo) {
         >
           <option value="" disabled>Seleccione la ficha</option>
           <option v-for="ficha in misFichas" :key="ficha._id" :value="ficha._id">
-            Ficha {{ ficha.codigoFicha }} · {{ ficha.nombrePrograma }} · Aula {{ ficha.aulaAsignada }} · {{ ficha.jornada }}{{ ficha.esLider ? ' · Líder' : '' }}
+            Ficha {{ ficha.codigoFicha }} · {{ ficha.nombrePrograma }} · Ambiente {{ ficha.aulaAsignada }} · {{ ficha.jornada }}{{ ficha.esLider ? ' · Líder' : '' }}
           </option>
         </select>
       </div>
@@ -1581,11 +1583,11 @@ function descargarExcel(data, nombreArchivo) {
             <h3>{{ fichaSeleccionada.nombrePrograma }} ({{ fichaSeleccionada.codigoFicha }})</h3>
             <span v-if="fichaSeleccionada.esLider" class="badge-banner badge-lider">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
-              Docente Líder de la Ficha
+              Instructor Líder de la Ficha
             </span>
             <span v-else class="badge-banner badge-comun">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
-              Docente Común
+              Instructor Común
             </span>
           </div>
           <div class="banner-actions">
@@ -1619,7 +1621,7 @@ function descargarExcel(data, nombreArchivo) {
               class="tab-btn"
               :class="{ active: vistaFicha === 'docentes' }"
               @click="vistaFicha = 'docentes'"
-              title="Equipo Docente"
+              title="Equipo de Instructores"
             >
               <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               <span class="tab-label">Equipo</span>
@@ -1794,7 +1796,7 @@ function descargarExcel(data, nombreArchivo) {
             </div>
             <div class="docente-jornada-body">
               <div class="docente-jornada-header-line">
-                <span class="docente-jornada-pre">Docente a cargo de la jornada:</span>
+                <span class="docente-jornada-pre">Instructor a cargo de la jornada:</span>
                 <strong class="docente-jornada-nombre">
                   Prof. {{ docenteResponsableDia ? docenteResponsableDia.nombreCompleto : (usuario?.nombre || `${usuario?.nombres || ''} ${usuario?.apellidos || ''}`.trim() || 'Instructor') }}
                 </strong>
@@ -1811,13 +1813,13 @@ function descargarExcel(data, nombreArchivo) {
               </div>
               <p class="docente-jornada-desc">
                 <template v-if="jornadaEsDeOtroDocente">
-                  Esta sesión fue registrada por otro docente. Puedes visualizarla pero los controles están bloqueados para proteger el registro del instructor titular.
+                  Esta sesión fue registrada por otro instructor. Puedes visualizarla pero los controles están bloqueados para proteger el registro del instructor titular.
                 </template>
                 <template v-else-if="docenteResponsableDia">
                   Tienes permisos de edición completos sobre esta jornada registrada.
                 </template>
                 <template v-else>
-                  Jornada sin registro previo. Los cambios que efectúes quedarán vinculados a tu usuario como docente a cargo del día.
+                  Jornada sin registro previo. Los cambios que efectúes quedarán vinculados a tu usuario como instructor a cargo del día.
                 </template>
               </p>
             </div>
@@ -1874,7 +1876,7 @@ function descargarExcel(data, nombreArchivo) {
                   </td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro instructor' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.estado === 'Falta' || (asistenciaDia[est._id]?.excusa && Number(asistenciaDia[est._id]?.horasFallidas) >= horasClaseFicha)"
@@ -1885,7 +1887,7 @@ function descargarExcel(data, nombreArchivo) {
                     </label>
                   </td>
                   <td class="td-radio">
-                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
+                    <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro instructor' : ''">
                       <input
                         type="checkbox"
                         :checked="asistenciaDia[est._id]?.excusa"
@@ -1960,7 +1962,7 @@ function descargarExcel(data, nombreArchivo) {
                         inputmode="numeric"
                         :value="asistenciaDia[est._id]?.horasFallidas || 0"
                         :disabled="jornadaInhabilitada || !asistenciaDia[est._id]?.esMio"
-                        :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: registrada por otro docente' : (`Horas fallidas (máximo ${horasClaseFicha})`)"
+                        :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: registrada por otro instructor' : (`Horas fallidas (máximo ${horasClaseFicha})`)"
                         @keydown="bloquearNoEnteros"
                         @input="onHorasInput(est._id, $event)"
                         @change="onHorasChange(est._id, $event)"
@@ -2042,7 +2044,7 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' || (asistenciaDia[est._id]?.excusa && Number(asistenciaDia[est._id]?.horasFallidas) >= horasClaseFicha) }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="marcarFalta(est._id)"
-                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Marcar falla'"
+                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro instructor' : 'Marcar falla'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -2054,7 +2056,7 @@ function descargarExcel(data, nombreArchivo) {
                       :class="{ 'btn-mob-exc-active': asistenciaDia[est._id]?.excusa }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="toggleExcusa(est._id)"
-                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Registrar excusa'"
+                      :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro instructor' : 'Registrar excusa'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                     </button>
@@ -2128,7 +2130,7 @@ function descargarExcel(data, nombreArchivo) {
               <tr>
                 <th>Fecha / Hora</th>
                 <th>Aprendiz</th>
-                <th>Docente</th>
+                <th>Instructor</th>
                 <th>Estado</th>
                 <th>Tiempo Tardanza</th>
               </tr>
@@ -2166,7 +2168,7 @@ function descargarExcel(data, nombreArchivo) {
         <div v-if="vistaFicha === 'docentes'" class="section-body">
           <div class="section-header-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
-              <h4>Equipo Docente - Ficha {{ fichaSeleccionada.codigoFicha }}</h4>
+              <h4>Equipo de Instructores - Ficha {{ fichaSeleccionada.codigoFicha }}</h4>
               <p class="section-desc">{{ fichaSeleccionada.nombrePrograma }} | Jornada: {{ fichaSeleccionada.jornada }}</p>
             </div>
             <button
@@ -2174,10 +2176,10 @@ function descargarExcel(data, nombreArchivo) {
               class="btn btn-primary"
               style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer;"
               @click="abrirModalAgregarDocente"
-              title="Agregar docente al equipo de trabajo"
+              title="Agregar instructor al equipo de trabajo"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Asignar Docente</span>
+              <span>Asignar Instructor</span>
             </button>
           </div>
 
@@ -2187,7 +2189,7 @@ function descargarExcel(data, nombreArchivo) {
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <span class="badge badge-success" style="font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 18h16l1.5-9-5 3-4.5-6-4.5 6-5-3L4 18z"/></svg>
-                  Docente Líder
+                  Instructor Líder
                 </span>
                 <span v-if="String(fichaSeleccionada.instructorLiderId?._id || fichaSeleccionada.instructorLiderId) === String(usuario.id)" class="badge badge-lider" style="font-size: 11px;">(Tú)</span>
               </div>
@@ -2218,7 +2220,7 @@ function descargarExcel(data, nombreArchivo) {
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <span class="badge badge-neutral" style="font-weight: 600; display: inline-flex; align-items: center; gap: 5px;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.8-6 8-6s6.5 2 8 6z"/></svg>
-                  Docente Común
+                  Instructor Común
                 </span>
                 <div style="display: flex; align-items: center; gap: 6px;">
                   <span v-if="String(doc._id || doc) === String(usuario.id)" class="badge badge-comun" style="font-size: 11px;">(Tú)</span>
@@ -2227,7 +2229,7 @@ function descargarExcel(data, nombreArchivo) {
                     type="button"
                     class="btn-quitar-doc"
                     @click="abrirModalDesvincularDocente(doc)"
-                    title="Desvincular docente de la ficha"
+                    title="Desvincular instructor de la ficha"
                     style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; cursor: pointer; padding: 4px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; transition: background .15s ease;"
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -2236,7 +2238,7 @@ function descargarExcel(data, nombreArchivo) {
                 </div>
               </div>
               <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #1e293b;">
-                {{ doc.nombres || 'Docente' }} {{ doc.apellidos || '' }}
+                {{ doc.nombres || 'Instructor' }} {{ doc.apellidos || '' }}
               </h4>
               <p style="font-size: 13px; color: #64748b; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
@@ -2254,7 +2256,7 @@ function descargarExcel(data, nombreArchivo) {
           </div>
           <div v-if="(!fichaSeleccionada.instructores || fichaSeleccionada.instructores.length === 0)" style="padding: 16px; background: #f8fafc; border-radius: 8px; font-size: 13px; color: #64748b; margin-top: 12px; display: flex; align-items: center; gap: 8px;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none"/></svg>
-            Esta ficha actualmente no tiene otros docentes comunes asignados.
+            Esta ficha actualmente no tiene otros instructores comunes asignados.
           </div>
         </div>
 
@@ -2441,7 +2443,7 @@ function descargarExcel(data, nombreArchivo) {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
             </div>
             <div>
-              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Agregar Docente al Equipo</h3>
+              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Agregar Instructor al Equipo</h3>
               <p style="margin: 2px 0 0; font-size: 12.5px; color: #64748b;">Ficha {{ fichaSeleccionada?.codigoFicha }} — {{ fichaSeleccionada?.jornada }}</p>
             </div>
           </div>
@@ -2456,7 +2458,7 @@ function descargarExcel(data, nombreArchivo) {
             style="flex: 1; padding: 9px 12px; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; transition: all .15s ease;"
             @click="modoAsignar = 'existente'"
           >
-            Docente Existente
+            Instructor Existente
           </button>
           <button
             type="button"
@@ -2464,25 +2466,25 @@ function descargarExcel(data, nombreArchivo) {
             style="flex: 1; padding: 9px 12px; border: none; border-radius: 7px; font-size: 13px; cursor: pointer; transition: all .15s ease;"
             @click="modoAsignar = 'nuevo'"
           >
-            + Registrar Nuevo Docente
+            + Registrar Nuevo Instructor
           </button>
         </div>
 
         <!-- MODO 1: SELECCIONAR DOCENTE EXISTENTE -->
         <div v-if="modoAsignar === 'existente'">
           <p style="font-size: 13px; color: #64748b; margin-bottom: 14px; line-height: 1.5;">
-            Selecciona un docente ya registrado en la institución para vincularlo como docente común de esta ficha:
+            Selecciona un instructor ya registrado en la institución para vincularlo como instructor común de esta ficha:
           </p>
           <div class="form-group" style="margin-bottom: 20px;">
-            <label style="display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Selecciona el Docente</label>
+            <label style="display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px;">Selecciona el Instructor</label>
             <select v-model="docenteSeleccionadoId" class="form-input" style="width: 100%; height: 44px; border-radius: 8px; font-size: 13.5px; padding: 0 12px;">
-              <option value="" disabled>Selecciona un docente de la lista...</option>
+              <option value="" disabled>Selecciona un instructor de la lista...</option>
               <option v-for="inst in docentesDisponiblesParaFicha" :key="inst._id || inst.id" :value="inst._id || inst.id">
-                {{ inst.nombres }} {{ inst.apellidos || '' }} — {{ inst.correo || inst.especialidad || 'Docente' }}
+                {{ inst.nombres }} {{ inst.apellidos || '' }} — {{ inst.correo || inst.especialidad || 'Instructor' }}
               </option>
             </select>
             <p v-if="docentesDisponiblesParaFicha.length === 0" style="font-size: 12.5px; color: #b45309; background: #fffbeb; border: 1px solid #fef3c7; padding: 10px 12px; border-radius: 8px; margin-top: 10px;">
-              No hay otros docentes registrados disponibles. Puedes usar la pestaña <strong>"+ Registrar Nuevo Docente"</strong> para crearlo con sus datos.
+              No hay otros instructores registrados disponibles. Puedes usar la pestaña <strong>"+ Registrar Nuevo Instructor"</strong> para crearlo con sus datos.
             </p>
           </div>
         </div>
@@ -2490,16 +2492,16 @@ function descargarExcel(data, nombreArchivo) {
         <!-- MODO 2: REGISTRAR NUEVO DOCENTE CON TODOS SUS DATOS -->
         <div v-else>
           <p style="font-size: 13px; color: #64748b; margin-bottom: 14px; line-height: 1.5;">
-            Ingresa todos los datos del nuevo docente. Se creará su cuenta institucional y se vinculará de inmediato a esta ficha:
+            Ingresa todos los datos del nuevo instructor. Se creará su cuenta institucional y se vinculará de inmediato a esta ficha:
           </p>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
             <div class="form-group">
               <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Nombres *</label>
-              <input v-model="nuevoDocenteForm.nombres" type="text" class="form-input" placeholder="Nombres del docente" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+              <input v-model="nuevoDocenteForm.nombres" type="text" class="form-input" placeholder="Nombres del instructor" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
             </div>
             <div class="form-group">
               <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Apellidos *</label>
-              <input v-model="nuevoDocenteForm.apellidos" type="text" class="form-input" placeholder="Apellidos del docente" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
+              <input v-model="nuevoDocenteForm.apellidos" type="text" class="form-input" placeholder="Apellidos del instructor" style="width: 100%; height: 40px; padding: 0 10px; font-size: 13px; border-radius: 7px;" />
             </div>
             <div class="form-group">
               <label style="display: block; font-size: 12.5px; font-weight: 600; color: #374151; margin-bottom: 5px;">Tipo Documento</label>
@@ -2529,7 +2531,7 @@ function descargarExcel(data, nombreArchivo) {
             </div>
           </div>
           <p style="font-size: 11.5px; color: #64748b; margin: 0 0 16px;">
-            * La contraseña inicial de acceso del nuevo docente será por defecto su número de documento.
+            * La contraseña inicial de acceso del nuevo instructor será por defecto su número de documento.
           </p>
         </div>
 
@@ -2556,7 +2558,7 @@ function descargarExcel(data, nombreArchivo) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
           <div>
-            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Desvincular Docente del Equipo</h3>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Desvincular Instructor del Equipo</h3>
             <p style="margin: 3px 0 0; font-size: 13px; color: #64748b;">Ficha {{ fichaSeleccionada?.codigoFicha }}</p>
           </div>
         </div>
@@ -2572,7 +2574,7 @@ function descargarExcel(data, nombreArchivo) {
         </div>
 
         <p style="font-size: 13.5px; color: #475569; line-height: 1.5; margin-bottom: 22px;">
-          ¿Estás seguro de quitar a este docente del equipo de trabajo? Ya no podrá registrar asistencias ni iniciar sesiones en este grupo. Las asistencias registradas previamente <strong>se conservarán</strong>.
+          ¿Estás seguro de quitar a este instructor del equipo de trabajo? Ya no podrá registrar asistencias ni iniciar sesiones en este grupo. Las asistencias registradas previamente <strong>se conservarán</strong>.
         </p>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
