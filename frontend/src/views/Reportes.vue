@@ -535,7 +535,11 @@ function datosAprendiz(est) {
   const rachaMaxima = rachaMaximaConsecutiva(fechasInjustificadas)
   const consecutivoGrave = rachaMaxima >= LIMITE_DIAS_CONSECUTIVOS
   const acumuladoGrave = fallasSinExcusa >= LIMITE_DIAS_NO_CONSECUTIVOS
-  const riesgo = consecutivoGrave ? 'critico' : (acumuladoGrave ? 'alerta' : 'normal')
+  const rutaConsecutivos = rachaMaxima >= RUTA_DIAS_CONSECUTIVOS
+  const rutaAcumulados = fallasSinExcusa >= RUTA_DIAS_ACUMULADOS
+  const riesgo = (consecutivoGrave || acumuladoGrave)
+    ? 'critico'
+    : ((rutaConsecutivos || rutaAcumulados) ? 'ruta' : 'normal')
 
   return {
     estudiante: est,
@@ -548,9 +552,9 @@ function datosAprendiz(est) {
     totalHoras: (fallasSinExcusa + fallasConExcusa) * hDia + horasTardanza,
     totalDias, porcentaje, rachaMaxima, riesgo, inasistencias,
     fechasFallas: fechasInjustificadas,
-    rutaConsecutivos: rachaMaxima >= RUTA_DIAS_CONSECUTIVOS,
-    rutaAcumulados: fallasSinExcusa >= RUTA_DIAS_ACUMULADOS,
-    enRuta: rachaMaxima >= RUTA_DIAS_CONSECUTIVOS || fallasSinExcusa >= RUTA_DIAS_ACUMULADOS,
+    rutaConsecutivos,
+    rutaAcumulados,
+    enRuta: rutaConsecutivos || rutaAcumulados,
   }
 }
 
@@ -578,8 +582,8 @@ const resumenFicha = computed(() => {
       ? Math.round(conRegistro.reduce((t, d) => t + d.porcentaje, 0) / conRegistro.length)
       : 0,
     enRuta: todos.filter((d) => d.enRuta).length,
-    criticos: todos.filter((d) => d.riesgo === 'critico').length,
-    alertas: todos.filter((d) => d.riesgo === 'alerta').length,
+    desertores: todos.filter((d) => d.riesgo === 'critico').length,
+    enRutaNivel: todos.filter((d) => d.riesgo === 'ruta').length,
     docentes: docentes.size,
     sesiones: fechasClase.value.length,
   }
@@ -726,11 +730,11 @@ const totalesFicha = computed(() => filasAprendices.value.reduce((t, f) => ({
 }), { dias: 0, horasInasistencia: 0, horasTardanza: 0, totalHoras: 0 }))
 
 const textoRiesgo = {
-  critico: (f) => `Crítico (${f.rachaMaxima} d consecutivos)`,
-  alerta: (f) => `Alerta (${f.fallasSinExcusa} d acumulados)`,
+  critico: (f) => `Deserción (${f.rachaMaxima >= LIMITE_DIAS_CONSECUTIVOS ? `${f.rachaMaxima} d seguidos` : `${f.fallasSinExcusa} d acumulados`})`,
+  ruta: (f) => `En ruta (${f.rachaMaxima >= RUTA_DIAS_CONSECUTIVOS ? `${f.rachaMaxima} d seguidos` : `${f.fallasSinExcusa} d acumulados`})`,
   normal: () => 'Normal',
 }
-const claseRiesgo = { critico: 'badge-danger', alerta: 'badge-warning', normal: 'badge-success' }
+const claseRiesgo = { critico: 'badge-danger', ruta: 'badge-warning', normal: 'badge-success' }
 
 // ---------- Modal de detalle ----------
 function abrirDetalle(fila) { detalleEst.value = fila }
@@ -838,8 +842,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
 
       <div v-if="resumenFicha" class="rp-stats">
         <StatCard icon="percent" label="Asistencia General" :value="`${resumenFicha.porcentajeGeneral}%`" variant="verde" />
-        <StatCard icon="x-circle" label="Riesgo Crítico (3+ consec.)" :value="`${resumenFicha.criticos}`" variant="rojo" />
-        <StatCard icon="clock" label="Alerta (5+ acumuladas)" :value="`${resumenFicha.alertas}`" variant="ambar" />
+        <StatCard icon="x-circle" label="Deserción (3 seguidas o 5 acumuladas)" :value="`${resumenFicha.desertores}`" variant="rojo" />
+        <StatCard icon="clock" label="En ruta (2 seguidas o 3 acumuladas)" :value="`${resumenFicha.enRutaNivel}`" variant="ambar" />
         <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenFicha.docentes" variant="morado" />
         <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenFicha.sesiones" variant="indigo" />
       </div>
@@ -913,7 +917,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                 <td><strong>{{ nombreCompleto(f.estudiante) }}</strong></td>
                 <td>{{ f.estudiante.tipoDocumento }} {{ f.estudiante.numeroDocumento }}</td>
                 <td>
-                  <span class="badge" :class="f.riesgo === 'normal' ? 'badge-warning' : 'badge-danger'">{{ f.riesgo === 'normal' ? 'En ruta' : 'Deserción' }}</span>
+                  <span class="badge" :class="f.riesgo === 'critico' ? 'badge-danger' : 'badge-warning'">{{ f.riesgo === 'critico' ? 'Deserción' : 'En ruta' }}</span>
                 </td>
                 <td>
                   <div class="rp-motivos">
