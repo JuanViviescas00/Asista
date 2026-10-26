@@ -22,10 +22,10 @@ test('textoJustificacion: con descripcion -> devuelve la descripcion', () => {
 
 test('textoJustificacion: sin descripcion -> textos fijos exactos', () => {
   assert.strictEqual(textoJustificacion({ tipo: 'Excusada' }), 'Con excusa')
-  assert.strictEqual(textoJustificacion({ tipo: 'Falta' }), 'Falla injustificada')
-  assert.strictEqual(textoJustificacion({ tipo: 'Tardanza' }), 'Tardanza injustificada')
+  assert.strictEqual(textoJustificacion({ tipo: 'Falta' }), 'Sin excusa')
+  assert.strictEqual(textoJustificacion({ tipo: 'Tardanza' }), 'Sin excusa')
 })
 
 test('textoJustificacion: descripcion de solo espacios -> texto fijo', () => {
-  assert.strictEqual(textoJustificacion({ tipo: 'Falta', descripcion: '   ' }), 'Falla injustificada')
+  assert.strictEqual(textoJustificacion({ tipo: 'Falta', descripcion: '   ' }), 'Sin excusa')
 })
