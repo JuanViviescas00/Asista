@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import api from '../services/index.js'
 import StatCard from '../components/StatCard.vue'
 import {
@@ -7,6 +7,7 @@ import {
   LIMITE_DIAS_NO_CONSECUTIVOS,
   rachaMaximaConsecutiva,
 } from '../utils/inasistencias.js'
+import { useToast } from '../composables/useToast.js'
 
 // ---------- Estado del formulario ----------
 const tipoReporte = ref('aprendiz') // 'aprendiz' | 'ficha' | 'desercion'
@@ -18,6 +19,8 @@ const fechaHasta = ref('')
 const listaAbierta = ref(false)
 const mensajeError = ref('')
 const cargando = ref(false)
+
+const { toast, showToast } = useToast()
 
 // ---------- Datos ----------
 const fichasList = ref([])
@@ -119,9 +122,11 @@ function cerrarListaConRetraso() {
 const rangoInvalido = computed(() =>
   !!(fechaDesde.value && fechaHasta.value && fechaDesde.value > fechaHasta.value)
 )
-const puedeGenerar = computed(() =>
-  !!(filtroFicha.value && fechaDesde.value && fechaHasta.value && !rangoInvalido.value && !cargando.value)
-)
+const puedeGenerar = computed(() => {
+  if (!filtroFicha.value || cargando.value) return false
+  if (tipoReporte.value === 'desercion') return true
+  return !!(fechaDesde.value && fechaHasta.value && !rangoInvalido.value)
+})
 
 // ---------- Generar reporte ----------
 function fechaISO(valor) {
@@ -149,14 +154,22 @@ async function generarReporte() {
     lista = estudiantesFicha.value
   }
 
+  let desde = fechaDesde.value
+  let hasta = fechaHasta.value
+  if (tipoReporte.value === 'desercion') {
+    desde = fichaSeleccionada.value?.fechaInicio || '2020-01-01'
+    hasta = hoyISO
+  }
+
   cargando.value = true
   diaSeleccionado.value = null
   detalleEst.value = null
+  paginaRuta.value = 1
   try {
     asistenciasFicha.value = await api.asistencias.getAll({
       fichaId: filtroFicha.value,
-      fechaDesde: fechaDesde.value,
-      fechaHasta: fechaHasta.value,
+      fechaDesde: desde,
+      fechaHasta: hasta,
     })
     // El motivo de la excusa vive en la colección de excusas; si falla, el reporte sigue funcionando
     try {
@@ -169,8 +182,8 @@ async function generarReporte() {
       tipo: tipoReporte.value,
       estudiantes: lista,
       ficha: fichaSeleccionada.value,
-      desde: fechaDesde.value,
-      hasta: fechaHasta.value,
+      desde,
+      hasta,
     }
     // Si el resultado es un solo aprendiz, se muestra su calendario de una vez
     calendarioEst.value = tipoReporte.value === 'aprendiz' && lista.length === 1 ? lista[0] : null
@@ -579,6 +592,78 @@ const filasRuta = computed(() =>
       nombreCompleto(a.estudiante).localeCompare(nombreCompleto(b.estudiante), 'es'))
 )
 
+// Paginación de la tabla de ruta de deserción (máximo 10 filas por página)
+const paginaRuta = ref(1)
+const FILAS_RUTA_POR_PAGINA = 10
+const totalPaginasRuta = computed(() => Math.max(1, Math.ceil(filasRuta.value.length / FILAS_RUTA_POR_PAGINA)))
+const filasRutaPaginadas = computed(() => {
+  const inicio = (paginaRuta.value - 1) * FILAS_RUTA_POR_PAGINA
+  return filasRuta.value.slice(inicio, inicio + FILAS_RUTA_POR_PAGINA)
+})
+
+// Activar cuando exista el endpoint POST /reportes/ruta-desercion/reportar
+const REPORTAR_HABILITADO = false
+
+// Modal de confirmación "Reportar a ruta de deserción"
+const modalReporteAbierto = ref(false)
+const reporteTarget = ref(null)
+const enviandoReporte = ref(false)
+const reportadoMap = reactive({})
+
+function abrirModalReporteDesercion(fila) {
+  reporteTarget.value = fila
+  modalReporteAbierto.value = true
+}
+
+function cerrarModalReporteDesercion() {
+  if (enviandoReporte.value) return
+  modalReporteAbierto.value = false
+  reporteTarget.value = null
+}
+
+function formatoCorto(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
+function reportadoFecha(fila) {
+  const id = fila?.estudiante?._id
+  if (!id) return null
+  return reportadoMap[id] || fila.ultimoReporte || null
+}
+
+async function enviarReporteDesercion() {
+  const fila = reporteTarget.value
+  if (!fila) return
+  enviandoReporte.value = true
+  try {
+    const res = await api.reportes.reportarDesercion({
+      estudianteId: fila.estudiante._id,
+      fichaId: reporte.value?.ficha?._id,
+    })
+    if (res?.reportadoEn) reportadoMap[fila.estudiante._id] = res.reportadoEn
+    if (res?.simulado) {
+      const dest = Array.isArray(res.destinatarios)
+        ? res.destinatarios.join(', ')
+        : (res.destinatarios || 'coordinador, bienestar y equipo ejecutor')
+      showToast(`Simulación: no se envió ningún correo. Destinatarios: ${dest}`, 'warning')
+    } else {
+      const n = Array.isArray(res?.destinatarios) ? res.destinatarios.length : (res?.destinatarios ?? 0)
+      showToast(`Reporte enviado a ${n} destinatarios`, 'success')
+    }
+    modalReporteAbierto.value = false
+    reporteTarget.value = null
+  } catch (e) {
+    showToast(e?.message || 'No se pudo enviar el reporte', 'error')
+  } finally {
+    enviandoReporte.value = false
+  }
+}
+
 const subtituloResultado = computed(() => {
   if (!reporte.value) return ''
   if (reporte.value.tipo === 'desercion') {
@@ -675,15 +760,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
           <p v-else-if="listaAbierta && busqueda.trim() && filtroFicha && !sugerencias.length" class="rp-sin-resultados">Sin coincidencias en esta ficha</p>
         </div>
 
-        <div class="rp-campo">
-          <label for="rp-desde">Fecha de inicio</label>
-          <input id="rp-desde" v-model="fechaDesde" type="date" :max="hoyISO" />
-        </div>
+        <template v-if="tipoReporte !== 'desercion'">
+          <div class="rp-campo">
+            <label for="rp-desde">Fecha de inicio</label>
+            <input id="rp-desde" v-model="fechaDesde" type="date" :max="hoyISO" />
+          </div>
 
-        <div class="rp-campo">
-          <label for="rp-hasta">Fecha final</label>
-          <input id="rp-hasta" v-model="fechaHasta" type="date" :max="hoyISO" />
-        </div>
+          <div class="rp-campo">
+            <label for="rp-hasta">Fecha final</label>
+            <input id="rp-hasta" v-model="fechaHasta" type="date" :max="hoyISO" />
+          </div>
+        </template>
       </div>
 
       <p v-if="rangoInvalido" class="rp-error" role="alert">La fecha de inicio no puede ser posterior a la fecha final.</p>
@@ -702,7 +789,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
       <header class="rp-res-head">
         <div>
           <h2>{{ { ficha: 'Reporte de la ficha', desercion: 'Ruta de deserción · Ficha' }[reporte.tipo] || 'Aprendices de la ficha' }} {{ reporte.ficha?.codigoFicha }}</h2>
-          <p>{{ reporte.desde }} al {{ reporte.hasta }} · {{ subtituloResultado }}</p>
+          <p>
+            <template v-if="reporte.tipo === 'desercion'">Toda la ficha · hasta hoy</template>
+            <template v-else>{{ reporte.desde }} al {{ reporte.hasta }}</template>
+            · {{ subtituloResultado }}
+          </p>
         </div>
       </header>
 
@@ -775,10 +866,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                 <th>Motivo</th>
                 <th class="rp-num-col">Días de falla</th>
                 <th>Fechas de las fallas</th>
+                <th class="rp-th-acc">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="f in filasRuta" :key="f.estudiante._id" class="rp-fila" tabindex="0" @click="abrirDetalle(f)" @keydown.enter="abrirDetalle(f)">
+              <tr v-for="f in filasRutaPaginadas" :key="f.estudiante._id" class="rp-fila" tabindex="0" @click="abrirDetalle(f)" @keydown.enter="abrirDetalle(f)">
                 <td><strong>{{ nombreCompleto(f.estudiante) }}</strong></td>
                 <td>{{ f.estudiante.tipoDocumento }} {{ f.estudiante.numeroDocumento }}</td>
                 <td>
@@ -796,10 +888,33 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                     <span v-for="fecha in f.fechasFallas" :key="fecha" class="rp-chip-fecha">{{ fecha }}</span>
                   </div>
                 </td>
+                <td class="rp-td-acc">
+                  <div class="rp-acciones-celda">
+                    <button type="button" class="rp-link" @click.stop="abrirDetalle(f)">Ver reporte de fallas</button>
+                    <template v-if="REPORTAR_HABILITADO">
+                      <button
+                        v-if="!reportadoFecha(f)"
+                        type="button"
+                        class="rp-btn rp-btn-reportar"
+                        @click.stop="abrirModalReporteDesercion(f)"
+                      >Reportar</button>
+                      <span v-else class="rp-reportado" title="Ya se envió el reporte a ruta de deserción">Reportado {{ formatoCorto(reportadoFecha(f)) }}</span>
+                    </template>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
+        <nav v-if="totalPaginasRuta > 1" class="rp-paginacion" aria-label="Paginación de la ruta de deserción">
+          <button type="button" class="rp-pag-flecha" :disabled="paginaRuta === 1" aria-label="Página anterior" @click="paginaRuta--">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span class="rp-pag-info">Página {{ paginaRuta }} de {{ totalPaginasRuta }}</span>
+          <button type="button" class="rp-pag-flecha" :disabled="paginaRuta === totalPaginasRuta" aria-label="Página siguiente" @click="paginaRuta++">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </nav>
         <p class="rp-nota">
           Un aprendiz entra en la ruta de deserción con {{ RUTA_DIAS_CONSECUTIVOS }} o más días seguidos de falla injustificada, o con {{ RUTA_DIAS_ACUMULADOS }} o más días de falla acumulados (no tienen que ser seguidos). Las excusas no cuentan y un fin de semana no interrumpe una racha. Con 3 días seguidos o 5 acumulados el nivel pasa a "Deserción". Haz clic en un aprendiz para ver su detalle.
         </p>
@@ -969,6 +1084,33 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MODAL DE CONFIRMACIÓN "REPORTAR" ===== -->
+    <div v-if="modalReporteAbierto && reporteTarget" class="rp-overlay" @click.self="cerrarModalReporteDesercion">
+      <div class="rp-modal rp-modal-reporte" role="dialog" aria-modal="true" aria-labelledby="rp-reporte-titulo">
+        <header class="rp-modal-head">
+          <div>
+            <h3 id="rp-reporte-titulo">Reportar a ruta de deserción</h3>
+            <p>{{ nombreCompleto(reporteTarget.estudiante) }} · {{ reporteTarget.estudiante.tipoDocumento }} {{ reporteTarget.estudiante.numeroDocumento }}</p>
+          </div>
+          <button type="button" class="rp-cerrar" aria-label="Cerrar" @click="cerrarModalReporteDesercion">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </header>
+
+        <div class="rp-modal-cuerpo">
+          <p class="rp-reporte-texto">
+            ¿Seguro que quieres reportar a este aprendiz en la ruta de deserción? Se notificará por correo al coordinador, bienestar al aprendiz y al equipo ejecutor de la ficha.
+          </p>
+          <div class="rp-reporte-acciones">
+            <button type="button" class="rp-btn rp-btn-secundario" :disabled="enviandoReporte" @click="cerrarModalReporteDesercion">Cancelar</button>
+            <button type="button" class="rp-btn rp-btn-primario" :disabled="enviandoReporte" @click="enviarReporteDesercion">
+              {{ enviandoReporte ? 'Enviando...' : 'Confirmar y reportar' }}
+            </button>
           </div>
         </div>
       </div>
@@ -1172,6 +1314,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
 .rp-td-acc { text-align: right; white-space: nowrap; }
 .rp-link { background: none; border: none; padding: 6px 8px; font: inherit; font-size: 13.5px; font-weight: 700; color: #2c8300; cursor: pointer; border-radius: 6px; }
 .rp-link:hover { background: #e8f5e0; }
+.rp-acciones-celda { display: inline-flex; align-items: center; gap: 8px; }
+.rp-btn-reportar {
+  height: 34px; padding: 0 14px; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 700;
+  background: #c4432b; color: #fff; cursor: pointer; border: 1px solid transparent; transition: background .15s, opacity .15s;
+}
+.rp-btn-reportar:hover:not(:disabled) { background: #a33622; }
+.rp-btn-reportar:disabled { opacity: .45; cursor: not-allowed; }
+.rp-reportado { padding: 5px 10px; border-radius: 999px; background: #f2f9ed; color: #2c8300; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+
+.rp-paginacion { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px; }
+.rp-pag-flecha {
+  width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid #d5dbd0; border-radius: 50%; color: #2e7d32; cursor: pointer;
+  transition: background .15s, border-color .15s, opacity .15s;
+}
+.rp-pag-flecha:hover:not(:disabled) { background: #f2f9ed; border-color: #39a900; }
+.rp-pag-flecha:disabled { opacity: .4; cursor: default; }
+.rp-pag-info { font-size: 14px; font-weight: 700; color: #16210f; }
 
 .rp-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(22, 33, 15, .45); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .rp-modal { background: #fff; border-radius: 20px; width: 100%; max-width: 820px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 24px 64px rgba(22, 33, 15, .28); }
@@ -1188,6 +1348,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
 .rp-dato b { font-size: 15px; color: #16210f; }
 .rp-sin-inas { margin: 0; padding: 16px; background: #f2f9ed; border-radius: 12px; color: #2c8300; font-weight: 600; font-size: 14px; }
 .rp-tabla-det td, .rp-tabla-det th { padding: 11px 14px; }
+.rp-modal-reporte {
+  --rp-verde: var(--verde, #39a900);
+  --rp-verde-osc: #2c8300;
+  --rp-borde: var(--borde, #e3e8df);
+  --rp-texto: var(--tinta, #16210f);
+  max-width: 480px;
+}
+.rp-reporte-texto { margin: 0; font-size: 14.5px; line-height: 1.55; color: #16210f; }
+.rp-reporte-acciones { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 
 @media (max-width: 1100px) { .rp-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* Ventana flotante de detalle del día */
