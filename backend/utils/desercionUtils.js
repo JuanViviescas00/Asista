@@ -13,7 +13,7 @@ import { topeHorasPorJornada } from './jornadaUtils.js'
  * - Una 'Falta' aún dentro de la ventana es "pendiente": no cuenta.
  * - Deserción: 3 jornadas continuas con falta injustificada (máximo histórico),
  *   o 5 acumuladas en toda la ficha (no por mes).
- * - Riesgo: 2 continuas ACTUALES, o 4 acumuladas.
+ * - Riesgo: 2 continuas ACTUALES, o 3 acumuladas.
  * - "Continuas" se evalúa sobre las fechas de jornadas e inasistencias (unión),
  *   ordenadas. Un día asistido, con tardanza menor al tope, o excusado CORTA la
  *   cadena. Los días sin jornada (festivo, sin clase, o jornada inhabilitada)
@@ -99,7 +99,7 @@ export function evaluarRiesgoDesercion({ jornadas = [], inasistencias = [], fest
     detalle = maxContinuas >= 3
       ? `Deserción: ${maxContinuas} jornadas continuas con falta injustificada.`
       : `Deserción: ${acumuladas} inasistencias injustificadas acumuladas.`
-  } else if (continuasActuales >= 2 || acumuladas >= 4) {
+  } else if (continuasActuales >= 2 || acumuladas >= 3) {
     nivel = 'riesgo'
     detalle = continuasActuales >= 2
       ? `Riesgo: ${continuasActuales} jornadas continuas con falta injustificada.`
