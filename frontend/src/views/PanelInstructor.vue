@@ -743,6 +743,10 @@ const horasClaseFicha = computed(() => {
 function horasAuto(reg) {
   const max = horasClaseFicha.value
   if (!reg) return 0
+  if (reg.excusa) {
+    const h = Number(reg.horasTardanza) || 0
+    return (h > 0 && h < max) ? h : max
+  }
   if (reg.estado === 'Falta') return max
   if (reg.estado === 'Tardanza') return Math.min(Number(reg.horasTardanza) || 1, max)
   return 0
@@ -760,6 +764,18 @@ function actualizarEstadoPorHoras(reg, n) {
   reg.horasFallidas = limitado
 
   if (reg.excusa) {
+    if (limitado === 0) {
+      reg.excusa = false
+      reg.motivoExcusa = ''
+      reg.descripcion = ''
+      reg.estado = 'Presente'
+      reg.horasTardanza = 0
+      reg.tiempoTardanza = '0 horas'
+      if (!reg.horaMarcacion || reg.horaMarcacion === '—') {
+        reg.horaMarcacion = new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      }
+      return
+    }
     reg.estado = 'Excusada'
     if (limitado > 0 && limitado < max) {
       reg.horasTardanza = limitado
@@ -866,7 +882,9 @@ function inicializarAsistenciaDia() {
     const hora = existente ? (existente.hora || '') : (new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
-      : { horas: 0, texto: '0 horas' }
+      : (estado === 'Excusada'
+        ? { horas: Number(existente.horasTardanza) || 0, texto: existente.tiempoTardanza || '0 horas' }
+        : { horas: 0, texto: '0 horas' })
 
     // Verificación de propiedad docente (Solo lectura para otros docentes)
     const instructorAsignado = existente?.instructorId
@@ -899,6 +917,7 @@ function inicializarAsistenciaDia() {
       previo: null,
       esMio,
       nombreDocenteCreador,
+      descripcion: existente?.descripcion || '',
     }
     registros[est._id].horasFallidas = horasAuto(registros[est._id])
   }
@@ -925,6 +944,7 @@ function inicializarAsistenciaDia() {
     reg.horaMarcacion = item.hora || '—'
     reg.horasTardanza = item.horasTardanza || 0
     reg.tiempoTardanza = item.tiempoTardanza || '0 horas'
+    reg.descripcion = item.descripcion ?? reg.descripcion
     reg.horasFallidas = horasAuto(reg)
   }
 
@@ -994,6 +1014,7 @@ function construirItem(estId) {
     horasTardanza: hTardanza,
     tiempoTardanza: tTardanza,
     instructorId: usuario.value.id || null,
+    descripcion: reg.descripcion || '',
     metodo: 'MANUAL',
   }
 }
@@ -1106,6 +1127,29 @@ async function marcarFalta(estId) {
     return
   }
 
+  if (reg.excusa) {
+    if (Number(reg.horasFallidas) < horasClaseFicha.value) {
+      reg.horasTardanza = 0
+      reg.tiempoTardanza = '0 horas'
+      reg.horasFallidas = horasAuto(reg)
+      await sincronizarCambioNube(estId)
+      return
+    }
+    // Desmarcar la falla justificada: vuelve a Presente
+    const previo = reg.previo
+    reg.estado = previo?.estado || 'Presente'
+    reg.horaMarcacion = previo?.horaMarcacion || new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    reg.horasTardanza = previo?.horasTardanza || 0
+    reg.tiempoTardanza = previo?.tiempoTardanza || '0 horas'
+    reg.excusa = false
+    reg.motivoExcusa = ''
+    reg.descripcion = ''
+    reg.previo = null
+    reg.horasFallidas = horasAuto(reg)
+    await sincronizarCambioNube(estId)
+    return
+  }
+
   if (reg.estado === 'Falta') {
     // Desmarcar la falla: vuelve a estar Presente
     const previo = reg.previo
@@ -1142,6 +1186,7 @@ const excusaError = ref('')
 const excusaEditando = ref(false)
 const excusaTextareaRef = ref(null)
 const EXCUSA_MAX = 300
+const DESCRIPCION_MAX = 200
 
 const excusaEstudiante = computed(() => estudiantesFicha.value.find(e => String(e._id) === String(excusaEstId.value)) || null)
 
@@ -1180,7 +1225,7 @@ async function abrirModalExcusa(estId, editando = false) {
   if (!reg) return
   excusaEstId.value = estId
   excusaEditando.value = editando
-  excusaTexto.value = editando ? (reg.motivoExcusa || '') : ''
+  excusaTexto.value = editando ? (reg.motivoExcusa || reg.descripcion || '') : ''
   excusaError.value = ''
   showExcusaModal.value = true
   await nextTick()
@@ -1199,16 +1244,13 @@ async function confirmarExcusa() {
   const reg = validarEdicionExcusa(estId)
   if (!reg) { cerrarModalExcusa(); return }
 
-  const texto = excusaTexto.value.trim()
-  if (texto.length < 5) {
-    excusaError.value = 'Describe brevemente el motivo de la excusa (mínimo 5 caracteres).'
-    return
-  }
+  const texto = excusaTexto.value.trim().slice(0, DESCRIPCION_MAX)
 
   reg.motivoExcusa = texto
   reg.excusa = true
   reg.estado = 'Excusada'
   reg.horasFallidas = horasAuto(reg)
+  reg.descripcion = texto
   cerrarModalExcusa()
 
   await sincronizarCambioNube(estId)
@@ -1222,6 +1264,22 @@ async function toggleExcusa(estId) {
   if (!reg.excusa) {
     await abrirModalExcusa(estId, false)
     return
+  }
+
+  reg.excusa = false
+  reg.motivoExcusa = ''
+  reg.descripcion = ''
+  const h = Number(reg.horasTardanza) || 0
+  const max = horasClaseFicha.value
+  if (h > 0 && h < max) {
+    reg.estado = 'Tardanza'
+    reg.horasTardanza = h
+    reg.tiempoTardanza = `${h} ${h === 1 ? 'hora' : 'horas'}`
+  } else {
+    reg.estado = 'Falta'
+    reg.horasTardanza = 0
+    reg.tiempoTardanza = '0 horas'
+    reg.horaMarcacion = '—'
   }
 
   reg.excusa = false
@@ -1267,6 +1325,49 @@ async function sincronizarMotivoExcusa(estId, item) {
     console.warn('[Excusa] No se pudo sincronizar la descripción:', err.message)
     showToast('La asistencia se guardó, pero no se pudo guardar la descripción de la excusa.', 'warning')
   }
+}
+
+// --- Descripción opcional para Sofía Plus (modal) ---
+const showDescModal = ref(false)
+const descEstId = ref('')
+const descTexto = ref('')
+const descTextareaRef = ref(null)
+
+// Valida que la fila admita una descripción: debe existir, ser mía, no estar
+// reportada a Sofía Plus y estar en Falta, Tardanza o Excusada (excusa cuenta).
+function validarEdicionDescripcion(estId) {
+  const reg = asistenciaDia.value[estId]
+  if (!reg) return null
+  if (!reg.esMio) return null
+  if (reg.subidoSofia) return null
+  const estadoEfectivo = reg.excusa ? 'Excusada' : reg.estado
+  if (!['Falta', 'Tardanza', 'Excusada'].includes(estadoEfectivo)) return null
+  return reg
+}
+
+async function abrirModalDescripcion(estId) {
+  const reg = validarEdicionDescripcion(estId)
+  if (!reg) return
+  descEstId.value = estId
+  descTexto.value = reg.descripcion || ''
+  showDescModal.value = true
+  await nextTick()
+  descTextareaRef.value?.focus()
+}
+
+function cerrarModalDescripcion() {
+  showDescModal.value = false
+  descEstId.value = ''
+  descTexto.value = ''
+}
+
+async function confirmarDescripcion() {
+  const estId = descEstId.value
+  const reg = asistenciaDia.value[estId]
+  if (!reg) { cerrarModalDescripcion(); return }
+  reg.descripcion = descTexto.value.trim().slice(0, DESCRIPCION_MAX)
+  cerrarModalDescripcion()
+  await sincronizarCambioNube(estId)
 }
 
 // Contadores de asistencia del día
@@ -1755,10 +1856,10 @@ function descargarExcel(data, nombreArchivo) {
                     :class="{ 'row-excusada': asistenciaDia[est._id]?.excusa, 'row-disabled': jornadaInhabilitada }">
                   <td>
                     <strong>{{ est.nombres }} {{ est.apellidos }}</strong>
-                    <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
-                      <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
-                      <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
-                      <template v-else>error</template>
+                    <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].estado === 'error' ? (estadoFilaSync[est._id].detalle || 'Error al guardar') : (estadoFilaSync[est._id].estado === 'guardando' ? 'Guardando…' : 'Guardado')">
+                      <template v-if="estadoFilaSync[est._id].estado === 'guardando'">●</template>
+                      <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">✓</template>
+                      <template v-else>!</template>
                     </span>
                   </td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
@@ -1766,7 +1867,7 @@ function descargarExcel(data, nombreArchivo) {
                     <label class="checkbox-label" :style="(jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio) ? 'cursor: not-allowed; opacity: 0.5;' : ''" :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : ''">
                       <input
                         type="checkbox"
-                        :checked="asistenciaDia[est._id]?.estado === 'Falta'"
+                        :checked="asistenciaDia[est._id]?.estado === 'Falta' || (asistenciaDia[est._id]?.excusa && Number(asistenciaDia[est._id]?.horasFallidas) >= horasClaseFicha)"
                         :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                         @change="marcarFalta(est._id)"
                       />
@@ -1801,15 +1902,15 @@ function descargarExcel(data, nombreArchivo) {
                       class="badge badge-warning badge-excusa-tip"
                       tabindex="0"
                       role="button"
-                      :aria-label="'Excusada: ' + (asistenciaDia[est._id]?.motivoExcusa || 'sin descripción')"
+                      :aria-label="'Excusada: ' + (asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará &quot;Con excusa&quot; a Sofía Plus')"
                       @click="editarExcusa(est._id)"
                       @keydown.enter="editarExcusa(est._id)"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                       Excusada
                       <span class="excusa-tooltip" role="tooltip">
-                        <strong>Motivo de la excusa</strong>
-                        <span>{{ asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada' }}</span>
+                        <strong>Descripción para Sofía Plus</strong>
+                        <span>{{ asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará "Con excusa" a Sofía Plus' }}</span>
                         <em v-if="asistenciaDia[est._id]?.esMio && !asistenciaDia[est._id]?.subidoSofia">Clic para editar</em>
                       </span>
                     </span>
@@ -1825,6 +1926,17 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
                       Presente (A tiempo)
                     </span>
+                    <button
+                      v-if="(asistenciaDia[est._id]?.excusa || asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.estado === 'Tardanza') && !jornadaInhabilitada"
+                      type="button"
+                      class="btn-desc-nota"
+                      :class="{ 'btn-desc-nota-activa': asistenciaDia[est._id]?.descripcion }"
+                      :disabled="asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
+                      :title="asistenciaDia[est._id]?.subidoSofia ? 'Ya reportada a Sofía Plus' : (asistenciaDia[est._id]?.descripcion ? 'Editar descripción: ' + asistenciaDia[est._id]?.descripcion : 'Añadir descripción opcional')"
+                      @click="abrirModalDescripcion(est._id)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                    </button>
                   </td>
                   <td class="td-horas">
                     <div class="horas-wrap">
@@ -1873,10 +1985,10 @@ function descargarExcel(data, nombreArchivo) {
                   <div class="mob-info">
                     <strong class="mob-name">
                       {{ est.nombres }} {{ est.apellidos }}
-                      <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
-                        <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
-                        <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
-                        <template v-else>error</template>
+                      <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].estado === 'error' ? (estadoFilaSync[est._id].detalle || 'Error al guardar') : (estadoFilaSync[est._id].estado === 'guardando' ? 'Guardando…' : 'Guardado')">
+                        <template v-if="estadoFilaSync[est._id].estado === 'guardando'">●</template>
+                        <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">✓</template>
+                        <template v-else>!</template>
                       </span>
                     </strong>
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
@@ -1884,7 +1996,7 @@ function descargarExcel(data, nombreArchivo) {
                   <div class="mob-status-badge">
                     <span v-if="asistenciaDia[est._id]?.subidoSofia" class="badge-mob-pres" style="background: #059669; color: #fff;">Sofia OK</span>
                     <span v-else-if="jornadaInhabilitada" class="badge-mob-inh">Inhabilitada</span>
-                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.motivoExcusa || 'Sin descripción registrada'" @click="editarExcusa(est._id)">Excusada</span>
+                    <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará &quot;Con excusa&quot; a Sofía Plus'" @click="editarExcusa(est._id)">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
                     <span v-else class="badge-mob-pres">Presente</span>
@@ -1917,7 +2029,7 @@ function descargarExcel(data, nombreArchivo) {
                     <button
                       type="button"
                       class="btn-mob-falta"
-                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' }"
+                      :class="{ 'btn-mob-falta-active': asistenciaDia[est._id]?.estado === 'Falta' || (asistenciaDia[est._id]?.excusa && Number(asistenciaDia[est._id]?.horasFallidas) >= horasClaseFicha) }"
                       :disabled="jornadaInhabilitada || asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
                       @click="marcarFalta(est._id)"
                       :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Marcar falla'"
@@ -1935,6 +2047,18 @@ function descargarExcel(data, nombreArchivo) {
                       :title="!asistenciaDia[est._id]?.esMio ? 'Solo lectura: jornada de otro docente' : 'Registrar excusa'"
                     >
                       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    </button>
+
+                    <!-- Botón Descripción (nota Sofía Plus) -->
+                    <button
+                      v-if="(asistenciaDia[est._id]?.excusa || asistenciaDia[est._id]?.estado === 'Falta' || asistenciaDia[est._id]?.estado === 'Tardanza') && !jornadaInhabilitada"
+                      type="button"
+                      class="btn-mob-nota"
+                      :disabled="asistenciaDia[est._id]?.subidoSofia || !asistenciaDia[est._id]?.esMio"
+                      :title="asistenciaDia[est._id]?.subidoSofia ? 'Ya reportada a Sofía Plus' : (asistenciaDia[est._id]?.descripcion ? 'Editar descripción: ' + asistenciaDia[est._id]?.descripcion : 'Añadir descripción opcional')"
+                      @click="abrirModalDescripcion(est._id)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
                     </button>
                   </div>
                 </div>
@@ -2181,25 +2305,59 @@ function descargarExcel(data, nombreArchivo) {
           Fecha: <strong>{{ fechaAsistencia }}</strong>
         </p>
 
-        <label class="excusa-modal-label" for="excusa-texto">¿Por qué se le coloca la excusa al aprendiz?</label>
+        <label class="excusa-modal-label" for="excusa-texto">¿Por qué se le coloca la excusa al aprendiz? (opcional)</label>
+        <p class="excusa-modal-sub">Este texto se enviará a Sofía Plus. Si lo dejas vacío se enviará "Con excusa". No incluyas datos médicos ni personales.</p>
         <textarea
           id="excusa-texto"
           ref="excusaTextareaRef"
           v-model="excusaTexto"
           class="form-input excusa-modal-textarea"
-          :maxlength="EXCUSA_MAX"
+          :maxlength="DESCRIPCION_MAX"
           rows="4"
-          placeholder="Ej: Cita médica con soporte de incapacidad, calamidad doméstica, permiso aprobado por coordinación..."
+          placeholder="Ej: Permiso aprobado por coordinación."
           @input="excusaError = ''"
         ></textarea>
         <div class="excusa-modal-pie">
           <span v-if="excusaError" class="excusa-modal-error">{{ excusaError }}</span>
-          <span class="excusa-modal-contador">{{ excusaTexto.length }} / {{ EXCUSA_MAX }}</span>
+          <span class="excusa-modal-contador">{{ excusaTexto.length }} / {{ DESCRIPCION_MAX }}</span>
         </div>
 
         <div class="modal-actions excusa-modal-acciones">
           <button type="button" class="btn btn-outline" @click="cerrarModalExcusa">Cancelar</button>
           <button type="button" class="btn btn-primary" @click="confirmarExcusa">Guardar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: DESCRIPCIÓN OPCIONAL PARA SOFÍA PLUS -->
+    <div v-if="showDescModal" class="modal-overlay" @click.self="cerrarModalDescripcion" @keydown.esc="cerrarModalDescripcion">
+      <div class="modal excusa-modal" role="dialog" aria-modal="true" aria-labelledby="desc-modal-titulo">
+        <h3 id="desc-modal-titulo" class="excusa-modal-titulo">
+          <span class="excusa-modal-icono" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </span>
+          Descripción para Sofía Plus (opcional)
+        </h3>
+        <p class="excusa-modal-sub">
+          Si la dejas vacía se enviará el texto estándar (Falla justificada / injustificada). No incluyas datos médicos ni personales.
+        </p>
+
+        <textarea
+          id="desc-texto"
+          ref="descTextareaRef"
+          v-model="descTexto"
+          class="form-input excusa-modal-textarea"
+          :maxlength="DESCRIPCION_MAX"
+          rows="4"
+          placeholder="Ej: El aprendiz no asistió a la totalidad de la jornada."
+        ></textarea>
+        <div class="excusa-modal-pie">
+          <span class="excusa-modal-contador">{{ descTexto.length }} / {{ DESCRIPCION_MAX }}</span>
+        </div>
+
+        <div class="modal-actions excusa-modal-acciones">
+          <button type="button" class="btn btn-outline" @click="cerrarModalDescripcion">Cancelar</button>
+          <button type="button" class="btn btn-primary" @click="confirmarDescripcion">Guardar</button>
         </div>
       </div>
     </div>
