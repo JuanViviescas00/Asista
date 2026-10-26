@@ -196,6 +196,10 @@ const api = {
     finalizar(body) { return request('/clases/finalizar', { method: 'POST', body: JSON.stringify(body) }) },
     estado() { return request('/clases/estado') },
   },
+
+  reportes: {
+    reportarDesercion(body) { return request('/reportes/ruta-desercion/reportar', { method: 'POST', body: JSON.stringify(body) }) },
+  },
 }
 
 // ------------------------------------------------------------
