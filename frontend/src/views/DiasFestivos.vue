@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../services/index.js'
 import '../styles/diasFestivos.css'
+import { confirmar } from '../composables/useConfirm.js'
 
 const toast = ref({ show: false, message: '', type: '' })
 const showModal = ref(false)
@@ -160,7 +161,13 @@ async function guardarDiaFestivo() {
 }
 
 async function eliminarDiaFestivo(id) {
-  if (!confirm('¿Deseas eliminar este día festivo / inhabilitación?')) return
+  const ok = await confirmar({
+    titulo: 'Eliminar día inhabilitado',
+    mensaje: '¿Deseas eliminar este día festivo / inhabilitación?',
+    textoConfirmar: 'Eliminar',
+    peligro: true,
+  })
+  if (!ok) return
   try {
     await api.diasFestivos.delete(id)
     await loadDiasFestivos()

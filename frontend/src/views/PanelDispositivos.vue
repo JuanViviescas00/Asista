@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import { socket } from '../services/index.js'
+import { confirmar } from '../composables/useConfirm.js'
 
 const dispositivos = ref([])
 const fichas = ref([])
@@ -187,11 +188,11 @@ async function guardar(device) {
 }
 
 async function resetFingerprint(device) {
-  if (!confirm(`¿Resetear la identidad de hardware de "${deviceLabel(device)}"?\n\n` +
-    'Se eliminará el fingerprint guardado y el dispositivo lo re-adoptará en su próxima conexión. ' +
-    'Úsalo solo si reinstalaste Windows o reemplazaste el disco de ese PC.')) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Resetear dispositivo',
+    mensaje: `¿Resetear la identidad de hardware de "${deviceLabel(device)}"?\n\nSe eliminará el fingerprint guardado y el dispositivo lo re-adoptará en su próxima conexión. Úsalo solo si reinstalaste Windows o reemplazaste el disco de ese PC.`,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.resetFingerprint(device._id)
@@ -218,9 +219,12 @@ async function aprobarDispositivo(device) {
 }
 
 async function deshabilitarDispositivo(device) {
-  if (!confirm(`¿Deshabilitar "${deviceLabel(device)}"?\n\nEl dispositivo perderá el acceso de inmediato si está conectado.`)) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Deshabilitar dispositivo',
+    mensaje: `¿Deshabilitar "${deviceLabel(device)}"?\n\nEl dispositivo perderá el acceso de inmediato si está conectado.`,
+    peligro: true,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.deshabilitar(device._id)
@@ -247,9 +251,12 @@ async function reactivarDispositivo(device) {
 }
 
 async function rechazarDispositivo(device) {
-  if (!confirm(`¿Rechazar y eliminar "${deviceLabel(device)}"?\n\nEsta acción es permanente y borra el dispositivo.`)) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Rechazar dispositivo',
+    mensaje: `¿Rechazar y eliminar "${deviceLabel(device)}"?\n\nEsta acción es permanente y borra el dispositivo.`,
+    peligro: true,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.eliminar(device._id)
@@ -263,9 +270,12 @@ async function rechazarDispositivo(device) {
 }
 
 async function eliminarDispositivo(device) {
-  if (!confirm(`¿Eliminar definitivamente "${deviceLabel(device)}"?\n\nEsta acción borrará el registro del dispositivo de la base de datos y liberará cualquier ficha asignada.`)) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Eliminar dispositivo',
+    mensaje: `¿Eliminar definitivamente "${deviceLabel(device)}"?\n\nEsta acción borrará el registro del dispositivo de la base de datos y liberará cualquier ficha asignada.`,
+    peligro: true,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.eliminar(device._id)

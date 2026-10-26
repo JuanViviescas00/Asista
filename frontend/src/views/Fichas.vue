@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
 import { useAuth } from '../composables/useAuth.js'
+import { confirmar } from '../composables/useConfirm.js'
 import { nombreProgramaLimpio, capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textos.js'
 
 const { usuario } = useAuth()
@@ -339,7 +340,12 @@ async function eliminarPrograma(prog) {
     showToastFn('Acción restringida: solo el Administrador puede eliminar programas', 'error')
     return
   }
-  if (!confirm(`¿Estás seguro de eliminar el programa "${prog.nombre}"?`)) return
+  const ok = await confirmar({
+    titulo: 'Eliminar programa',
+    mensaje: `¿Estás seguro de eliminar el programa "${prog.nombre}"?`,
+    peligro: true,
+  })
+  if (!ok) return
   try {
     await api.programas.delete(prog._id)
     showToastFn(`Programa "${prog.nombre}" eliminado correctamente`)
