@@ -1243,7 +1243,7 @@ async function confirmarExcusa() {
   reg.excusa = true
   reg.estado = 'Excusada'
   reg.horasFallidas = horasAuto(reg)
-  if (texto) reg.descripcion = texto
+  reg.descripcion = texto
   cerrarModalExcusa()
 
   await sincronizarCambioNube(estId)
