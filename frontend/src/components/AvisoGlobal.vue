@@ -88,4 +88,8 @@ const estado = useAvisoState()
   opacity: 0;
   transform: translateY(8px);
 }
+
+@media (max-width: 480px) {
+  .aviso-global, .ag-aviso { left: 12px; right: 12px; max-width: none; }
+}
 </style>

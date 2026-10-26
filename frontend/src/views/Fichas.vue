@@ -550,25 +550,42 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
 
   <!-- MODAL DE CREACIÓN / EDICIÓN DE FICHA -->
   <div v-if="showModal" class="fichas-modal-overlay" @click.self="closeModal">
-    <div class="fichas-modal fichas-modal-large">
-      <h2>{{ editingId ? ' Editar Ficha' : ' Nueva Ficha' }}</h2>
-      <div class="fichas-form-grid">
-        <div class="fichas-form-group">
+    <div class="fichas-modal fichas-modal-large fichas-modal-ficha">
+      <div class="fichas-modal-titulo">
+        <h2>{{ editingId ? ' Editar Ficha' : ' Nueva Ficha' }}</h2>
+        <button
+        v-if="esAdmin"
+        type="button"
+        class="btn-link-programas"
+        @click="abrirCrearProgramaRapido"
+        title="Adjuntar un nuevo programa oficial al catálogo"
+        >
+        + Adjuntar Programa
+        </button>
+      </div>
+      <div class="fichas-form-grid fichas-form-grid-ficha">
+        <div class="fichas-form-group fichas-col-2">
           <label>Código de Ficha *</label>
           <input v-model="fichaForm.codigoFicha" type="text" placeholder="Ej: 2670123" />
         </div>
-        <div class="fichas-form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+        <div class="fichas-form-group fichas-col-2">
+          <label>Jornada *</label>
+          <select v-model="fichaForm.jornada">
+            <option value="" disabled>Selecciona la jornada...</option>
+            <option value="Mañana">Mañana</option>
+            <option value="Tarde">Tarde</option>
+            <option value="Noche">Noche</option>
+            <option value="Mixta">Mixta</option>
+          </select>
+        </div>
+        <div class="fichas-form-group fichas-col-2">
+          <label>Ambiente Asignado *</label>
+          <input v-model="fichaForm.aulaAsignada" type="text" placeholder="Ej: Ambiente 302 - Bloque A" />
+        </div>
+
+        <div class="fichas-form-group fichas-col-6">
+          <div>
             <label style="margin: 0;">Nombre del Programa *</label>
-            <button
-              v-if="esAdmin"
-              type="button"
-              class="btn-link-programas"
-              @click="abrirCrearProgramaRapido"
-              title="Adjuntar un nuevo programa oficial al catálogo"
-            >
-              + Adjuntar Programa
-            </button>
           </div>
           <select
             v-model="fichaForm.nombrePrograma"
@@ -597,20 +614,6 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
             Selecciona un programa estandarizado de la lista. Solo el Administrador puede adjuntar o modificar programas.
           </span>
         </div>
-        <div class="fichas-form-group">
-          <label>Jornada *</label>
-          <select v-model="fichaForm.jornada">
-            <option value="Mañana">Mañana</option>
-            <option value="Tarde">Tarde</option>
-            <option value="Noche">Noche</option>
-            <option value="Mixta">Mixta</option>
-          </select>
-        </div>
-        <div class="fichas-form-group">
-          <label>Ambiente Asignado *</label>
-          <input v-model="fichaForm.aulaAsignada" type="text" placeholder="Ej: Ambiente 302 - Bloque A" />
-        </div>
-
         <!-- BUSCADOR DE DOCENTES -->
         <div class="fichas-form-group fichas-form-group-wide">
           <label> Filtrar / Buscar Instructor en la Lista</label>
@@ -666,11 +669,11 @@ watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
           </div>
         </div>
 
-        <div class="fichas-form-group">
+        <div class="fichas-form-group fichas-col-3">
           <label>Fecha de Inicio *</label>
           <input v-model="fichaForm.fechaInicio" type="date" />
         </div>
-        <div class="fichas-form-group">
+        <div class="fichas-form-group fichas-col-3">
           <label>Fecha de Fin *</label>
           <input v-model="fichaForm.fechaFin" type="date" />
         </div>
