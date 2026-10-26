@@ -2,7 +2,6 @@ import mongoose from 'mongoose'
 import Instructor from '../models/Instructor.js'
 import Ficha from '../models/Ficha.js'
 import Estudiante from '../models/Estudiante.js'
-import Asistencia from '../models/Asistencia.js'
 import Inasistencia from '../models/Inasistencia.js'
 import SofiaPlusSync from '../models/SofiaPlusSync.js'
 import { hashPassword, claveInicialInstructor } from '../services/passwordService.js'
@@ -10,6 +9,7 @@ import { encrypt, decrypt } from '../services/cryptoService.js'
 import { enviarCorreoConfirmacionCambioPassword } from '../services/emailService.js'
 import { capitalizarTexto, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textUtils.js'
 import { ejecutarRPAInasistencias, obtenerEstadoRPA } from '../services/rpaService.js'
+import { textoJustificacion } from '../utils/descripcionInasistencia.js'
 
 // Resuelve un fichaId (ObjectId o codigoFicha) a su documento Ficha.
 // Mismo patrón de resolución usado en estudianteController.updateEstudiante.
@@ -400,11 +400,7 @@ export async function getInasistenciasParaRPA(req, res) {
           apellidos: a.estudianteId.apellidos || '',
           nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
         },
-        justificacion: a.tipo === 'Excusada'
-          ? 'Falla justificada'
-          : (a.tipo === 'Falta'
-              ? 'Falla injustificada'
-              : 'Tardanza injustificada')
+        justificacion: textoJustificacion(a)
       }))
 
     res.json({
@@ -490,11 +486,7 @@ export async function getTodosInasistenciasParaRPA(req, res) {
             apellidos: a.estudianteId.apellidos || '',
             nombreCompleto: `${a.estudianteId.nombres || ''} ${a.estudianteId.apellidos || ''}`.trim()
           },
-          justificacion: a.tipo === 'Excusada'
-            ? 'Falla justificada'
-            : (a.tipo === 'Falta'
-                ? 'Falla injustificada'
-                : 'Tardanza injustificada')
+          justificacion: textoJustificacion(a)
         })
       })
 
@@ -534,27 +526,55 @@ export async function confirmarSubidaSofia(req, res) {
       ? asistenciaIds
       : (inasistenciaId || asistenciaId ? [inasistenciaId || asistenciaId] : [])
 
+    // Validar que los ids recibidos sean ObjectIds válidos.
+    for (const id of idsList) {
+      if (!mongoose.Types.ObjectId.isValid(String(id))) {
+        return res.status(400).json({ ok: false, error: 'Identificador de inasistencia no válido' })
+      }
+    }
+    if (fichaId && !mongoose.Types.ObjectId.isValid(String(fichaId))) {
+      return res.status(400).json({ ok: false, error: 'Identificador de ficha no válido' })
+    }
+    if (estudianteId && !mongoose.Types.ObjectId.isValid(String(estudianteId))) {
+      return res.status(400).json({ ok: false, error: 'Identificador de estudiante no válido' })
+    }
+
     if (idsList.length === 0 && (!estudianteId || !fecha)) {
       return res.status(400).json({ ok: false, error: 'Se requiere asistenciaId, asistenciaIds o (estudianteId y fecha)' })
+    }
+
+    // Sin ids, la búsqueda por (estudianteId, fecha) exige también fichaId.
+    if (idsList.length === 0 && !fichaId) {
+      return res.status(400).json({ ok: false, error: 'Se requiere fichaId junto con estudianteId y fecha' })
     }
 
     const query = idsList.length > 0 ? { _id: { $in: idsList } } : { estudianteId, fecha }
     if (fichaId) query.fichaId = fichaId
 
-    // Actualizar Inasistencias marcando estadoCarga = 'SUBIDA' y fechaSubidaSofia
-    const updateResult = await Inasistencia.updateMany(
-      query,
-      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } }
-    )
-
-    if (updateResult.matchedCount === 0) {
+    // Idempotencia: si no hay coincidencias con la query original -> 404.
+    const totalCoincidentes = await Inasistencia.countDocuments(query)
+    if (totalCoincidentes === 0) {
       return res.status(404).json({ ok: false, error: 'Registro(s) de inasistencia no encontrado(s)' })
     }
 
-    // Actualizar o marcar en la colección SofiaPlusSync si existen
-    if (idsList.length > 0) {
+    // Clasificar estados de los coincidentes y obtener ids elegibles para SofiaPlusSync.
+    const coincidentes = await Inasistencia.find(query).select('_id estadoCarga').lean()
+    const yaConfirmados = coincidentes.filter(d => d.estadoCarga === 'SUBIDA').length
+    const noListos = coincidentes.filter(d => d.estadoCarga === 'EN_ESPERA').length
+    const idsElegibles = coincidentes
+      .filter(d => d.estadoCarga === 'LISTO_PARA_SUBIR' || d.estadoCarga === 'SUBIDA')
+      .map(d => d._id)
+
+    // Actualizar SOLO los que están LISTO_PARA_SUBIR a SUBIDA (nunca EN_ESPERA).
+    const updateResult = await Inasistencia.updateMany(
+      { ...query, estadoCarga: 'LISTO_PARA_SUBIR' },
+      { $set: { estadoCarga: 'SUBIDA', fechaSubidaSofia: new Date() } }
+    )
+
+    // Actualizar o marcar en la colección SofiaPlusSync solo los ids elegibles.
+    if (idsElegibles.length > 0) {
       await SofiaPlusSync.updateMany(
-        { $or: [{ inasistenciaId: { $in: idsList } }, { asistenciaId: { $in: idsList } }] },
+        { $or: [{ inasistenciaId: { $in: idsElegibles } }, { asistenciaId: { $in: idsElegibles } }] },
         { $set: { estadoSync: 'subido', fechaSubida: new Date() } }
       )
     }
@@ -562,7 +582,9 @@ export async function confirmarSubidaSofia(req, res) {
     res.json({
       ok: true,
       mensaje: 'Inasistencia(s) confirmada(s) y sincronizada(s) con Sofia Plus exitosamente',
-      actualizados: updateResult.modifiedCount
+      actualizados: updateResult.modifiedCount,
+      yaConfirmados,
+      noListos
     })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })

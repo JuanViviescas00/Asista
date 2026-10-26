@@ -61,9 +61,6 @@ async function loadFichas() {
     } else {
       fichasList.value = await api.fichas.getAll()
     }
-    if (esInstructor.value && !busqueda.fichaId && fichasList.value.length > 0) {
-      busqueda.fichaId = fichasList.value[0]._id
-    }
   } catch (e) {}
 }
 
@@ -372,7 +369,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           Ficha / Programa
         </label>
         <select v-model="busqueda.fichaId" class="filtro-input">
-          <option :value="null" :disabled="esInstructor">{{ esInstructor ? 'Seleccione la ficha' : 'Todas las fichas' }}</option>
+          <option :value="null" :disabled="esInstructor">{{ esInstructor ? 'Escoja ficha' : 'Todas las fichas' }}</option>
           <option v-for="f in fichasList" :key="f._id" :value="f._id">{{ f.codigoFicha }} — {{ f.nombrePrograma }} ({{ f.jornada }})</option>
         </select>
       </div>

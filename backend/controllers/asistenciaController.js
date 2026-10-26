@@ -1,4 +1,3 @@
-import Asistencia from '../models/Asistencia.js'
 import Inasistencia from '../models/Inasistencia.js'
 import Jornada from '../models/Jornada.js'
 import Estudiante from '../models/Estudiante.js'
@@ -13,6 +12,7 @@ import { getFichaIdList, getHoyString, calcularEstadoAsistencia, calcularTardanz
 import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 import { topeHorasPorJornada, validarHorasInasistencia } from '../utils/jornadaUtils.js'
 import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { normalizarDescripcion } from '../utils/descripcionInasistencia.js'
 import { asegurarJornada } from '../services/jornadaService.js'
 
 // Shim de compatibilidad: expone la misma forma que el modelo Asistencia.
@@ -21,10 +21,11 @@ function toAsistenciaShape(a) {
   return {
     ...obj,
     estado: a.tipo,
-    horasTardanza: a.tipo === 'Tardanza' ? a.horas : 0,
+    horasTardanza: (a.tipo === 'Tardanza' || a.tipo === 'Excusada') ? a.horas : 0,
     motivoInhabilitacion: '',
     subidoSofia: a.estadoCarga === 'SUBIDA',
     estadoCarga: a.estadoCarga,
+    descripcion: obj.descripcion || '',
   }
 }
 
@@ -209,7 +210,8 @@ export async function createAsistencia(req, res) {
       hora,
       horasTardanza,
       tiempoTardanza,
-      instructorId
+      instructorId,
+      descripcion
     } = req.body
 
     if (fecha && fecha > getHoyString()) {
@@ -240,7 +242,15 @@ export async function createAsistencia(req, res) {
       }
     }
 
-    const instructorFinal = usuarioId || existente?.instructorId || null
+    let instructorFinal
+    if (esAdmin) {
+      instructorFinal = existente?.instructorId
+        || (instructorId && mongoose.Types.ObjectId.isValid(String(instructorId)) ? instructorId : null)
+        || fichaDoc?.instructorLiderId
+        || null
+    } else {
+      instructorFinal = usuarioId || existente?.instructorId || null
+    }
 
     // Bloqueo por subida a Sofía Plus: una novedad ya subida no puede editarse
     // ni quitarse, sin importar su origen (manual o huellero).
@@ -275,7 +285,15 @@ export async function createAsistencia(req, res) {
     // Derivar y validar las horas según el tipo y el tope de la jornada.
     const jornada = fichaDoc?.jornada || ''
     const tope = topeHorasPorJornada(jornada)
-    const horasPropuestas = estado === 'Tardanza' ? (horasTardanza || 0) : tope
+    let horasPropuestas
+    if (estado === 'Tardanza') {
+      horasPropuestas = horasTardanza || 0
+    } else if (estado === 'Excusada') {
+      const h = Number(horasTardanza)
+      horasPropuestas = Number.isInteger(h) && h > 0 && h < tope ? h : tope
+    } else {
+      horasPropuestas = tope
+    }
     const validacion = validarHorasInasistencia(horasPropuestas, jornada)
     if (!validacion.ok) {
       return res.status(400).json({ error: validacion.error })
@@ -298,6 +316,9 @@ export async function createAsistencia(req, res) {
           tiempoTardanza: tiempoTardanza || (estado === 'Tardanza' ? `${horas} ${horas === 1 ? 'hora' : 'horas'}` : '0 horas'),
           instructorId: instructorFinal,
           estadoCarga,
+          ...(Object.prototype.hasOwnProperty.call(req.body, 'descripcion')
+            ? { descripcion: normalizarDescripcion(descripcion) }
+            : {}),
         },
         $setOnInsert: {
           origen: 'manual',
@@ -389,6 +410,8 @@ export async function procesarAsistencia(item) {
     // Sin clase localizable: se cae al fallback de horario fijo (jornada).
   }
 
+  const instructorResuelto = instructorId || claseDoc?.instructorId || ficha.instructorLiderId || null
+
   let estado
   let horasTardanza
   let tiempoTardanza
@@ -419,10 +442,10 @@ export async function procesarAsistencia(item) {
 
   try {
     // Asegurar la Jornada (origen huellero) para esta ficha y fecha.
-    await asegurarJornada({ fichaId: ficha._id, fecha, instructorId: instructorId || null, origen: 'huellero' })
+    await asegurarJornada({ fichaId: ficha._id, fecha, instructorId: instructorResuelto, origen: 'huellero' })
 
     if (estado === 'Presente') {
-      return procesarPresente({ uuid, estudianteId, fichaId: ficha._id, fecha, hora, claseIdObj, instructorId, metodo })
+      return procesarPresente({ uuid, estudianteId, fichaId: ficha._id, fecha, hora, claseIdObj, instructorId: instructorResuelto, metodo })
     }
 
     // Tardanza o Falta
@@ -433,7 +456,7 @@ export async function procesarAsistencia(item) {
     const festivosSet = new Set((festivosDocs || []).map((d) => d.fecha))
     const estadoCarga = calcularEstadoCarga({ fecha, tipo, jornada: ficha.jornada || '', festivosSet, hoyStr: getHoyString() })
 
-    return procesarNovedad({ uuid, estudianteId, fichaId: ficha._id, fecha, tipo, horas, hora, tiempoTardanza, claseIdObj, instructorId, estadoCarga })
+    return procesarNovedad({ uuid, estudianteId, fichaId: ficha._id, fecha, tipo, horas, hora, tiempoTardanza, claseIdObj, instructorId: instructorResuelto, estadoCarga })
   } catch (err) {
     return { uuid, estado: 'error', error: err.message }
   }

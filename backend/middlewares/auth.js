@@ -208,3 +208,43 @@ export function autenticarJWTODispositivo(rolesPermitidos = ['Administrador', 'I
     })
   }
 }
+
+/**
+ * Middleware de autenticación para los endpoints del Robot RPA (Sofia Plus).
+ * Acepta:
+ *  (a) la cabecera 'x-rpa-key' igual a process.env.RPA_API_KEY, comparada con
+ *      crypto.timingSafeEqual (si las longitudes difieren, se rechaza sin lanzar
+ *      excepción), o
+ *  (b) un JWT válido de rol Administrador (reutilizando verificarTokenJWT).
+ * Si RPA_API_KEY no está definida, la vía (a) queda deshabilitada (fail closed)
+ * y se escribe una advertencia en consola sin imprimir ninguna clave.
+ */
+export function autenticarRPA(req, res, next) {
+  const apiKey = process.env.RPA_API_KEY
+  const headerKey = req.headers['x-rpa-key']
+
+  if (apiKey && headerKey && typeof headerKey === 'string') {
+    const keyBuf = Buffer.from(apiKey)
+    const headerBuf = Buffer.from(headerKey)
+    if (keyBuf.length === headerBuf.length && crypto.timingSafeEqual(keyBuf, headerBuf)) {
+      return next()
+    }
+  } else if (!apiKey) {
+    console.warn('[Seguridad] RPA_API_KEY no definida: la autenticación por clave del RPA queda deshabilitada (fail closed).')
+  }
+
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null
+  if (token) {
+    const decoded = verificarTokenJWT(token)
+    if (decoded && decoded.rol === 'Administrador') {
+      req.usuario = decoded
+      return next()
+    }
+  }
+
+  return res.status(401).json({
+    ok: false,
+    error: 'Acceso no autorizado. Se requiere una clave de RPA válida o un token de Administrador.'
+  })
+}

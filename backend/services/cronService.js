@@ -1,6 +1,5 @@
 import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
 import cron from 'node-cron'
-import Asistencia from '../models/Asistencia.js'
 import Instructor from '../models/Instructor.js'
 import DiaFestivo from '../models/DiaFestivo.js'
 import Clase from '../models/Clase.js'

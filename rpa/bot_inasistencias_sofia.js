@@ -39,6 +39,11 @@ const { chromium } = require('playwright');
 
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
+if (!process.env.RPA_API_KEY) {
+  console.error('[RPA] Falta RPA_API_KEY. Define RPA_API_KEY en rpa/.env y vuelve a ejecutar.');
+  process.exit(1);
+}
+
 const URL_SOFIA_PUBLIC = 'http://senasofiaplus.edu.co/sofia-public/';
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 const EVIDENCIAS_DIR = path.resolve(__dirname, 'descargas', 'evidencias_inasistencias');
@@ -217,7 +222,7 @@ async function obtenerDatosDocenteDesdeAPI(documento, fecha = '', fichaId = '') 
 
     const url = `${API_BASE_URL}/api/instructores/documento/${encodeURIComponent(documento)}/inasistencias-rpa?${params.toString()}`;
     console.log(`[API] Consultando inasistencias del docente en: ${url}`);
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: { 'x-rpa-key': process.env.RPA_API_KEY || '' } });
     if (resp.ok) {
       const data = await resp.json();
       if (data.ok) return data;
@@ -239,7 +244,7 @@ async function obtenerConsolidadoTodosDesdeAPI(fecha = '') {
 
     const url = `${API_BASE_URL}/api/instructores/todos-inasistencias-rpa?${params.toString()}`;
     console.log(`[API] Consultando inasistencias de todos los instructores en: ${url}`);
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: { 'x-rpa-key': process.env.RPA_API_KEY || '' } });
     if (resp.ok) {
       const data = await resp.json();
       if (data.ok) return data;
@@ -601,7 +606,7 @@ async function procesarDocenteEnSofia(instructor, itemsInasistencias, cli, brows
             };
             const respConf = await fetch(`${API_BASE_URL}/api/instructores/confirmar-subida-sofia`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'x-rpa-key': process.env.RPA_API_KEY || '' },
               body: JSON.stringify(payloadConfirmar)
             });
             const dataConf = await respConf.json().catch(() => ({}));

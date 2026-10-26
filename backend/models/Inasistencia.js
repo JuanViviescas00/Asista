@@ -20,6 +20,7 @@ const inasistenciaSchema = new mongoose.Schema({
   },
   hora: { type: String, default: '' },
   tiempoTardanza: { type: String, default: '' },
+  descripcion: { type: String, trim: true, default: '', maxlength: 200 },
   instructorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Instructor' },
   claseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Clase', default: null },
   origen: { type: String, enum: ['manual', 'huellero'], required: true },
