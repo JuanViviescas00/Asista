@@ -847,7 +847,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onTecla))
         <StatCard icon="user-check" label="Docentes en Ficha" :value="resumenFicha.docentes" variant="morado" />
         <StatCard icon="calendar" label="Sesiones Dictadas" :value="resumenFicha.sesiones" variant="indigo" />
       </div>
-      <p v-if="resumenFicha" class="rp-nota rp-nota-stats">Las tarjetas resumen toda la ficha en el periodo consultado.</p>
+      <p v-if="resumenFicha" class="rp-nota rp-nota-stats">Las tarjetas resumen toda la ficha en el periodo consultado. Asistencia general: promedio de asistencia de los aprendices con registros. Cada presente suma 1 día, cada tardanza suma 0,5 día y las faltas no suman.</p>
 
       <div v-if="resumenFicha && resumenFicha.enRuta > 0 && reporte.tipo !== 'desercion'" class="rp-aviso" role="alert">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
