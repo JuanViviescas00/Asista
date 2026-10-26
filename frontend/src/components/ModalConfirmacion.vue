@@ -139,4 +139,9 @@ watch(
   outline: 2px solid #39a900;
   outline-offset: 2px;
 }
+
+@media (max-width: 420px) {
+  .mc-acciones { flex-direction: column-reverse; }
+  .mc-acciones .mc-btn { width: 100%; }
+}
 </style>
