@@ -360,13 +360,13 @@ async function detenerSesionRemotaDocente() {
   if (!fichaSeleccionada.value || finalizando.value) return
   finalizando.value = true
   try {
-    await api.clases.finalizar({
+    const resultado = await api.clases.finalizar({
       fichaId: fichaSeleccionada.value._id,
       instructorId: usuario.value.id,
     })
     sesionRemotaActiva.value = false
     claseIniciadaAt.value = null
-    showToast('Clase finalizada.', 'info')
+    showToast(`Clase finalizada. Faltas por falta de marcación: ${resultado.faltasCreadas || 0}.`, 'info')
     await cargarDatosFicha(fichaSeleccionada.value._id)
   } catch (e) {
     showToast(e.message || 'No se pudo finalizar la clase', 'error')
@@ -418,7 +418,11 @@ const memoriaBiometricaRAM = ref([])
 async function cargarDatosFicha(fichaId) {
   try {
     const estRes = await api.estudiantes.getAll({ fichaId, estado: 'Activo' }).catch(e => { console.error('Error est:', e); return [] })
-    const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => { console.error('Error asis:', e); return [] })
+    const asisRes = await api.asistencias.getAll({ fichaId }).catch(e => {
+      console.error('Error asis:', e)
+      showToast('No se pudieron cargar las asistencias. No se marcarán aprendices como presentes.', 'error')
+      throw e
+    })
     const bioRes = await api.fichas.getPlantillasBiometricas(fichaId).catch(() => [])
     const excRes = await api.excusas.getAll({ fichaId }).catch(e => { console.error('Error excusas:', e); return [] })
 
@@ -440,11 +444,7 @@ async function cargarDatosFicha(fichaId) {
 // TOMA DE ASISTENCIA Y GESTIÓN DE JORNADA
 // =============================================
 function getHoyLocalISO() {
-  const ahora = new Date()
-  const year = ahora.getFullYear()
-  const month = String(ahora.getMonth() + 1).padStart(2, '0')
-  const day = String(ahora.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date())
 }
 
 const fechaHoyMax = computed(() => getHoyLocalISO())
@@ -878,8 +878,8 @@ function inicializarAsistenciaDia() {
            a.fecha === hoy &&
            (!currentFichaId || String(a.fichaId?._id || a.fichaId) === currentFichaId)
     )
-    const estado = existente ? existente.estado : 'Presente'
-    const hora = existente ? (existente.hora || '') : (new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    const estado = existente ? existente.estado : 'Sin registro'
+    const hora = existente ? (existente.hora || '') : ''
     const tardanzaInfo = estado === 'Tardanza'
       ? (existente.tiempoTardanza ? { horas: existente.horasTardanza || 1, texto: existente.tiempoTardanza } : calcularHorasTardanza(hora, jornadaFicha))
       : (estado === 'Excusada'
@@ -1375,23 +1375,21 @@ async function confirmarDescripcion() {
 // Contadores de asistencia del día
 const conteoAsistencia = computed(() => {
   if (jornadaInhabilitada.value) {
-    return { Presente: 0, Tardanza: 0, Falta: 0, Excusada: 0, Inhabilitada: estudiantesFicha.value.length }
+    return { Presente: 0, Tardanza: 0, Falta: 0, Excusada: 0, SinRegistro: 0, Inhabilitada: estudiantesFicha.value.length }
   }
-  const conteo = { Presente: 0, Tardanza: 0, Falta: 0, Excusada: 0 }
+  const conteo = { Presente: 0, Tardanza: 0, Falta: 0, Excusada: 0, SinRegistro: 0 }
   for (const est of estudiantesFicha.value) {
     const reg = asistenciaDia.value[est._id]
-    if (reg) {
-      if (reg.excusa || reg.estado === 'Excusada') {
-        conteo.Excusada++
-      } else if (reg.estado === 'Falta') {
-        conteo.Falta++
-      } else if (reg.estado === 'Tardanza') {
-        conteo.Tardanza++
-      } else {
-        conteo.Presente++
-      }
-    } else {
+    if (reg?.excusa || reg?.estado === 'Excusada') {
+      conteo.Excusada++
+    } else if (reg?.estado === 'Falta') {
+      conteo.Falta++
+    } else if (reg?.estado === 'Tardanza') {
+      conteo.Tardanza++
+    } else if (reg?.estado === 'Presente') {
       conteo.Presente++
+    } else {
+      conteo.SinRegistro++
     }
   }
   return conteo
@@ -1837,6 +1835,7 @@ function descargarExcel(data, nombreArchivo) {
               <div class="conteo-chip conteo-tardanza"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg> Tardanza: {{ conteoAsistencia.Tardanza }}</div>
               <div class="conteo-chip conteo-falta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg> Falta: {{ conteoAsistencia.Falta }}</div>
               <div class="conteo-chip conteo-excusada"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><line x1="9" y1="11" x2="15" y2="11"/><line x1="9" y1="15" x2="15" y2="15"/></svg> Excusada: {{ conteoAsistencia.Excusada }}</div>
+              <div class="conteo-chip conteo-sin-registro">Sin marcación: {{ conteoAsistencia.SinRegistro }}</div>
             </template>
           </div>
 
@@ -1935,6 +1934,9 @@ function descargarExcel(data, nombreArchivo) {
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M8 3l-2 2M16 3l2 2"/></svg>
                       Tardanza ({{ asistenciaDia[est._id]?.tiempoTardanza || '1 hora' }})
                     </span>
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Sin registro'" class="badge badge-info">
+                      Sin marcación
+                    </span>
                     <span v-else class="badge badge-success">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16.2 9"/></svg>
                       Presente (A tiempo)
@@ -2012,7 +2014,8 @@ function descargarExcel(data, nombreArchivo) {
                     <span v-else-if="asistenciaDia[est._id]?.excusa" class="badge-mob-exc" :title="asistenciaDia[est._id]?.descripcion || asistenciaDia[est._id]?.motivoExcusa || 'Se enviará &quot;Con excusa&quot; a Sofía Plus'" @click="editarExcusa(est._id)">Excusada</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Falta'" class="badge-mob-falta">Falta</span>
                     <span v-else-if="asistenciaDia[est._id]?.estado === 'Tardanza'" class="badge-mob-tard">Tardanza</span>
-                    <span v-else class="badge-mob-pres">Presente</span>
+                    <span v-else-if="asistenciaDia[est._id]?.estado === 'Presente'" class="badge-mob-pres">Presente</span>
+                    <span v-else class="badge-mob-sin-registro">Sin marcación</span>
                   </div>
                 </div>
                 <div class="mob-card-footer">
@@ -2597,6 +2600,6 @@ function descargarExcel(data, nombreArchivo) {
     </div>
     </template>
 
+
   </div>
 </template>
-

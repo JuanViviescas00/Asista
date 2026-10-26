@@ -315,6 +315,7 @@
 .conteo-tardanza { background: #fef3c7; color: #92400e; }
 .conteo-falta { background: #fee2e2; color: #991b1b; }
 .conteo-excusada { background: #e0f2fe; color: #0369a1; }
+.conteo-sin-registro { background: #f1f5f9; color: #475569; }
 
 /* Tables */
 .table-scroll {
@@ -1500,6 +1501,7 @@
   .badge-mob-falta { background: #fee2e2; color: #991b1b; }
   .badge-mob-exc { background: #dbeafe; color: #1e40af; }
   .badge-mob-inh { background: #ffedd5; color: #9a3412; }
+  .badge-mob-sin-registro { background: #f1f5f9; color: #475569; }
 
   .mob-card-footer {
     display: flex;
