@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../services/index.js'
 import { nombreProgramaLimpio, truncar, formatearNumeroDocumento, capitalizarTexto, TIPOS_DOCUMENTO, normalizarTipoDocumento, normalizarNumeroDocumento } from '../utils/textos.js'
 import StatCard from '../components/StatCard.vue'
@@ -50,7 +50,7 @@ async function loadEstudiantes() {
     }
     estudiantes.value = await api.estudiantes.getAll(params)
   } catch (e) {
-    showToastFn('Error al cargar estudiantes', 'error')
+    showToastFn('Error al cargar aprendices', 'error')
   }
 }
 
@@ -130,6 +130,23 @@ const estudiantesFiltrados = computed(() => {
   return lista
 })
 
+const FILAS_POR_PAGINA = 10
+const pagina = ref(1)
+const totalPaginas = computed(() => Math.max(1, Math.ceil(estudiantesFiltrados.value.length / FILAS_POR_PAGINA)))
+const paginaActual = computed(() => {
+  const inicio = (pagina.value - 1) * FILAS_POR_PAGINA
+  return estudiantesFiltrados.value.slice(inicio, inicio + FILAS_POR_PAGINA)
+})
+
+// Al cambiar cualquier filtro o búsqueda, vuelve a la página 1.
+watch(
+  [() => filtroEstado.value, () => busqueda.fichaId, () => busqueda.jornada, () => busqueda.documento, () => busqueda.nombres, () => busqueda.nombreDocumento, () => busqueda.estadoAsistencia],
+  () => { pagina.value = 1 }
+)
+
+// Si tras eliminar o filtrar la página queda vacía, ajusta a la última válida.
+watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
+
 const criteriosActivos = computed(() => {
   let count = 0
   if (busqueda.fichaId) count++
@@ -196,13 +213,13 @@ async function guardarEstudiante() {
     }
     if (editingId.value) {
       await api.estudiantes.update(editingId.value, body)
-      showToastFn('Estudiante actualizado correctamente')
+      showToastFn('Aprendiz actualizado correctamente')
     } else {
       body.estado = 'Activo'
       body.motivo = ''
       body.estadoAsistencia = 'Sin registro'
       await api.estudiantes.create(body)
-      showToastFn('Estudiante creado correctamente')
+      showToastFn('Aprendiz creado correctamente')
     }
     await loadEstudiantes()
     closeModal()
@@ -233,7 +250,7 @@ async function confirmarRetirar() {
     await loadEstudiantes()
     showRetirarModal.value = false
     const label = retirarTipo.value === 'Retirado' ? 'retirado' : 'inhabilitado'
-    showToastFn(`Estudiante ${label} correctamente. El historial se ha conservado.`)
+    showToastFn(`Aprendiz ${label} correctamente. El historial se ha conservado.`)
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -243,7 +260,7 @@ async function activarEstudiante(estudiante) {
   try {
     await api.estudiantes.update(estudiante._id, { estado: 'Activo', motivo: '' })
     await loadEstudiantes()
-    showToastFn('Estudiante activado correctamente')
+    showToastFn('Aprendiz activado correctamente')
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -252,13 +269,13 @@ async function activarEstudiante(estudiante) {
 async function eliminarEstudiante(id) {
   const est = estudiantes.value.find(e => e._id === id)
   if (est && est.estado !== 'Activo') {
-    showToastFn('No se puede eliminar un estudiante con historial. Usa la opcion Retirar en su lugar.', 'error')
+    showToastFn('No se puede eliminar un aprendiz con historial. Usa la opcion Retirar en su lugar.', 'error')
     return
   }
   try {
     await api.estudiantes.delete(id)
     await loadEstudiantes()
-    showToastFn('Estudiante eliminado correctamente')
+    showToastFn('Aprendiz eliminado correctamente')
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -322,12 +339,12 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
 <template>
   <div class="page-header">
-    <h1>Estudiantes</h1>
+    <h1>Aprendices</h1>
     <p v-if="esInstructor">
       Mostrando únicamente los aprendices de <strong>tus fichas asignadas</strong>.
     </p>
     <p v-else>
-      Gestiona los estudiantes. Al inhabilitar o retirar se conserva la trazabilidad.
+      Gestiona los aprendices. Al inhabilitar o retirar se conserva la trazabilidad.
     </p>
     <div v-if="esInstructor" style="display: inline-block; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid #6ee7b7; color: #065f46; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">
       Fichas asignadas: {{ fichasList.length }}
@@ -445,19 +462,19 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   <div class="card">
     <div class="card-header">
       <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-        <h3>Listado de Estudiantes</h3>
+        <h3>Listado de Aprendices</h3>
         <span v-if="criteriosActivos > 0" class="badge badge-primary">{{ estudiantesFiltrados.length }} resultado(s)</span>
         
       </div>
-      <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Estudiante" style="display: inline-flex; align-items: center; gap: 6px;">
+      <button v-if="puedeCrearEstudiante" class="btn btn-primary" @click="openCreate" title="Nuevo Aprendiz" style="display: inline-flex; align-items: center; gap: 6px;">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span>Nuevo Estudiante</span>
+        <span>Nuevo Aprendiz</span>
       </button>
     </div>
 
     <div v-if="estudiantesFiltrados.length === 0" class="empty-state">
       <p v-if="sinSeleccion">Usa la búsqueda avanzada para ver la información de los aprendices.</p>
-      <p v-else>{{ criteriosActivos > 0 ? 'No se encontraron estudiantes con los criterios de busqueda.' : 'No hay estudiantes registrados. Crea el primero usando el boton "Nuevo Estudiante".' }}</p>
+      <p v-else>{{ criteriosActivos > 0 ? 'No se encontraron aprendices con los criterios de busqueda.' : 'No hay aprendices registrados. Crea el primero usando el boton "Nuevo Aprendiz".' }}</p>
     </div>
 
     <div v-else class="table-container">
@@ -475,7 +492,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
           </tr>
         </thead>
         <tbody>
-          <template v-for="e in estudiantesFiltrados" :key="e._id">
+          <template v-for="e in paginaActual" :key="e._id">
             <tr :class="{ 'fila-inactivo': e.estado !== 'Activo' }">
               <td><strong :title="nombreCompleto(e)">{{ truncar(nombreCompleto(e), 28) }}</strong></td>
               <td><strong>{{ getFichaCodigo(e.fichaId) }}</strong></td>
@@ -511,11 +528,20 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
         </tbody>
       </table>
     </div>
+    <div v-if="estudiantesFiltrados.length > 0" class="paginacion">
+      <button class="pag-flecha" :disabled="pagina <= 1" @click="pagina--" title="Anterior" aria-label="Página anterior">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="pag-info">Página {{ pagina }} de {{ totalPaginas }} · {{ estudiantesFiltrados.length }} registros</span>
+      <button class="pag-flecha" :disabled="pagina >= totalPaginas" @click="pagina++" title="Siguiente" aria-label="Página siguiente">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
   </div>
 
   <div v-if="showRetirarModal" class="modal-overlay" @click.self="showRetirarModal = false">
     <div class="modal">
-      <h2>{{ retirarTipo === 'Retirado' ? 'Retirar' : 'Inhabilitar' }} Estudiante</h2>
+      <h2>{{ retirarTipo === 'Retirado' ? 'Retirar' : 'Inhabilitar' }} Aprendiz</h2>
       <p style="color: var(--text-secondary); margin-bottom: 16px;">Vas a {{ retirarTipo === 'Retirado' ? 'retirar' : 'inhabilitar' }} a <strong>{{ retirarTarget ? nombreCompleto(retirarTarget) : '' }}</strong>. Su historial y trazabilidad se conservaran, solo cambiara su estado.</p>
       <div class="form-group">
         <label>Motivo</label>
@@ -530,10 +556,10 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
 
   <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
     <div class="modal">
-      <h2>{{ editingId ? 'Editar Estudiante' : 'Nuevo Estudiante' }}</h2>
+      <h2>{{ editingId ? 'Editar Aprendiz' : 'Nuevo Aprendiz' }}</h2>
       <div class="form-grid">
-        <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del estudiante" /></div>
-        <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del estudiante" /></div>
+        <div class="form-group"><label>Nombres</label><input v-model="estudianteForm.nombres" type="text" placeholder="Nombres del aprendiz" /></div>
+        <div class="form-group"><label>Apellidos</label><input v-model="estudianteForm.apellidos" type="text" placeholder="Apellidos del aprendiz" /></div>
         <div class="form-group"><label>Tipo de Documento</label><select v-model="estudianteForm.tipoDocumento"><option v-for="t in TIPOS_DOCUMENTO" :key="t.codigo" :value="t.codigo">{{ t.descripcion }}</option></select></div>
         <div class="form-group"><label>Numero de Documento</label><input v-model="estudianteForm.numeroDocumento" type="text" placeholder="Numero de documento" /></div>
         <div class="form-group"><label>Correo Electronico</label><input v-model="estudianteForm.correo" type="email" placeholder="correo@ejemplo.com" /></div>
@@ -549,7 +575,7 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
             <option v-for="f in (esInstructor ? fichasLider : fichasList)" :key="f._id" :value="f._id">{{ f.codigoFicha }} - {{ f.nombrePrograma }} ({{ f.jornada }})</option>
           </select>
           <p v-if="esInstructor && !editingId" style="font-size: 11px; color: #64748b; margin-top: 4px;">
-            Mostrando únicamente las fichas donde eres docente líder.
+            Mostrando únicamente las fichas donde eres instructor líder.
           </p>
         </div>
       </div>
@@ -727,5 +753,43 @@ function retiradosCount() { return estudiantes.value.filter(e => e.estado === 'R
   .est-tabla { min-width: 620px; }
   .est-tabla th, .est-tabla td { padding: 12px 10px; }
   .est-detalle { grid-template-columns: 1fr; gap: 12px 16px; padding: 16px; }
+}
+
+/* Paginación en cliente */
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+.pag-flecha {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #d9e2d3;
+  color: #39A900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+.pag-flecha:hover:not(:disabled) {
+  background: #E8F5E0;
+  border-color: #39A900;
+}
+.pag-flecha:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.pag-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
 }
 </style>

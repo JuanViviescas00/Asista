@@ -111,7 +111,7 @@ function asistenciaBadge(estado) {
           v-model="busqueda"
           type="text"
           class="student-consult-search-input"
-          placeholder="Ingresa el número de documento o nombre del estudiante..."
+          placeholder="Ingresa el número de documento o nombre del aprendiz..."
           autofocus
         />
         <button v-if="busqueda" class="student-consult-button student-consult-button-outline student-consult-button-small" @click="limpiarBusqueda">Limpiar</button>
@@ -121,7 +121,7 @@ function asistenciaBadge(estado) {
     <!-- Lista de Resultados Coincidentes -->
     <div v-if="!estudianteSeleccionado && busqueda && resultados.length === 0" class="student-consult-card student-consult-no-print">
       <div class="student-consult-empty-state">
-        <p>No se encontró ningún estudiante registrado con el documento o término "{{ busqueda }}".</p>
+        <p>No se encontró ningún aprendiz registrado con el documento o término "{{ busqueda }}".</p>
       </div>
     </div>
 
@@ -186,7 +186,7 @@ function asistenciaBadge(estado) {
               <strong>{{ estudianteSeleccionado._ficha ? `${estudianteSeleccionado._ficha.codigoFicha} - ${estudianteSeleccionado._ficha.nombrePrograma}` : 'Sin Ficha' }}</strong>
             </div>
             <div>
-              <span class="student-consult-field-label">Jornada y Aula:</span>
+              <span class="student-consult-field-label">Jornada y Ambiente:</span>
               <span>{{ estudianteSeleccionado._ficha ? `${estudianteSeleccionado._ficha.jornada} | ${estudianteSeleccionado._ficha.aulaAsignada}` : '—' }}</span>
             </div>
             <div>

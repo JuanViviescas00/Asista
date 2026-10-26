@@ -186,7 +186,7 @@ function estadoBadge(estado) {
       <table>
         <thead>
           <tr>
-            <th>Estudiante</th><th>Ficha</th><th>Fecha Inasistencia</th><th>Tipo</th><th>Adjunto</th><th>Horas</th><th>Estado</th><th>Acciones</th>
+            <th>Aprendiz</th><th>Ficha</th><th>Fecha Inasistencia</th><th>Tipo</th><th>Adjunto</th><th>Horas</th><th>Estado</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -224,9 +224,9 @@ function estadoBadge(estado) {
       <h2>Registrar Excusa</h2>
       <div class="form-grid">
         <div class="form-group">
-          <label>Estudiante</label>
+          <label>Aprendiz</label>
           <select v-model="excusaForm.estudianteId" @change="onEstudianteChange">
-            <option :value="null" disabled>Selecciona un estudiante</option>
+            <option :value="null" disabled>Selecciona un aprendiz</option>
             <option v-for="e in todosEstudiantes" :key="e._id" :value="e._id">{{ e.nombres }} {{ e.apellidos }} - {{ e.numeroDocumento }}</option>
           </select>
         </div>

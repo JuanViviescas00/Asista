@@ -10,6 +10,7 @@ const userStr = sessionStorage.getItem('user_data')
 const usuarioSesion = ref(userStr ? JSON.parse(userStr) : null)
 
 const esInstructor = computed(() => usuarioSesion.value?.rol === 'Instructor')
+const esAdmin = computed(() => usuarioSesion.value?.rol === 'Administrador')
 
 const perfil = reactive({
   id: '',
@@ -26,6 +27,13 @@ const perfil = reactive({
 })
 
 const esLiderCalculado = ref(false)
+
+// Correos globales para el reporte de ruta de deserción (solo Administrador)
+const correosReporte = reactive({
+  correoCoordinador: '',
+  correoBienestar: '',
+})
+const correosLoading = ref(false)
 
 // Estado del Modal de Cambio de Contraseña
 // Estado del Modal de Clave Sofía Plus
@@ -77,7 +85,7 @@ onMounted(async () => {
         perfil.numeroDocumento = inst.numeroDocumento || ''
         perfil.correo = inst.correo || perfil.correo
         perfil.telefono = inst.telefono || ''
-        perfil.especialidad = inst.especialidad || 'Docente SENA'
+        perfil.especialidad = inst.especialidad || 'Instructor SENA'
         perfil.estado = inst.estado || 'Activo'
 
         const esLiderEnFicha = misFichas.some(f => f.esLider || String(f.instructorLiderId?._id || f.instructorLiderId) === String(inst._id))
@@ -100,11 +108,55 @@ onMounted(async () => {
       console.error('Error al cargar perfil de admin:', e)
     }
   }
+
+  if (esAdmin.value) {
+    await cargarCorreosReporte()
+  }
 })
 
 function showToast(message, type = 'success') {
   toast.value = { show: true, message, type }
   setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+async function cargarCorreosReporte() {
+  try {
+    const data = await api.configuracion.getCorreosReporte()
+    correosReporte.correoCoordinador = data?.correoCoordinador || ''
+    correosReporte.correoBienestar = data?.correoBienestar || ''
+  } catch (e) {
+    console.error('Error al cargar los correos del reporte:', e)
+  }
+}
+
+async function guardarCorreos() {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const coord = correosReporte.correoCoordinador.trim()
+  const bien = correosReporte.correoBienestar.trim()
+
+  if (coord && !emailRegex.test(coord)) {
+    showToast('El correo del coordinador no es válido.', 'error')
+    return
+  }
+  if (bien && !emailRegex.test(bien)) {
+    showToast('El correo de bienestar no es válido.', 'error')
+    return
+  }
+
+  correosLoading.value = true
+  try {
+    const res = await api.configuracion.updateCorreosReporte({
+      correoCoordinador: coord,
+      correoBienestar: bien,
+    })
+    correosReporte.correoCoordinador = res?.correoCoordinador || ''
+    correosReporte.correoBienestar = res?.correoBienestar || ''
+    showToast('Correos del reporte guardados correctamente')
+  } catch (e) {
+    showToast('Error al guardar los correos: ' + (e.message || 'Intenta de nuevo.'), 'error')
+  } finally {
+    correosLoading.value = false
+  }
 }
 
 async function guardarPerfil() {
@@ -249,7 +301,7 @@ async function procesarCambioPassword() {
 <template>
   <div class="admin-profile-page-header">
     <h1>{{ esInstructor ? 'Perfil Instructor' : 'Perfil del Administrador' }}</h1>
-    <p>{{ esInstructor ? 'Información personal y académica del docente' : 'Gestiona tu información personal y seguridad de la cuenta' }}</p>
+    <p>{{ esInstructor ? 'Información personal y académica del instructor' : 'Gestiona tu información personal y seguridad de la cuenta' }}</p>
   </div>
 
   <!-- Vista para Instructor / Maestro -->
@@ -324,6 +376,29 @@ async function procesarCambioPassword() {
     <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
       <button class="admin-profile-button admin-profile-button-primary" @click="guardarPerfil" :disabled="loading" title="Guardar Cambios"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
       <button class="admin-profile-button admin-profile-button-security" @click="abrirModalPassword" title="Cambiar Contraseña"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Correos para el reporte de ruta de deserción (solo Administrador) -->
+  <div v-if="esAdmin" class="admin-profile-card">
+    <div class="admin-profile-card-header">
+      <h3>Correos para el reporte de ruta de deserción</h3>
+    </div>
+    <p class="admin-profile-help">Estos correos reciben el reporte cuando un instructor reporta a un aprendiz. El equipo ejecutor se toma automáticamente de la ficha del aprendiz.</p>
+    <div class="admin-profile-form-grid">
+      <div class="admin-profile-form-group">
+        <label>Correo del coordinador</label>
+        <input v-model="correosReporte.correoCoordinador" type="email" placeholder="coordinacion@sena.edu.co" />
+      </div>
+      <div class="admin-profile-form-group">
+        <label>Correo de bienestar al aprendiz</label>
+        <input v-model="correosReporte.correoBienestar" type="email" placeholder="bienestar@sena.edu.co" />
+      </div>
+    </div>
+    <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
+      <button class="admin-profile-button admin-profile-button-primary" @click="guardarCorreos" :disabled="correosLoading">
+        {{ correosLoading ? 'Guardando...' : 'Guardar correos' }}
+      </button>
     </div>
   </div>
 

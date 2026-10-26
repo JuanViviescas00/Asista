@@ -7,7 +7,6 @@
 // ============================================================
 import { ref, watch } from 'vue'
 
-import Dashboard from '../views/Dashboard.vue'
 import AdminPerfil from '../views/AdminPerfil.vue'
 import Instructores from '../views/Instructores.vue'
 import Fichas from '../views/Fichas.vue'
@@ -23,10 +22,9 @@ import PanelEstudiante from '../views/PanelEstudiante.vue'
 export const routes = {
   panel_instructor: { component: PanelInstructor, label: 'Mis Fichas / Grupos', meta: { title: 'Mis fichas' }, roles: ['Instructor'] },
   panel_estudiante: { component: PanelEstudiante, label: 'Mi Panel Aprendiz', meta: { title: 'Mi panel' }, roles: ['Estudiante'] },
-  dashboard: { component: Dashboard, label: 'Dashboard', meta: { title: 'Panel principal' }, roles: ['Administrador'] },
   perfil: { component: AdminPerfil, label: 'Perfil', meta: { title: 'Perfil' }, roles: ['Administrador', 'Instructor'] },
   instructores: { component: Instructores, label: 'Instructores', meta: { title: 'Instructores' }, roles: ['Administrador'] },
-  estudiantes: { component: Estudiantes, label: 'Aprendices', meta: { title: 'Estudiantes' }, roles: ['Administrador', 'Instructor'] },
+  estudiantes: { component: Estudiantes, label: 'Aprendices', meta: { title: 'Aprendices' }, roles: ['Administrador', 'Instructor'] },
   fichas: { component: Fichas, label: 'Fichas', meta: { title: 'Fichas' }, roles: ['Administrador'] },
   dispositivos: { component: PanelDispositivos, label: 'Dispositivos', meta: { title: 'Dispositivos' }, roles: ['Administrador'] },
   importar: { component: ImportarUsuarios, label: 'Importar / Carga Masiva', meta: { title: 'Importar usuarios' }, roles: ['Administrador', 'Instructor'], soloLider: true },
