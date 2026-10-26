@@ -88,13 +88,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 76px;
-  height: 76px;
-  border-radius: 18px;
-  background: var(--verde-tenue);
-  border: 1px solid var(--verde-suave);
+  width: 88px;
+  height: 88px;
   margin-bottom: 14px;
-  padding: 12px;
+  padding: 0;
 }
 
 .login-brand-icon img {

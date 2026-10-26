@@ -211,6 +211,20 @@ body {
   border-radius: 8px;
 }
 
+.sidebar-logo-plain {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.sidebar-logo-plain img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .sidebar-title {
   font-size: 21px;
   font-weight: 800;
@@ -1635,4 +1649,24 @@ body {
   .main-content .student-consult-page {
     padding: 0;
   }
+}
+
+/* === Responsividad adicional (pantallas angostas) === */
+@media (max-width: 640px) {
+  .holidays-card.holidays-card{padding:22px 16px}
+  .holidays-card-header.holidays-card-header{flex-direction:column;align-items:stretch;gap:12px}
+  .holidays-button-group.holidays-button-group{flex-wrap:wrap}
+  .holidays-modal.holidays-modal{padding:22px 18px}
+  .holidays-form-grid.holidays-form-grid{grid-template-columns:1fr}
+  .holidays-fiches-check-grid.holidays-fiches-check-grid{grid-template-columns:1fr}
+  .holidays-modal-actions.holidays-modal-actions{flex-wrap:wrap}
+  .holidays-toast.holidays-toast{left:12px;right:12px;bottom:12px}
+  .fichas-toast.fichas-toast{left:12px;right:12px;bottom:12px}
+  .fichas-instructor-check-grid.fichas-instructor-check-grid{grid-template-columns:1fr}
+  .student-consult-profile-summary.student-consult-profile-summary{flex-direction:column;gap:16px}
+  .student-consult-profile-details.student-consult-profile-details{grid-template-columns:1fr}
+  .student-consult-search-bar.student-consult-search-bar{flex-wrap:wrap}
+  .login-panel.login-panel{padding:30px 22px 26px}
+  .login-carnet-selector.login-carnet-selector{flex-wrap:wrap}
+  .admin-profile-form-grid.admin-profile-form-grid{grid-template-columns:1fr}
 }

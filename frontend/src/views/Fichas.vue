@@ -1,8 +1,9 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import api from '../services/index.js'
 import '../styles/fichas.css'
 import { useAuth } from '../composables/useAuth.js'
+import { confirmar } from '../composables/useConfirm.js'
 import { nombreProgramaLimpio, capitalizarTexto, normalizarJornada, normalizarNumeroDocumento, normalizarNombrePrograma } from '../utils/textos.js'
 
 const { usuario } = useAuth()
@@ -339,7 +340,12 @@ async function eliminarPrograma(prog) {
     showToastFn('Acción restringida: solo el Administrador puede eliminar programas', 'error')
     return
   }
-  if (!confirm(`¿Estás seguro de eliminar el programa "${prog.nombre}"?`)) return
+  const ok = await confirmar({
+    titulo: 'Eliminar programa',
+    mensaje: `¿Estás seguro de eliminar el programa "${prog.nombre}"?`,
+    peligro: true,
+  })
+  if (!ok) return
   try {
     await api.programas.delete(prog._id)
     showToastFn(`Programa "${prog.nombre}" eliminado correctamente`)
@@ -433,6 +439,17 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
   const lidId = fichaForm.instructorLiderId
   return fichas.value.find(f => f._id !== editingId.value && (f.instructorLiderId?._id === lidId || f.instructorLiderId === lidId))
 })
+
+const FILAS_POR_PAGINA = 10
+const pagina = ref(1)
+const totalPaginas = computed(() => Math.max(1, Math.ceil(fichas.value.length / FILAS_POR_PAGINA)))
+const paginaActual = computed(() => {
+  const inicio = (pagina.value - 1) * FILAS_POR_PAGINA
+  return fichas.value.slice(inicio, inicio + FILAS_POR_PAGINA)
+})
+
+// Si tras eliminar o filtrar la página queda vacía, ajusta a la última válida.
+watch(totalPaginas, (t) => { if (pagina.value > t) pagina.value = t })
 </script>
 
 <template>
@@ -480,12 +497,12 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
           <tr>
             <th>Código Ficha</th>
             <th>Ficha</th>
-            <th>Docente Líder</th>
+            <th>Instructor Líder</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
-          <template v-for="f in fichas" :key="f._id">
+          <template v-for="f in paginaActual" :key="f._id">
             <tr :class="{ 'fichas-row-inactiva': !estaActiva(f) }">
               <td><strong>{{ f.codigoFicha }}</strong></td>
               <td><span class="fichas-badge fichas-badge-ficha" :title="nombreProgramaLimpio(f.nombrePrograma)">{{ acortarNombre(nombreProgramaLimpio(f.nombrePrograma)) }}</span></td>
@@ -506,11 +523,11 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
             <tr v-if="expandidos[f._id]" class="fichas-detalle-fila">
               <td colspan="4">
                 <div class="fichas-detalle">
-                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Aula</span><span>{{ f.aulaAsignada || '—' }}</span></div>
+                  <div class="fichas-detalle-item"><span class="fichas-detalle-label">Ambiente</span><span>{{ f.aulaAsignada || '—' }}</span></div>
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Jornada</span><span><span class="fichas-badge" :class="jornadaBadge(f.jornada)">{{ f.jornada }}</span></span></div>
                   <div class="fichas-detalle-item"><span class="fichas-detalle-label">Estado</span><span><span class="fichas-badge" :class="estaActiva(f) ? 'fichas-badge-success' : 'fichas-badge-inactive'">{{ estaActiva(f) ? 'Activa' : 'Inactiva' }}</span></span></div>
                   <div class="fichas-detalle-item" v-if="f.instructores && f.instructores.length">
-                    <span class="fichas-detalle-label">Docentes de Apoyo</span>
+                    <span class="fichas-detalle-label">Instructores de Apoyo</span>
                     <span>{{ formatDocentesComunes(f.instructores) }}</span>
                   </div>
                 </div>
@@ -520,29 +537,55 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
         </tbody>
       </table>
     </div>
+    <div v-if="fichas.length > 0" class="fichas-paginacion">
+      <button class="fichas-pag-flecha" :disabled="pagina <= 1" @click="pagina--" title="Anterior" aria-label="Página anterior">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span class="fichas-pag-info">Página {{ pagina }} de {{ totalPaginas }} · {{ fichas.length }} registros</span>
+      <button class="fichas-pag-flecha" :disabled="pagina >= totalPaginas" @click="pagina++" title="Siguiente" aria-label="Página siguiente">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
   </div>
 
   <!-- MODAL DE CREACIÓN / EDICIÓN DE FICHA -->
   <div v-if="showModal" class="fichas-modal-overlay" @click.self="closeModal">
-    <div class="fichas-modal fichas-modal-large">
-      <h2>{{ editingId ? ' Editar Ficha' : ' Nueva Ficha' }}</h2>
-      <div class="fichas-form-grid">
-        <div class="fichas-form-group">
+    <div class="fichas-modal fichas-modal-large fichas-modal-ficha">
+      <div class="fichas-modal-titulo">
+        <h2>{{ editingId ? ' Editar Ficha' : ' Nueva Ficha' }}</h2>
+        <button
+        v-if="esAdmin"
+        type="button"
+        class="btn-link-programas"
+        @click="abrirCrearProgramaRapido"
+        title="Adjuntar un nuevo programa oficial al catálogo"
+        >
+        + Adjuntar Programa
+        </button>
+      </div>
+      <div class="fichas-form-grid fichas-form-grid-ficha">
+        <div class="fichas-form-group fichas-col-2">
           <label>Código de Ficha *</label>
           <input v-model="fichaForm.codigoFicha" type="text" placeholder="Ej: 2670123" />
         </div>
-        <div class="fichas-form-group">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+        <div class="fichas-form-group fichas-col-2">
+          <label>Jornada *</label>
+          <select v-model="fichaForm.jornada">
+            <option value="" disabled>Selecciona la jornada...</option>
+            <option value="Mañana">Mañana</option>
+            <option value="Tarde">Tarde</option>
+            <option value="Noche">Noche</option>
+            <option value="Mixta">Mixta</option>
+          </select>
+        </div>
+        <div class="fichas-form-group fichas-col-2">
+          <label>Ambiente Asignado *</label>
+          <input v-model="fichaForm.aulaAsignada" type="text" placeholder="Ej: Ambiente 302 - Bloque A" />
+        </div>
+
+        <div class="fichas-form-group fichas-col-6">
+          <div>
             <label style="margin: 0;">Nombre del Programa *</label>
-            <button
-              v-if="esAdmin"
-              type="button"
-              class="btn-link-programas"
-              @click="abrirCrearProgramaRapido"
-              title="Adjuntar un nuevo programa oficial al catálogo"
-            >
-              + Adjuntar Programa
-            </button>
           </div>
           <select
             v-model="fichaForm.nombrePrograma"
@@ -571,50 +614,36 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
             Selecciona un programa estandarizado de la lista. Solo el Administrador puede adjuntar o modificar programas.
           </span>
         </div>
-        <div class="fichas-form-group">
-          <label>Jornada *</label>
-          <select v-model="fichaForm.jornada">
-            <option value="Mañana">Mañana</option>
-            <option value="Tarde">Tarde</option>
-            <option value="Noche">Noche</option>
-            <option value="Mixta">Mixta</option>
-          </select>
-        </div>
-        <div class="fichas-form-group">
-          <label>Aula Asignada *</label>
-          <input v-model="fichaForm.aulaAsignada" type="text" placeholder="Ej: Aula 302 - Bloque A" />
-        </div>
-
         <!-- BUSCADOR DE DOCENTES -->
         <div class="fichas-form-group fichas-form-group-wide">
-          <label> Filtrar / Buscar Docente en la Lista</label>
+          <label> Filtrar / Buscar Instructor en la Lista</label>
           <input
             v-model="busquedaDocente"
             type="text"
-            placeholder="Escribe el nombre, apellido, documento o especialidad del docente..."
+            placeholder="Escribe el nombre, apellido, documento o especialidad del instructor..."
             class="fichas-instructor-search"
           />
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label> Docente Líder de la Ficha (Obligatorio) *</label>
+          <label> Instructor Líder de la Ficha (Obligatorio) *</label>
           <select v-model="fichaForm.instructorLiderId" class="fichas-leader-select">
-            <option :value="null" disabled>Selecciona al Docente Líder...</option>
+            <option :value="null" disabled>Selecciona al Instructor Líder...</option>
             <option v-for="i in instructoresFiltrados" :key="i._id" :value="i._id">
                {{ i.nombres }} {{ i.apellidos }} — {{ i.especialidad }}
             </option>
           </select>
           <p v-if="instructoresFiltrados.length === 0" class="fichas-warning-text">
-            No se encontraron docentes con la búsqueda "{{ busquedaDocente }}".
+            No se encontraron instructores con la búsqueda "{{ busquedaDocente }}".
           </p>
           <p v-if="liderYaEsLiderEnOtraFicha" class="fichas-warning-text">
-             <strong>Aviso de Liderazgo:</strong> Este docente ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
+             <strong>Aviso de Liderazgo:</strong> Este instructor ya es Líder de la Ficha <strong>{{ liderYaEsLiderEnOtraFicha.codigoFicha }}</strong> ({{ liderYaEsLiderEnOtraFicha.nombrePrograma }}). Se permite ser líder de múltiples fichas.
           </p>
         </div>
 
         <div class="fichas-form-group fichas-form-group-wide">
-          <label> Docentes Comunes Asignados (Opcional)</label>
-          <p class="fichas-help-text">Selecciona los docentes adicionales que dictan clases en esta ficha:</p>
+          <label> Instructores Comunes Asignados (Opcional)</label>
+          <p class="fichas-help-text">Selecciona los instructores adicionales que dictan clases en esta ficha:</p>
           <div class="fichas-instructor-check-grid">
             <label
               v-for="i in instructoresFiltrados"
@@ -635,16 +664,16 @@ const liderYaEsLiderEnOtraFicha = computed(() => {
               </span>
             </label>
             <div v-if="instructoresFiltrados.length === 0" class="fichas-no-instructors">
-              No se encontraron docentes que coincidan con la búsqueda.
+              No se encontraron instructores que coincidan con la búsqueda.
             </div>
           </div>
         </div>
 
-        <div class="fichas-form-group">
+        <div class="fichas-form-group fichas-col-3">
           <label>Fecha de Inicio *</label>
           <input v-model="fichaForm.fechaInicio" type="date" />
         </div>
-        <div class="fichas-form-group">
+        <div class="fichas-form-group fichas-col-3">
           <label>Fecha de Fin *</label>
           <input v-model="fichaForm.fechaFin" type="date" />
         </div>

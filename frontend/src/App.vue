@@ -4,6 +4,8 @@ import { useAuth, initAuth } from './composables/useAuth.js'
 import { setViewForRole, actualizarTituloPestana } from './router/index.js'
 import DefaultLayout from './layouts/DefaultLayout.vue'
 import Login from './views/Login.vue'
+import ModalConfirmacion from './components/ModalConfirmacion.vue'
+import AvisoGlobal from './components/AvisoGlobal.vue'
 
 const { autenticado, usuario, onLoginSuccess } = useAuth()
 
@@ -41,4 +43,7 @@ onMounted(() => {
   />
 
   <DefaultLayout v-else />
+
+  <ModalConfirmacion />
+  <AvisoGlobal />
 </template>

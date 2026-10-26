@@ -36,8 +36,10 @@ const rolActual = computed(() => usuario.value?.rol || 'Administrador')
 const esInstructor = computed(() => rolActual.value === 'Instructor')
 const vistasDelRol = computed(() => viewsForRole(rolActual.value, usuario.value?.esLider))
 
-// "Perfil" ya no aparece como ítem del menú: se abre al pulsar el logo SENA.
+// "Perfil" aparece como primer ítem del menú del Administrador. Para el resto de
+// roles no se lista: se abre al pulsar el logo/avatar.
 const viewsDisponibles = computed(() => {
+  if (rolActual.value === 'Administrador') return vistasDelRol.value
   const { perfil, ...resto } = vistasDelRol.value
   return resto
 })
@@ -59,7 +61,6 @@ const debePrimerLogin = computed(() => {
 const iconosPorVista = {
   panel_instructor: 'groups',
   panel_estudiante: 'school',
-  dashboard: 'grid_view',
   perfil: 'person',
   instructores: 'person_add',
   estudiantes: 'group_add',
@@ -138,6 +139,7 @@ function irA(key) {
         <div class="sidebar-header">
           <div class="sidebar-header-top">
             <button
+              v-if="esInstructor"
               type="button"
               class="sidebar-logo-btn"
               :class="{ active: currentView === 'perfil' }"
@@ -145,13 +147,15 @@ function irA(key) {
               :title="tienePerfil ? 'Ir a Perfil' : null"
             >
               <img
-                v-if="esInstructor"
                 :src="instructorAvatar"
                 alt="Instructor"
                 class="sidebar-avatar-img"
               />
-              <img v-else :src="senaLogo" alt="Logo SENA" />
             </button>
+            <!-- Admin / Aprendiz: solo el logo SENA, sin botón ni borde -->
+            <div v-else class="sidebar-logo-plain">
+              <img :src="senaLogo" alt="Logo SENA" />
+            </div>
 
             <!-- Botón para contraer / desplegar el menú (solo escritorio) -->
             <button

@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../services/index.js'
 import { socket } from '../services/index.js'
+import { confirmar } from '../composables/useConfirm.js'
 
 const dispositivos = ref([])
 const fichas = ref([])
@@ -26,6 +27,16 @@ const activos = computed(() =>
 const deshabilitados = computed(() =>
   dispositivos.value.filter((d) => d.activo === false && !!d.aprobadoEn)
 )
+
+const vistaFiltro = ref('todos')
+const filtroFichaId = ref('')
+
+const activosFiltrados = computed(() => {
+  if (!filtroFichaId.value) return activos.value
+  return activos.value.filter((d) =>
+    (d.fichas || []).some((f) => String(f._id || f) === String(filtroFichaId.value))
+  )
+})
 
 onMounted(async () => {
   loading.value = true
@@ -177,11 +188,11 @@ async function guardar(device) {
 }
 
 async function resetFingerprint(device) {
-  if (!confirm(`¿Resetear la identidad de hardware de "${deviceLabel(device)}"?\n\n` +
-    'Se eliminará el fingerprint guardado y el dispositivo lo re-adoptará en su próxima conexión. ' +
-    'Úsalo solo si reinstalaste Windows o reemplazaste el disco de ese PC.')) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Resetear dispositivo',
+    mensaje: `¿Resetear la identidad de hardware de "${deviceLabel(device)}"?\n\nSe eliminará el fingerprint guardado y el dispositivo lo re-adoptará en su próxima conexión. Úsalo solo si reinstalaste Windows o reemplazaste el disco de ese PC.`,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.resetFingerprint(device._id)
@@ -208,9 +219,12 @@ async function aprobarDispositivo(device) {
 }
 
 async function deshabilitarDispositivo(device) {
-  if (!confirm(`¿Deshabilitar "${deviceLabel(device)}"?\n\nEl dispositivo perderá el acceso de inmediato si está conectado.`)) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Deshabilitar dispositivo',
+    mensaje: `¿Deshabilitar "${deviceLabel(device)}"?\n\nEl dispositivo perderá el acceso de inmediato si está conectado.`,
+    peligro: true,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.deshabilitar(device._id)
@@ -237,9 +251,12 @@ async function reactivarDispositivo(device) {
 }
 
 async function rechazarDispositivo(device) {
-  if (!confirm(`¿Rechazar y eliminar "${deviceLabel(device)}"?\n\nEsta acción es permanente y borra el dispositivo.`)) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Rechazar dispositivo',
+    mensaje: `¿Rechazar y eliminar "${deviceLabel(device)}"?\n\nEsta acción es permanente y borra el dispositivo.`,
+    peligro: true,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.eliminar(device._id)
@@ -253,9 +270,12 @@ async function rechazarDispositivo(device) {
 }
 
 async function eliminarDispositivo(device) {
-  if (!confirm(`¿Eliminar definitivamente "${deviceLabel(device)}"?\n\nEsta acción borrará el registro del dispositivo de la base de datos y liberará cualquier ficha asignada.`)) {
-    return
-  }
+  const ok = await confirmar({
+    titulo: 'Eliminar dispositivo',
+    mensaje: `¿Eliminar definitivamente "${deviceLabel(device)}"?\n\nEsta acción borrará el registro del dispositivo de la base de datos y liberará cualquier ficha asignada.`,
+    peligro: true,
+  })
+  if (!ok) return
   savingId.value = device._id
   try {
     await api.dispositivos.eliminar(device._id)
@@ -291,6 +311,20 @@ function formatFecha(iso) {
   </div>
 
   <div v-else>
+    <div class="filtro-barra">
+      <div class="filtro-chips">
+        <button type="button" class="chip" :class="{ 'chip-activo': vistaFiltro === 'todos' }" @click="vistaFiltro = 'todos'">Todos ({{ dispositivos.length }})</button>
+        <button type="button" class="chip" :class="{ 'chip-activo': vistaFiltro === 'pendientes' }" @click="vistaFiltro = 'pendientes'">No registrados ({{ pendientes.length }})</button>
+      </div>
+      <div class="filtro-ficha">
+        <label for="filtro-ficha">Filtrar por ficha</label>
+        <select id="filtro-ficha" v-model="filtroFichaId" class="filtro-select">
+          <option value="">Todas las fichas</option>
+          <option v-for="f in fichas" :key="f._id" :value="f._id">{{ f.codigoFicha }} — {{ f.nombrePrograma }}</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Pendientes de aprobación -->
     <div v-if="pendientes.length > 0" class="pendientes-section">
       <h2 class="pendientes-title"> Pendientes de aprobación</h2>
@@ -312,9 +346,11 @@ function formatFecha(iso) {
         </div>
       </div>
     </div>
+    <p v-else-if="vistaFiltro === 'pendientes'" class="filtro-vacio">Sin dispositivos para este filtro</p>
 
+    <template v-if="vistaFiltro === 'todos'">
     <div class="dispositivos-list">
-      <div v-for="d in activos" :key="d._id" class="card">
+      <div v-for="d in activosFiltrados" :key="d._id" class="card">
         <div class="card-header">
           <div>
             <h3>{{ deviceLabel(d) }}</h3>
@@ -423,6 +459,7 @@ function formatFecha(iso) {
         </div>
       </div>
     </div>
+    <p v-if="activos.length > 0 && activosFiltrados.length === 0" class="filtro-vacio">Sin dispositivos para este filtro</p>
     </div>
 
     <!-- Deshabilitados (aprobados antes, luego inactivos) -->
@@ -446,6 +483,7 @@ function formatFecha(iso) {
         </div>
       </div>
     </div>
+    </template>
   </div>
 
   <div v-if="toast.show" class="toast" :class="'toast-' + toast.type">{{ toast.message }}</div>
@@ -719,5 +757,73 @@ function formatFecha(iso) {
   .fichas-asociadas {
     font-size: 12px;
   }
+}
+
+/* Barra de filtros de dispositivos */
+.filtro-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.filtro-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #d9e2d3;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.chip-activo {
+  background: #39A900;
+  border-color: #39A900;
+  color: #ffffff;
+}
+
+.filtro-ficha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.filtro-select {
+  min-width: 240px;
+  padding: 9px 12px;
+  background: var(--blanco, #fff);
+  border: 1px solid var(--borde, #e2e6de);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--tinta, #16210f);
+  cursor: pointer;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.filtro-select:focus {
+  border-color: var(--verde, #39a900);
+  box-shadow: 0 0 0 3px rgba(57, 169, 0, .14);
+}
+
+.filtro-vacio {
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 12px 0;
 }
 </style>

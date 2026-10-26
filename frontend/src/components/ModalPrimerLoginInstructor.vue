@@ -39,7 +39,7 @@ const show = reactive({
 })
 
 const nombreInstructor = computed(() => {
-  return props.usuario?.nombre || props.usuario?.nombres || 'Docente'
+  return props.usuario?.nombre || props.usuario?.nombres || 'Instructor'
 })
 
 // Validación en vivo Paso 1

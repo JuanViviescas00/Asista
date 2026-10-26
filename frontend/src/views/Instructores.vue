@@ -200,14 +200,14 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
 <template>
   <div class="page-header">
     <h1>Instructores</h1>
-    <p>Gestiona los instructores y docentes del sistema institucional</p>
+    <p>Gestiona los instructores del sistema institucional</p>
   </div>
 
   <div class="stats-row">
     <StatCard icon="users" label="Total Instructores" :value="instructores.length" variant="primary" />
     <StatCard icon="check-circle" label="Activos" :value="activosCount" variant="verde" />
     <StatCard icon="minus-circle" label="Inactivos" :value="inactivosCount" variant="rojo" />
-    <StatCard icon="award" label="Docentes Líderes" :value="lideresCount" variant="azul" />
+    <StatCard icon="award" label="Instructores Líderes" :value="lideresCount" variant="azul" />
   </div>
 
   <div class="card busqueda-card">
@@ -259,7 +259,7 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
       <!-- Fila 2: Filtros Selectores (Estado, Tipo, Especialidad) -->
       <div class="busqueda-fila busqueda-fila-selects">
         <div class="campo-busqueda">
-          <label for="filtro-estado">Estado del Docente</label>
+          <label for="filtro-estado">Estado del Instructor</label>
           <select id="filtro-estado" v-model="busqueda.estado" class="select-control">
             <option value="Todos">Todos los estados</option>
             <option value="Activo">Activo</option>
@@ -328,7 +328,7 @@ function toggleDetalle(id) { expandidos.value[id] = !expandidos.value[id] }
           <tr>
             <th>Nombre</th>
             <th>Especialidad</th>
-            <th>Tipo Docente</th>
+            <th>Tipo de Instructor</th>
             <th>Estado</th>
             <th>Acciones</th>
           </tr>

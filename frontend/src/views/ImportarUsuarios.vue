@@ -21,7 +21,7 @@ const permisoCarga = ref(true)
 
 const HEADERS_ESTUDIANTES = ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Jornada']
 const HEADERS_INSTRUCTORES = ['Tipo_Doc', 'Num_Doc', 'Nombres', 'Apellidos', 'Genero', 'Correo', 'Telefono', 'Ficha', 'Es_Lider']
-const HEADERS_FICHAS = ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Aula_Asignada', 'Fecha_Inicio', 'Fecha_Fin']
+const HEADERS_FICHAS = ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Ambiente_Asignado', 'Fecha_Inicio', 'Fecha_Fin']
 
 const headersEsperados = computed(() => {
   if (tipoImportacion.value === 'fichas') return HEADERS_FICHAS
@@ -105,7 +105,7 @@ function validarFila(row) {
   if (tipoImportacion.value === 'fichas') {
     if (row.Codigo_Ficha) row.Codigo_Ficha = normalizarNumeroDocumento(row.Codigo_Ficha)
     if (row.Nombre_Programa) row.Nombre_Programa = capitalizarTexto(row.Nombre_Programa)
-    if (row.Aula_Asignada) row.Aula_Asignada = capitalizarTexto(row.Aula_Asignada)
+    if (row.Ambiente_Asignado) row.Ambiente_Asignado = capitalizarTexto(row.Ambiente_Asignado)
     if (row.Jornada) {
       row.Jornada = normalizarJornada(row.Jornada)
       if (!['Mañana', 'Tarde', 'Noche', 'Mixta'].includes(row.Jornada)) {
@@ -179,7 +179,7 @@ function detectarAdvertencia(row) {
       for (const fb of fichasBuscadas) {
         if (fb.ficha && fb.ficha.instructorLiderId) {
           const nombreActualLider = getInstructorNombre(fb.ficha.instructorLiderId)
-          return `La Ficha ${fb.codigo} ya tiene asignado como Líder a ${nombreActualLider || 'otro docente'}. Al importar, se actualizará a ${row.Nombres} ${row.Apellidos}.`
+          return `La Ficha ${fb.codigo} ya tiene asignado como Líder a ${nombreActualLider || 'otro instructor'}. Al importar, se actualizará a ${row.Nombres} ${row.Apellidos}.`
         }
       }
     }
@@ -214,6 +214,8 @@ function procesarArchivo(event) {
         return
       }
       headers = matrix[0].map(h => String(h ?? '').trim())
+      // Compatibilidad: archivos antiguos con la columna "Aula_Asignada"
+      headers = headers.map(h => (h === 'Aula_Asignada' ? 'Ambiente_Asignado' : h))
       rows = matrix.slice(1).map((values, idx) => {
         const row = {}
         headers.forEach((h, columnIndex) => {
@@ -265,9 +267,9 @@ function procesarArchivo(event) {
         if (docNum) {
           const existeEnBD = instructoresExistentes.value.find(i => String(i.numeroDocumento).trim() === docNum)
           if (existeEnBD) {
-            row._infoMultificha = `El docente ya está registrado previamente (${existeEnBD.nombres} ${existeEnBD.apellidos}). Se le asignará la(s) nueva(s) ficha(s).`
+            row._infoMultificha = `El instructor ya está registrado previamente (${existeEnBD.nombres} ${existeEnBD.apellidos}). Se le asignará la(s) nueva(s) ficha(s).`
           } else if (documentosEnArchivo.has(docNum)) {
-            row._infoMultificha = `El docente ya aparece en la línea ${documentosEnArchivo.get(docNum)}. Se le asignarán múltiples fichas.`
+            row._infoMultificha = `El instructor ya aparece en la línea ${documentosEnArchivo.get(docNum)}. Se le asignarán múltiples fichas.`
           } else {
             documentosEnArchivo.set(docNum, row._linea)
           }
@@ -321,7 +323,7 @@ async function ejecutarImportacion() {
         codigoFicha: normalizarNumeroDocumento(r.Codigo_Ficha),
         nombrePrograma: normalizarNombrePrograma(r.Nombre_Programa),
         jornada: normalizarJornada(r.Jornada),
-        aulaAsignada: capitalizarTexto(r.Aula_Asignada || 'Aula General'),
+        aulaAsignada: capitalizarTexto(r.Ambiente_Asignado || 'Ambiente General'),
         fechaInicio: r.Fecha_Inicio || '2026-02-01',
         fechaFin: r.Fecha_Fin || '2026-11-30',
       }))
@@ -347,7 +349,7 @@ async function ejecutarImportacion() {
           numeroDocumento: normalizarNumeroDocumento(r.Num_Doc),
           correo: String(r.Correo).trim().toLowerCase(),
           telefono: String(r.Telefono).trim(),
-          especialidad: primeraFicha ? capitalizarTexto(primeraFicha.nombrePrograma) : 'Docente SENA',
+          especialidad: primeraFicha ? capitalizarTexto(primeraFicha.nombrePrograma) : 'Instructor SENA',
           fichas: listaFichas,
           esLider: esLiderVal,
           rol: 'Instructor',
@@ -355,7 +357,7 @@ async function ejecutarImportacion() {
         }
       })
       await api.instructores.importar(items)
-      showToastFn(`${registros.value.length} registro(s) de docentes procesados e impartiendo sus respectivas fichas`)
+      showToastFn(`${registros.value.length} registro(s) de instructores procesados e impartiendo sus respectivas fichas`)
     } else {
       const items = registros.value.map(r => {
         const ficha = getFichaPorCodigo(r.Ficha)
@@ -374,7 +376,7 @@ async function ejecutarImportacion() {
         }
       })
       await api.estudiantes.importar(items)
-      showToastFn(`${registros.value.length} estudiantes importados correctamente`)
+      showToastFn(`${registros.value.length} aprendices importados correctamente`)
     }
     importado.value = true
   } catch (e) {
@@ -391,7 +393,7 @@ function descargarPlantilla() {
   if (tipoImportacion.value === 'fichas') {
     nombreArchivo = 'plantilla_fichas.xlsx'
     filas = [
-      ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Aula_Asignada', 'Fecha_Inicio', 'Fecha_Fin'],
+      ['Codigo_Ficha', 'Nombre_Programa', 'Jornada', 'Ambiente_Asignado', 'Fecha_Inicio', 'Fecha_Fin'],
     ]
   } else if (tipoImportacion.value === 'instructores') {
     nombreArchivo = 'plantilla_instructores.xlsx'
@@ -446,7 +448,7 @@ function limpiarTodo() {
             <span>Descargar Plantilla</span>
           </button>
           <span v-if="usuario.rol === 'Instructor'" class="import-users-badge import-users-badge-success">
-             Docente Líder Autorizado
+             Instructor Líder Autorizado
           </span>
         </div>
       </div>
@@ -454,8 +456,8 @@ function limpiarTodo() {
         <div class="import-users-form-group">
           <label>Tipo de Datos a Importar</label>
           <select v-model="tipoImportacion" :disabled="archivoNombre !== ''" @change="limpiarTodo">
-            <option value="estudiantes">Estudiantes (Aprendices)</option>
-            <option value="instructores">Instructores / Docentes</option>
+            <option value="estudiantes">Aprendices</option>
+            <option value="instructores">Instructores</option>
             <option value="fichas" v-if="usuario.rol === 'Administrador'">Fichas / Programas</option>
           </select>
         </div>
@@ -475,8 +477,8 @@ function limpiarTodo() {
         
         <ul v-if="tipoImportacion === 'instructores'" class="import-users-info-list">
           <li><strong>Tipo_Doc:</strong> CC, TI, CE, PA, PEP, PPT, CD, RC o SC</li>
-          <li><strong>Ficha:</strong> Código(s) de la ficha asignada. Para que un docente dicte <strong>más de una clase / ficha</strong>, puedes separar los códigos con comas o barras (ej: <code>"2670123, 2891234"</code>) o registrar al docente en filas separadas.</li>
-          <li><strong>Es_Lider:</strong> Pon <code>SI</code> si el docente es el Líder de la ficha, o <code>NO</code> si es Docente Común</li>
+          <li><strong>Ficha:</strong> Código(s) de la ficha asignada. Para que un instructor dicte <strong>más de una clase / ficha</strong>, puedes separar los códigos con comas o barras (ej: <code>"2670123, 2891234"</code>) o registrar al instructor en filas separadas.</li>
+          <li><strong>Es_Lider:</strong> Pon <code>SI</code> si el instructor es el Líder de la ficha, o <code>NO</code> si es Instructor Común</li>
           <li><strong>Jornada:</strong> Los instructores imparten en cualquier jornada (no se restringe por jornada).</li>
         </ul>
         <ul v-else-if="tipoImportacion === 'fichas'" class="import-users-info-list">
@@ -537,7 +539,7 @@ function limpiarTodo() {
           <thead>
             <tr>
               <th>Línea</th>
-              <th>Docente</th>
+              <th>Instructor</th>
               <th>Ficha</th>
               <th>Aviso Informativo</th>
             </tr>
@@ -564,7 +566,7 @@ function limpiarTodo() {
         <table class="import-users-table">
           <thead>
             <tr v-if="tipoImportacion === 'fichas'">
-              <th>Código Ficha</th><th>Nombre Programa</th><th>Jornada</th><th>Aula</th><th>Fecha Inicio</th><th>Fecha Fin</th>
+              <th>Código Ficha</th><th>Nombre Programa</th><th>Jornada</th><th>Ambiente</th><th>Fecha Inicio</th><th>Fecha Fin</th>
             </tr>
             <tr v-else-if="tipoImportacion === 'instructores'">
               <th>Tipo Doc</th><th>Nro Doc</th><th>Nombres</th><th>Apellidos</th><th>Correo</th><th>Ficha</th><th>¿Es Líder?</th><th>Avisos</th>
@@ -576,7 +578,7 @@ function limpiarTodo() {
           <tbody>
             <tr v-for="(r, idx) in registros.slice(0, 50)" :key="idx">
               <template v-if="tipoImportacion === 'fichas'">
-                <td>{{ r.Codigo_Ficha }}</td><td>{{ r.Nombre_Programa }}</td><td>{{ r.Jornada }}</td><td>{{ r.Aula_Asignada }}</td><td>{{ r.Fecha_Inicio }}</td><td>{{ r.Fecha_Fin }}</td>
+                <td>{{ r.Codigo_Ficha }}</td><td>{{ r.Nombre_Programa }}</td><td>{{ r.Jornada }}</td><td>{{ r.Ambiente_Asignado }}</td><td>{{ r.Fecha_Inicio }}</td><td>{{ r.Fecha_Fin }}</td>
               </template>
               <template v-else-if="tipoImportacion === 'instructores'">
                 <td>{{ r.Tipo_Doc }}</td><td>{{ r.Num_Doc }}</td><td>{{ r.Nombres }}</td><td>{{ r.Apellidos }}</td><td>{{ r.Correo }}</td><td>{{ r.Ficha }}</td>

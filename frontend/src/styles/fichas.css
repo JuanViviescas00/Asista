@@ -262,3 +262,60 @@
   color: #64748b;
   margin-top: 4px;
 }
+
+/* Paginación en cliente */
+.fichas-paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+.fichas-pag-flecha {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #d9e2d3;
+  color: #39A900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+.fichas-pag-flecha:hover:not(:disabled) {
+  background: #E8F5E0;
+  border-color: #39A900;
+}
+.fichas-pag-flecha:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.fichas-pag-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748B;
+  white-space: nowrap;
+}
+
+/* Modal Nueva/Editar Ficha: rejilla de 6 columnas ordenada */
+.fichas-modal-ficha { max-width: 780px; }
+.fichas-form-grid.fichas-form-grid-ficha { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: start; }
+.fichas-form-grid-ficha .fichas-col-2 { grid-column: span 2; }
+.fichas-form-grid-ficha .fichas-col-3 { grid-column: span 3; }
+.fichas-form-grid-ficha .fichas-col-6,
+.fichas-form-grid-ficha .fichas-form-group-wide { grid-column: 1 / -1; }
+.fichas-form-grid-ficha .fichas-form-group input:not([type="checkbox"]),
+.fichas-form-grid-ficha .fichas-form-group select { width: 100%; box-sizing: border-box; }
+.fichas-form-grid-ficha .fichas-instructor-check-item { display: flex; align-items: center; gap: 10px; }
+.fichas-form-grid-ficha .fichas-instructor-check-item input[type="checkbox"] { width: 16px; height: 16px; padding: 0; flex: 0 0 auto; }
+.fichas-modal-titulo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.fichas-modal-titulo h2 { margin: 0; }
+@media (max-width: 640px) {
+  .fichas-form-grid.fichas-form-grid-ficha { grid-template-columns: 1fr; }
+  .fichas-form-grid-ficha .fichas-col-2,
+  .fichas-form-grid-ficha .fichas-col-3 { grid-column: 1 / -1; }
+}
