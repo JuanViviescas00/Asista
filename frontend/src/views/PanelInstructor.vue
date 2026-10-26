@@ -1852,10 +1852,10 @@ function descargarExcel(data, nombreArchivo) {
                     :class="{ 'row-excusada': asistenciaDia[est._id]?.excusa, 'row-disabled': jornadaInhabilitada }">
                   <td>
                     <strong>{{ est.nombres }} {{ est.apellidos }}</strong>
-                    <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
-                      <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
-                      <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
-                      <template v-else>error</template>
+                    <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].estado === 'error' ? (estadoFilaSync[est._id].detalle || 'Error al guardar') : (estadoFilaSync[est._id].estado === 'guardando' ? 'Guardando…' : 'Guardado')">
+                      <template v-if="estadoFilaSync[est._id].estado === 'guardando'">●</template>
+                      <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">✓</template>
+                      <template v-else>!</template>
                     </span>
                   </td>
                   <td>{{ est.tipoDocumento }} {{ est.numeroDocumento }}</td>
@@ -1981,10 +1981,10 @@ function descargarExcel(data, nombreArchivo) {
                   <div class="mob-info">
                     <strong class="mob-name">
                       {{ est.nombres }} {{ est.apellidos }}
-                      <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].detalle || ''">
-                        <template v-if="estadoFilaSync[est._id].estado === 'guardando'">guardando…</template>
-                        <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">guardado ✓</template>
-                        <template v-else>error</template>
+                      <span v-if="estadoFilaSync[est._id]" class="sync-indicador" :class="'sync-' + estadoFilaSync[est._id].estado" :title="estadoFilaSync[est._id].estado === 'error' ? (estadoFilaSync[est._id].detalle || 'Error al guardar') : (estadoFilaSync[est._id].estado === 'guardando' ? 'Guardando…' : 'Guardado')">
+                        <template v-if="estadoFilaSync[est._id].estado === 'guardando'">●</template>
+                        <template v-else-if="estadoFilaSync[est._id].estado === 'guardado'">✓</template>
+                        <template v-else>!</template>
                       </span>
                     </strong>
                     <span class="mob-doc">{{ est.tipoDocumento }} {{ est.numeroDocumento }}</span>
