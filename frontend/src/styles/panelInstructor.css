@@ -1961,31 +1961,41 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: 6px;
-  padding: 3px 6px;
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  margin-left: 8px;
+  padding: 5px 8px;
+  background: #16a34a;
+  color: #ffffff;
+  border: 1px solid #15803d;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(22,163,74,0.35);
   cursor: pointer;
   vertical-align: middle;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-desc-nota:hover:not(:disabled) {
+  background: #15803d;
+}
+.btn-desc-nota svg {
+  width: 16px;
+  height: 16px;
 }
 .btn-desc-nota:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 .btn-desc-nota-activa {
-  background: #ecfdf5;
-  color: #16a34a;
-  border-color: #86efac;
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #15803d;
+  box-shadow: 0 0 0 3px #bbf7d0;
 }
 .btn-mob-nota {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
+  background: #16a34a;
+  color: #ffffff;
+  border: 1px solid #15803d;
   font-size: 12px;
   font-weight: 600;
   padding: 7px 10px;
