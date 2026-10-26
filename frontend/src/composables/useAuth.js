@@ -11,6 +11,7 @@
 // ============================================================
 import { ref, computed } from 'vue'
 import { reconectarConAuth } from '../services/index.js'
+import { mostrarAviso } from './useAviso.js'
 
 const INACTIVIDAD_MS = 10 * 60 * 1000
 const EVENTOS_ACTIVIDAD = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart', 'mousedown']
@@ -86,7 +87,7 @@ function limpiarListeners() {
 function manejarExpiracionAuth(e) {
   cerrarSesion()
   if (e?.detail) {
-    alert(e.detail)
+    mostrarAviso(e.detail, 'warning')
   }
 }
 

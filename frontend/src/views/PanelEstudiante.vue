@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import api from '../services/index.js'
 import StatCard from '../components/StatCard.vue'
+import { mostrarAviso } from '../composables/useAviso.js'
 import iconoHistorial from '../assets/historial-aprendiz-icon.png'
 import iconoSinExcusa from '../assets/sin-excusa-icon.png'
 import iconoConExcusa from '../assets/con-excusa-icon.png'
@@ -199,7 +200,7 @@ function motivoDeFila(asis) {
 
 async function radicarExcusa() {
   if (!nuevaExcusa.value.motivo.trim()) {
-    alert('Ingresa el motivo o justificación de la inasistencia')
+    mostrarAviso('Ingresa el motivo o justificación de la inasistencia', 'warning')
     return
   }
   try {
@@ -210,12 +211,12 @@ async function radicarExcusa() {
       motivo: nuevaExcusa.value.motivo,
       estado: 'Pendiente'
     })
-    alert('Excusa radicada correctamente. Será revisada por tu Instructor.')
+    mostrarAviso('Excusa radicada correctamente. Será revisada por tu Instructor.', 'success')
     showNuevaExcusaModal.value = false
     nuevaExcusa.value.motivo = ''
     await cargarDatosEstudiante()
   } catch (err) {
-    alert('Error al radicar excusa: ' + err.message)
+    mostrarAviso('Error al radicar excusa: ' + err.message, 'error')
   }
 }
 </script>
