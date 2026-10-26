@@ -852,7 +852,9 @@ async function onHorasChange(estId, ev) {
     ev.target.value = reg.horasFallidas || 0
     return
   }
-  const n = parseInt(ev.target.value, 10)
+  // Campo vacío al salir = 0 horas (antes se restauraba el valor anterior y no se guardaba)
+  const raw = String(ev.target.value ?? '').trim()
+  const n = raw === '' ? 0 : parseInt(raw, 10)
   const valorFinal = Number.isNaN(n) ? (reg.horasFallidas || 0) : n
   actualizarEstadoPorHoras(reg, valorFinal)
   ev.target.value = reg.horasFallidas
