@@ -21,12 +21,13 @@ const estudiantesFicha = ref([])
 const excusasFicha = ref([])
 const asistenciasFicha = ref([])
 
-// Historial filtrado únicamente por anomalías (fallas, tardanzas y excusas)
+// Historial del día: solo anomalías (fallas, tardanzas y excusas) registradas HOY
 const historialAnomalias = computed(() => {
   const anomalos = ['Falta', 'Tardanza', 'Excusada', 'Ausente', 'Retardo']
+  const hoy = getHoyLocalISO()
   return asistenciasFicha.value.filter(a => {
     const estado = a.estado || a.tipo
-    return anomalos.includes(estado)
+    return anomalos.includes(estado) && String(a.fecha || '').slice(0, 10) === hoy
   })
 })
 
@@ -2108,7 +2109,7 @@ function descargarExcel(data, nombreArchivo) {
           <div class="section-header-row">
             <div>
               <h4>Historial de Asistencias (Anomalías)</h4>
-              <p class="section-desc">Mostrando únicamente fallas, tardanzas y excusas de esta ficha:</p>
+              <p class="section-desc">Mostrando únicamente las fallas, tardanzas y excusas de hoy en esta ficha:</p>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <template v-if="historialAnomalias.length > 0">
@@ -2151,7 +2152,7 @@ function descargarExcel(data, nombreArchivo) {
                 </td>
               </tr>
               <tr v-if="historialAnomalias.length === 0">
-                <td colspan="5" class="empty-cell">No hay anomalías registradas (fallas, tardanzas o excusas). Todos los aprendices han estado presentes.</td>
+                <td colspan="5" class="empty-cell">No hay anomalías registradas hoy (fallas, tardanzas o excusas).</td>
               </tr>
             </tbody>
           </table>
