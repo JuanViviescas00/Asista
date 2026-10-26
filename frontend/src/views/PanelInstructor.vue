@@ -129,7 +129,7 @@ async function confirmarAgregarDocente() {
       misFichas.value[idx].instructores = fichaActualizada.instructores || []
     }
     await cargarTodosLosInstructores()
-    showToast(`Instructor ${nombreDoc} asignado al equipo exitosamente.`, 'success')
+    showToast(`Instructor ${nombreDoc} asignado al equipo ejecutor exitosamente.`, 'success')
     modalAgregarDocenteAbierto.value = false
     docenteSeleccionadoId.value = ''
   } catch (err) {
@@ -194,7 +194,7 @@ const tituloVista = computed(() => {
     return { icono: 'historial', titulo: 'Historial de Asistencias', subtitulo: detalle }
   }
   if (vistaFicha.value === 'docentes') {
-    return { icono: 'docentes', titulo: 'Equipo de Instructores', subtitulo: detalle }
+    return { icono: 'docentes', titulo: 'Equipo Ejecutor', subtitulo: detalle }
   }
   return { icono: 'asistencia', titulo: 'Tomar Asistencia', subtitulo: detalle }
 })
@@ -1618,10 +1618,10 @@ function descargarExcel(data, nombreArchivo) {
               class="tab-btn"
               :class="{ active: vistaFicha === 'docentes' }"
               @click="vistaFicha = 'docentes'"
-              title="Equipo de Instructores"
+              title="Equipo Ejecutor"
             >
               <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              <span class="tab-label">Equipo</span>
+              <span class="tab-label">Equipo Ejecutor</span>
             </button>
 
             <!-- Botón-switch de pase de lista: rojo = apagado, verde = encendido -->
@@ -2165,7 +2165,7 @@ function descargarExcel(data, nombreArchivo) {
         <div v-if="vistaFicha === 'docentes'" class="section-body">
           <div class="section-header-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div>
-              <h4>Equipo de Instructores - Ficha {{ fichaSeleccionada.codigoFicha }}</h4>
+              <h4>Equipo Ejecutor - Ficha {{ fichaSeleccionada.codigoFicha }}</h4>
               <p class="section-desc">{{ fichaSeleccionada.nombrePrograma }} | Jornada: {{ fichaSeleccionada.jornada }}</p>
             </div>
             <button
@@ -2173,7 +2173,7 @@ function descargarExcel(data, nombreArchivo) {
               class="btn btn-primary"
               style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer;"
               @click="abrirModalAgregarDocente"
-              title="Agregar instructor al equipo de trabajo"
+              title="Agregar instructor al equipo ejecutor"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>Asignar Instructor</span>
@@ -2440,7 +2440,7 @@ function descargarExcel(data, nombreArchivo) {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
             </div>
             <div>
-              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Agregar Instructor al Equipo</h3>
+              <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Agregar Instructor al Equipo Ejecutor</h3>
               <p style="margin: 2px 0 0; font-size: 12.5px; color: #64748b;">Ficha {{ fichaSeleccionada?.codigoFicha }} — {{ fichaSeleccionada?.jornada }}</p>
             </div>
           </div>
@@ -2541,7 +2541,7 @@ function descargarExcel(data, nombreArchivo) {
             @click="confirmarAgregarDocente"
             style="padding: 9px 20px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;"
           >
-            <span>{{ guardandoDocente ? 'Guardando...' : (modoAsignar === 'existente' ? 'Asignar al Equipo' : 'Guardar y Asignar') }}</span>
+            <span>{{ guardandoDocente ? 'Guardando...' : (modoAsignar === 'existente' ? 'Asignar al Equipo Ejecutor' : 'Guardar y Asignar') }}</span>
           </button>
         </div>
       </div>
@@ -2555,7 +2555,7 @@ function descargarExcel(data, nombreArchivo) {
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
           <div>
-            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Desvincular Instructor del Equipo</h3>
+            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e293b;">Desvincular Instructor del Equipo Ejecutor</h3>
             <p style="margin: 3px 0 0; font-size: 13px; color: #64748b;">Ficha {{ fichaSeleccionada?.codigoFicha }}</p>
           </div>
         </div>
@@ -2571,7 +2571,7 @@ function descargarExcel(data, nombreArchivo) {
         </div>
 
         <p style="font-size: 13.5px; color: #475569; line-height: 1.5; margin-bottom: 22px;">
-          ¿Estás seguro de quitar a este instructor del equipo de trabajo? Ya no podrá registrar asistencias ni iniciar sesiones en este grupo. Las asistencias registradas previamente <strong>se conservarán</strong>.
+          ¿Estás seguro de quitar a este instructor del equipo ejecutor? Ya no podrá registrar asistencias ni iniciar sesiones en este grupo. Las asistencias registradas previamente <strong>se conservarán</strong>.
         </p>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px;">
