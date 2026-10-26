@@ -1,7 +1,9 @@
 import Excusa from '../models/Excusa.js'
-import Asistencia from '../models/Asistencia.js'
+import DiaFestivo from '../models/DiaFestivo.js'
 import Inasistencia from '../models/Inasistencia.js'
 import { topeHorasPorJornada } from '../utils/jornadaUtils.js'
+import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
+import { getHoyString } from '../services/asistenciaService.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
 
@@ -59,6 +61,20 @@ export async function aprobarExcusa(req, res) {
     const excusa = await Excusa.findById(req.params.id)
     if (!excusa) return res.status(404).json({ error: 'Excusa no encontrada' })
 
+    // Buscar la Inasistencia existente para conservar datos ya reportados.
+    const existente = await Inasistencia.findOne({
+      estudianteId: excusa.estudianteId,
+      fichaId: excusa.fichaId,
+      fecha: excusa.fechaInasistencia
+    })
+
+    // Bloqueo por subida a Sofía Plus: una novedad ya subida no puede editarse.
+    if (existente?.estadoCarga === 'SUBIDA') {
+      return res.status(409).json({
+        error: 'Esta inasistencia ya fue reportada a Sofía Plus y no se puede modificar.'
+      })
+    }
+
     excusa.estado = 'Aprobada'
     await excusa.save()
 
@@ -69,7 +85,18 @@ export async function aprobarExcusa(req, res) {
 
     const tope = topeHorasPorJornada(fichaDoc?.jornada || '')
 
-    // 1. Actualizar o crear Inasistencia con tipo 'Excusada' y estadoCarga 'LISTO_PARA_SUBIR'
+    // Horas: conservar las de una Tardanza existente; en los demás casos usar el tope.
+    const horas = existente?.tipo === 'Tardanza' ? existente.horas : tope
+
+    // instructorId: conservar el existente; si no, usar el líder de la ficha.
+    const instructorId = existente?.instructorId || fichaDoc?.instructorLiderId || null
+
+    // Calcular el estado de carga (ciclo EN_ESPERA -> LISTO_PARA_SUBIR -> SUBIDA).
+    const festivosDocs = await DiaFestivo.find().select('fecha')
+    const festivosSet = new Set(festivosDocs.map((d) => d.fecha))
+    const estadoCarga = calcularEstadoCarga({ fecha: excusa.fechaInasistencia, tipo: 'Excusada', jornada: fichaDoc?.jornada || '', festivosSet, hoyStr: getHoyString() })
+
+    // 1. Actualizar o crear Inasistencia con tipo 'Excusada'.
     const inasistencia = await Inasistencia.findOneAndUpdate(
       {
         estudianteId: excusa.estudianteId,
@@ -79,34 +106,18 @@ export async function aprobarExcusa(req, res) {
       {
         $set: {
           tipo: 'Excusada',
-          horas: tope,
+          horas,
           hora: '—',
           tiempoTardanza: '0 horas',
-          estadoCarga: 'LISTO_PARA_SUBIR'
+          instructorId,
+          estadoCarga,
+          descripcion: existente?.descripcion || ''
         },
         $setOnInsert: {
           origen: 'manual'
         }
       },
       { upsert: true, new: true }
-    )
-
-    // 2. Compatibilidad legacy con Asistencia
-    await Asistencia.findOneAndUpdate(
-      {
-        estudianteId: excusa.estudianteId,
-        fecha: excusa.fechaInasistencia,
-        fichaId: excusa.fichaId
-      },
-      {
-        $set: {
-          estado: 'Excusada',
-          hora: '—',
-          horasTardanza: 0,
-          tiempoTardanza: '0 horas'
-        }
-      },
-      { upsert: true }
     )
 
     await Estudiante.findByIdAndUpdate(excusa.estudianteId, { estadoAsistencia: 'Excusada' })

@@ -22,6 +22,8 @@ import clasesRoutes from './routes/clases.js'
 import enrolamientoRoutes from './routes/enrolamiento.js'
 import dispositivosRoutes from './routes/dispositivos.js'
 import programasRoutes from './routes/programas.js'
+import reportesRoutes from './routes/reportes.js'
+import configuracionRoutes from './routes/configuracion.js'
 import { sanitizarEntrada } from './middlewares/sanitize.js'
 import { apiLimiter } from './middlewares/rateLimiter.js'
 import { esOrigenPermitido } from './utils/corsOrigins.js'
@@ -158,6 +160,8 @@ app.use('/api/clases', clasesRoutes)
 app.use('/api/enrolamiento', enrolamientoRoutes)
 app.use('/api/dispositivos', dispositivosRoutes)
 app.use('/api/programas', programasRoutes)
+app.use('/api/reportes', reportesRoutes)
+app.use('/api/configuracion', configuracionRoutes)
 
 // Servir estáticos del frontend compilado (Single Service para Render)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))

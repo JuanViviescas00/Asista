@@ -1470,3 +1470,24 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
 - **Verificación:**
   - Pruebas unitarias con Node.js validaron que `esOrigenPermitido('https://asista.onrender.com')` devuelve `true` tanto en modo desarrollo como en `NODE_ENV=production`.
   - Prueba de handshake WebSocket en Kiosco demostró conexión exitosa con ID asignado y autenticación por dispositivo.
+
+
+---
+
+## [2026-10-26 17:25] Depuración de Código Legacy de RPA (Eliminación de Practica_RPA)
+
+- **Fecha y Hora:** 2026-10-26 17:25:00 -05:00
+- **Descripción del Problema / Bug:**
+  Existencia de dos versiones divergentes del robot de inasistencias de Sofia Plus (`Practica_RPA/` externa vs `HuelleroActualizado/rpa/` integrada), lo que generaba riesgo de incompatibilidad (el código antiguo no agrupaba horas acumuladas de fallas, carecía de soporte para arrays de `asistenciaIds` y no manejaba caídas HTTP 503 de Sofia Plus).
+- **Causa Raíz:**
+  La carpeta `Practica_RPA` correspondía a un laboratorio previo que no fue depurado tras la migración oficial del robot al repositorio principal.
+- **Solución Aplicada:**
+  1. Se eliminó de forma definitiva la carpeta desactualizada `Practica_RPA/`.
+  2. Se validó la sintaxis estricta de los scripts oficiales en `HuelleroActualizado/rpa/` (`bot_inasistencias_sofia.js` y `bot_sofia_login.js`).
+  3. Se consolidó `HuelleroActualizado/rpa/` como la única fuente de verdad para la automatización de inasistencias en Sofia Plus.
+- **Archivos Modificados:**
+  - `c:\Users\JuanC\OneDrive\Desktop\SENA\PROYECTO_FINAL_LECTOR\Practica_RPA` (eliminado)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - `Test-Path "Practica_RPA"` confirmó `False`.
+  - Chequeo de sintaxis `node -c` en scripts de `HuelleroActualizado/rpa/` finalizó con código 0.
