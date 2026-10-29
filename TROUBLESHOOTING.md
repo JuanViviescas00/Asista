@@ -1491,3 +1491,31 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
 - **Verificación:**
   - `Test-Path "Practica_RPA"` confirmó `False`.
   - Chequeo de sintaxis `node -c` en scripts de `HuelleroActualizado/rpa/` finalizó con código 0.
+
+---
+
+## [2026-10-28 21:10] Generación de Manual de Usuario Oficial FAVA con Capturas Reales de Producción y Portada Institucional
+
+- **Fecha y Hora:** 2026-10-28 21:10:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  El borrador inicial del Manual de Usuario carecía de portada acorde con la identidad gráfica del software, no incluía los módulos funcionales clave (Kiosco biométrico, excusas bajo Acuerdo 009 de 2024, días festivos, dispositivos, alertas tempranas) y requería incorporar capturas de pantalla reales y no inventadas extraídas directamente del despliegue en producción (`https://asista.onrender.com`).
+- **Causa Raíz:**
+  Documentación preliminar incompleta y desalineada frente a las directrices metodológicas de la Guía FAVA SENA (*Manuales Técnicos de la Aplicación*, págs. 5-8 y 12-25) y frente a la versión final del sistema en producción.
+- **Solución Aplicada:**
+  1. Se diseñó y renderizó la portada institucional oficial en alta resolución (`docs/portada_manual_usuario.jpg` y `.png`) incorporando el logotipo real de ASISTA (`docs/asista_logo.png`) y la paleta de colores del software (fondo grafito oscuro `#0a130f` y verde acento `#46d67c` / `#39A900`).
+  2. Se construyó y ejecutó una suite automatizada con Playwright (`capture_prod.cjs`) contra el ambiente productivo activo `https://asista.onrender.com`, extrayendo 14 capturas de pantalla reales (Login personal, Login aprendiz, Recuperación de clave, Perfil Admin, Instructores, Aprendices, Fichas, Dispositivos, Importación masiva, Reportes, Seguimiento de inasistencias, Días inhabilitados, Panel de Aprendiz con datos reales y Panel de Instructor).
+  3. Se redactó el documento completo `docs/MANUAL_DE_USUARIO.md` estructurado en 7 capítulos conforme a la norma FAVA SENA (Control del documento, Alcance, Requerimientos, Habeas Data Ley 1581 de 2012, tablas de campos `[No | Elemento | Descripción | Detalle]`, procedimientos paso a paso y catálogo de errores).
+- **Archivos Modificados:**
+  - `docs/MANUAL_DE_USUARIO.md`
+  - `docs/asista_logo.png`
+  - `docs/portada_manual_usuario.jpg`
+  - `docs/portada_manual_usuario.png`
+  - `docs/generar_portada.html`
+  - `docs/render_portada.cjs`
+  - `capture_prod.cjs`
+  - `docs/capturas_manual/*` (14 capturas de producción)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución de Playwright contra `https://asista.onrender.com` finalizada con código 0.
+  - Validación de existencia y tamaño de las 14 imágenes en `docs/capturas_manual/`.
+  - Generación exitosa de la portada institucional en `docs/portada_manual_usuario.jpg`.

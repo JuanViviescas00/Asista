@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Portada Sistema ASISTA</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 1240px;
+      height: 1754px; /* Proporción A4 exacta a 150 DPI */
+      background-color: #080f0c;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: #eaf3ed;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 90px 80px 70px 80px;
+    }
+
+    /* Fondos y resplandores tecnológicos de la app */
+    .glow-top {
+      position: absolute;
+      top: -150px;
+      right: -100px;
+      width: 650px;
+      height: 650px;
+      background: radial-gradient(circle, rgba(70, 214, 124, 0.18) 0%, rgba(10, 19, 15, 0) 70%);
+      pointer-events: none;
+    }
+
+    .glow-bottom {
+      position: absolute;
+      bottom: -150px;
+      left: -100px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(57, 169, 0, 0.15) 0%, rgba(10, 19, 15, 0) 70%);
+      pointer-events: none;
+    }
+
+    .grid-pattern {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(36, 56, 44, 0.25) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(36, 56, 44, 0.25) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    /* Marco perimetral institucional */
+    .border-frame {
+      position: absolute;
+      inset: 35px;
+      border: 1px solid rgba(70, 214, 124, 0.22);
+      border-radius: 20px;
+      pointer-events: none;
+    }
+
+    .border-corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: #46d67c;
+      border-style: solid;
+      pointer-events: none;
+    }
+    .c-tl { top: 35px; left: 35px; border-width: 3px 0 0 3px; border-top-left-radius: 20px; }
+    .c-tr { top: 35px; right: 35px; border-width: 3px 3px 0 0; border-top-right-radius: 20px; }
+    .c-bl { bottom: 35px; left: 35px; border-width: 0 0 3px 3px; border-bottom-left-radius: 20px; }
+    .c-br { bottom: 35px; right: 35px; border-width: 0 3px 3px 0; border-bottom-right-radius: 20px; }
+
+    /* Cabecera Institucional */
+    .header {
+      position: relative;
+      z-index: 2;
+      border-bottom: 1px solid rgba(36, 56, 44, 0.8);
+      padding-bottom: 35px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .header-text {
+      max-width: 780px;
+    }
+
+    .inst-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(70, 214, 124, 0.12);
+      border: 1px solid rgba(70, 214, 124, 0.35);
+      padding: 6px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #46d67c;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .inst-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #46d67c;
+      box-shadow: 0 0 10px #46d67c;
+    }
+
+    .sena-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .sena-subtitle {
+      font-size: 15px;
+      font-weight: 500;
+      color: #83a191;
+      line-height: 1.4;
+    }
+
+    .doc-meta-badge {
+      background: #101d17;
+      border: 1px solid #24382c;
+      border-radius: 12px;
+      padding: 12px 20px;
+      text-align: right;
+    }
+
+    .meta-label {
+      font-size: 11px;
+      color: #5a7268;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 600;
+    }
+
+    .meta-val {
+      font-size: 15px;
+      color: #46d67c;
+      font-weight: 700;
+      font-family: 'Space Grotesk', monospace;
+    }
+
+    /* Centro: Logo Oficial y Títulos */
+    .hero {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin: 40px 0;
+    }
+
+    .logo-container {
+      position: relative;
+      width: 250px;
+      height: 250px;
+      margin-bottom: 35px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-glow-ring {
+      position: absolute;
+      inset: -15px;
+      border-radius: 46px;
+      background: radial-gradient(circle, rgba(70, 214, 124, 0.28) 0%, transparent 70%);
+      filter: blur(12px);
+    }
+
+    .app-logo {
+      width: 240px;
+      height: 240px;
+      object-fit: contain;
+      border-radius: 42px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 35px rgba(70, 214, 124, 0.35);
+      border: 2px solid rgba(70, 214, 124, 0.45);
+      position: relative;
+      z-index: 2;
+    }
+
+    .main-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 80px;
+      font-weight: 700;
+      letter-spacing: -2px;
+      color: #ffffff;
+      line-height: 1;
+      margin-bottom: 12px;
+      text-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+
+    .main-title span {
+      color: #46d67c;
+      text-shadow: 0 0 25px rgba(70, 214, 124, 0.5);
+    }
+
+    .doc-type {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #ffffff;
+      background: linear-gradient(90deg, #46d67c, #2fb867);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 22px;
+    }
+
+    .desc-pill {
+      max-width: 750px;
+      background: rgba(16, 29, 23, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid #24382c;
+      border-radius: 16px;
+      padding: 18px 32px;
+      font-size: 18px;
+      color: #c9ded2;
+      line-height: 1.5;
+      font-weight: 400;
+    }
+
+    /* Cards de Características en la portada */
+    .features-row {
+      display: flex;
+      gap: 16px;
+      margin-top: 35px;
+      width: 100%;
+      max-width: 900px;
+      justify-content: center;
+    }
+
+    .feature-card {
+      flex: 1;
+      background: #0f1c16;
+      border: 1px solid #1f3528;
+      border-radius: 12px;
+      padding: 14px 18px;
+      text-align: left;
+    }
+
+    .fc-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #46d67c;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .fc-desc {
+      font-size: 13px;
+      color: #83a191;
+    }
+
+    /* Footer Institucional */
+    .footer {
+      position: relative;
+      z-index: 2;
+      border-top: 1px solid rgba(36, 56, 44, 0.8);
+      padding-top: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .footer-left {
+      max-width: 600px;
+    }
+
+    .prog-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #5a7268;
+      margin-bottom: 4px;
+    }
+
+    .prog-name {
+      font-size: 17px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .prog-team {
+      font-size: 14px;
+      color: #83a191;
+    }
+
+    .footer-right {
+      text-align: right;
+    }
+
+    .ver-badge {
+      display: inline-block;
+      background: #17271f;
+      border: 1px solid #24382c;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #46d67c;
+      font-family: 'Space Grotesk', monospace;
+      margin-bottom: 8px;
+    }
+
+    .date-str {
+      font-size: 14px;
+      color: #5a7268;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow-top"></div>
+  <div class="glow-bottom"></div>
+  <div class="grid-pattern"></div>
+  <div class="border-frame"></div>
+  <div class="border-corner c-tl"></div>
+  <div class="border-corner c-tr"></div>
+  <div class="border-corner c-bl"></div>
+  <div class="border-corner c-br"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-text">
+      <div class="inst-badge">
+        <span class="inst-dot"></span>
+        Servicio Nacional de Aprendizaje — SENA
+      </div>
+      <div class="sena-title">Centro de Formación en Actividades de Servicios</div>
+      <div class="sena-subtitle">Regional Distrito Capital · Coordinación de Teleinformática y Software</div>
+    </div>
+    <div class="doc-meta-badge">
+      <div class="meta-label">Estándar</div>
+      <div class="meta-val">FAVA SENA</div>
+    </div>
+  </header>
+
+  <!-- Hero Central -->
+  <main class="hero">
+    <div class="logo-container">
+      <div class="logo-glow-ring"></div>
+      <img src="asista_logo.png" alt="ASISTA Logo" class="app-logo">
+    </div>
+
+    <h1 class="main-title">SISTEMA <span>ASISTA</span></h1>
+    <div class="doc-type">Manual de Usuario Oficial</div>
+
+    <div class="desc-pill">
+      Plataforma Integral de Control Biométrico de Asistencia, Gestión de Inasistencias bajo el Acuerdo 009 de 2024 y Sincronización Institucional
+    </div>
+
+    <div class="features-row">
+      <div class="feature-card">
+        <div class="fc-title">Identificación 1:N</div>
+        <div class="fc-desc">Biometría dactilar con lector DigitalPersona U.are.U 4500</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-title">Reglamento 2024</div>
+        <div class="fc-desc">Gestión y radicación de excusas con ventana de 5 días</div>
+      </div>
+      <div class="feature-card">
+        <div class="fc-title">Monitoreo Web</div>
+        <div class="fc-desc">Alertas tempranas de deserción e inasistencias en vivo</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-left">
+      <div class="prog-label">Proyecto Formativo</div>
+      <div class="prog-name">Tecnología en Análisis y Desarrollo de Software (ADSO)</div>
+      <div class="prog-team">Desarrollo y Arquitectura de Software · Equipo de Proyecto ASISTA</div>
+    </div>
+    <div class="footer-right">
+      <div class="ver-badge">VERSIÓN 1.0.0</div>
+      <div class="date-str">Bogotá D.C., Colombia — 2026</div>
+    </div>
+  </footer>
+</body>
+</html>
