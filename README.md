@@ -103,38 +103,108 @@ npm run dist        # genera el instalador (ver más abajo)
 
 > `huellero/` no forma parte de los workspaces de la raíz, así que sus dependencias se instalan con `npm install` dentro de `huellero/`.
 
-### Variables de entorno
+### Variables de entorno (`.env`)
 
-El backend lee sus variables desde `backend/.env` (puedes basarte en la plantilla oficial `backend/.env.example`). Nombres de variables usadas por el código:
+El sistema desacopla credenciales, conexiones y configuraciones sensibles del código fuente mediante archivos `.env`. Existen tres archivos de configuración según el componente:
 
-| Variable | Descripción |
-| :--- | :--- |
-| `PORT` | Puerto HTTP del backend (por defecto 3000). |
-| `MONGODB_URI` | Cadena de conexión a MongoDB Atlas. |
-| `JWT_SECRET` | Clave para firmar los tokens JWT. |
-| `JWT_EXPIRES_IN` | Vigencia de los tokens (por defecto 8h). |
-| `GMAIL_USER` | Correo usado para el envío de notificaciones. |
-| `GMAIL_PASS` | Contraseña de aplicación de ese correo. |
-| `TZ` | Zona horaria (por defecto `America/Bogota`). |
-| `SOFIA_ENCRYPTION_KEY` | Clave maestra del cifrado AES-256-GCM de credenciales Sofia Plus. |
-| `CRON_SCHEDULE` | Programación del cron nocturno institucional (por defecto `0 0 * * *`). |
-| `CRON_TIMEZONE` | Zona horaria de los cron. |
-| `ENABLE_SOFIA_SYNC` | Habilita la sincronización con Sofia Plus. |
-| `CRON_SOFIA_SCHEDULE` | Programación de la sincronización Sofia Plus (`0 0 * * 6` - Sábado 12:00 AM). |
-| `CORS_ORIGIN` | Control de orígenes permitidos (`*` por defecto, o lista separada por comas; alias `ALLOWED_ORIGINS`). |
-| `SEED_ADMIN_EMAIL` | Correo del administrador inicial si la base de datos está vacía (`senahuellero@gmail.com`). |
-| `SEED_ADMIN_PASSWORD` | Contraseña inicial en texto plano que se hasheará en bcrypt (`sena2026ADSO`). |
-| `SEED_ADMIN_NAME` | Nombre visible del administrador por defecto (`Administrador`). |
-| `ENABLE_RPA_ROBOT` | Dispara el Robot RPA de inasistencias tras encolar (`true` por defecto). |
-| `RPA_DRY_RUN` | Modo seguro sin guardar en Sofia Plus (`false` por defecto / modo real activo). |
+* **`backend/.env`** (o `.env` en la raíz si se ejecuta con Docker Compose): Configura la API REST, base de datos MongoDB Atlas, seguridad JWT, correos SMTP, automatización y reportería.
+* **`rpa/.env`**: Configuración independiente del robot de automatización con Playwright para Sofia Plus.
+* **`huellero/`**: La app de escritorio lee sus variables desde el entorno o desde su almacenamiento local (`config.json` en `%APPDATA%\huellero`).
 
-Variables opcionales de la app de escritorio (`huellero/`):
+> [!CAUTION]
+> Los archivos `.env` contienen secretos de autenticación y claves maestras de cifrado. **NUNCA deben subirse a Git ni compartirse públicamente**. Utiliza siempre los archivos de plantilla [`.env.example`](./.env.example) y [`backend/.env.example`](./backend/.env.example).
 
-| Variable | Descripción |
-| :--- | :--- |
-| `HUELLERO_BACKEND_URL` | URL del backend a la que se conecta la app. |
-| `HUELLERO_WS_URL` | URL WebSocket del backend. |
-| `BIOMETRIC_MATCH_THRESHOLD` | Umbral de coincidencia biométrica. |
+---
+
+#### 1. Base de Datos y Servidor HTTP (`backend/`)
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `MONGODB_URI` | `string` | **Sí** | Cadena de conexión URI oficial de **MongoDB Atlas** o contenedor local (ej: `mongodb+srv://usuario:pass@cluster.mongodb.net/huellero?retryWrites=true&w=majority`). Si falla la conexión a Atlas en local, el backend intenta un fallback automático a `mongodb://localhost:27017/huellero`. |
+| `PORT` | `number` (`3000`) | No | Puerto de escucha HTTP del servidor Express. En Render, Coolify o Heroku, la plataforma inyecta este valor dinámicamente. |
+| `TZ` | `string` (`America/Bogota`) | No | Zona horaria oficial del sistema. Garantiza que el cálculo de fechas, horas de entrada/salida y cortes de inasistencias operen con la hora legal colombiana sin desfases UTC. |
+| `CORS_ORIGIN` | `string` (`*`) | No | Control de orígenes permitidos para peticiones HTTP de navegadores. Acepta `*` para desarrollo libre, o un dominio específico (ej: `https://asista.onrender.com`). Alias admitidos: `CORS_ORIGINS`, `ALLOWED_ORIGINS` y `ORIGENES_PERMITIDOS`. |
+| `CORS_ORIGINS` | `string` (`""`) | No | Lista blanca de orígenes adicionales separados por coma (ej: `https://asista.onrender.com,http://localhost:5173`). El backend también admite automáticamente cualquier subdominio `https://*.onrender.com`. |
+| `RENDER_EXTERNAL_URL` | `string` | No | Inyectada automáticamente por Render (ej: `https://asista.onrender.com`). Si está presente, el backend la autoriza automáticamente en CORS. |
+
+---
+
+#### 2. Seguridad, Autenticación y Cifrado
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `JWT_SECRET` | `string` (min 32 car.) | **Sí** (en prod) | Clave criptográfica secreta para la firma y verificación de tokens de sesión JWT (algoritmo HS256). En producción (`NODE_ENV=production`), el servidor aborta el arranque si no está definida o si tiene menos de 32 caracteres. En desarrollo local genera una clave temporal aleatoria si falta. |
+| `JWT_EXPIRES_IN` | `string` (`8h`) | No | Tiempo de vigencia de la sesión web antes de requerir un nuevo inicio de sesión (ej: `8h`, `1d`). |
+| `SOFIA_ENCRYPTION_KEY` | `string` (min 32 car.) | No | Clave maestra para el **cifrado simétrico AES-256-GCM** de las contraseñas de Sofia Plus de los instructores. Si no se define, reutiliza el valor de `JWT_SECRET`. **Advertencia:** Si esta clave cambia en producción, las contraseñas de Sofia Plus guardadas previamente en la base de datos no podrán descifrarse. |
+
+---
+
+#### 3. Administrador Inicial del Sistema (Seed)
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `ADMIN_EMAIL` | `string` (`senahuellero@gmail.com`) | No | Correo electrónico de la cuenta Administrador creada en el primer arranque si la base de datos está completamente vacía. Alias: `SEED_ADMIN_EMAIL`. |
+| `ADMIN_PASSWORD` | `string` | No | Contraseña inicial en texto plano para el administrador creado por primera vez (se almacena hasheada con bcrypt). Si se deja vacía, el servidor genera una contraseña aleatoria de 12 bytes y la imprime **una sola vez** en los logs de consola. Alias: `SEED_ADMIN_PASSWORD`. |
+| `SEED_ADMIN_NAME` | `string` (`Administrador`) | No | Nombre visible de la cuenta administrador inicial. |
+| `SEED_ADMIN_TELEFONO` | `string` (`""`) | No | Teléfono de contacto de la cuenta administrador inicial. |
+
+---
+
+#### 4. Servicio de Notificaciones por Correo (SMTP / Nodemailer)
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `GMAIL_USER` | `string` | No | Dirección de correo de Gmail utilizada como emisor oficial para la recuperación de contraseñas y avisos (ej: `senahuellero@gmail.com`). |
+| `GMAIL_PASS` | `string` (16 car.) | No | Contraseña de aplicación generada en la cuenta de Google (no la contraseña habitual del correo). Requiere autenticación de dos pasos activada en Google. |
+
+---
+
+#### 5. Automatización, Cron y Robot RPA (Sofia Plus)
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `ENABLE_SOFIA_SYNC` | `boolean` (`false`) | No | **Interruptor maestro del Cron semanal:** Activa (`true`) o desactiva (`false`) la tarea programada de los sábados para revisar fallas y preparar el reporte oficial a Sofia Plus. Se recomienda `false` para mantener el reporte bajo control manual del usuario y evitar consumo de recursos en cloud. |
+| `CRON_SCHEDULE` | `string` (`0 0 * * *`) | No | Expresión cron para el procesamiento nocturno de verificación y consolidación de inasistencias (medianoche diaria). |
+| `CRON_TIMEZONE` | `string` (`America/Bogota`) | No | Zona horaria aplicada a todos los cron jobs del servidor. |
+| `CRON_SOFIA_SCHEDULE` | `string` (`0 0 * * 6`) | No | Programación cron semanal para la sincronización con Sofia Plus (por defecto todos los sábados a las 12:00 AM hora Colombia). |
+| `ENABLE_RPA_ROBOT` | `boolean` (`true`) | No | Determina si el cron semanal debe invocar automáticamente el subproceso del robot Playwright (`true`) o únicamente preparar y encolar las inasistencias en base de datos (`false`). En Render se sugiere `false` para evitar saturación de memoria RAM. |
+| `RPA_API_KEY` | `string` (hex 96 car.) | **Sí** (para RPA) | Clave secreta compartida para autorizar al Robot RPA contra los endpoints protegidos del backend (`/api/instructores/*-rpa`) mediante la cabecera `x-rpa-key`. Se valida con comparación criptográfica `crypto.timingSafeEqual` para prevenir ataques de temporización. |
+| `RPA_DRY_RUN` | `boolean` (`true`) | No | **Modo seguro del Robot:** Si es `true`, el robot navega por Sofia Plus, selecciona la ficha, busca al aprendiz, digita los datos y toma una captura de pantalla de evidencia, pero **NO** hace clic en 'Registrar Novedad'. Si es `false`, confirma el registro definitivo en Sofia Plus. |
+| `RPA_HEADLESS` | `boolean` (`true`) | No | Si es `true`, Chromium se ejecuta oculto en segundo plano sin ventana gráfica (ideal para servidores). Si es `false`, abre la ventana visible del navegador para ver la interacción en pantalla. Alias en submódulo: `HEADLESS`. |
+
+---
+
+#### 6. Ruta de Deserción y Reportes
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `CORREO_COORDINADOR` | `string` | No | Correo institucional de la Coordinación Académica para recibir alertas de aprendices en riesgo de deserción (3 o más fallas acumuladas). Puede sobreescribirse dinámicamente desde el panel web. |
+| `CORREO_BIENESTAR` | `string` | No | Correo del área de Bienestar al Aprendiz para seguimiento psicosocial de inasistencias. |
+| `RUTA_REPORTE_ENVIO_REAL` | `boolean` (`false`) | No | Si es `true`, envía correos reales a coordinación y bienestar al pulsar el botón 'Reportar'. Si es `false`, simula el envío y registra la trazabilidad en base de datos sin enviar correos reales. |
+
+---
+
+#### 7. Hardware Biométrico y Kiosco de Aula (`huellero/`)
+
+| Variable | Tipo / Defecto | Requerida | Especificación y Comportamiento |
+| :--- | :---: | :---: | :--- |
+| `BIOMETRIC_MATCH_THRESHOLD` | `number` (`21474`) | No | Umbral de coincidencia biométrica utilizado por el motor de comparación de DigitalPersona (FAR/FRR balanceado). |
+| `HUELLERO_BACKEND_URL` | `string` (`http://localhost:3000`) | No | URL base del servidor backend a la que se conecta el kiosco de escritorio para validar dispositivos y sincronizar asistencias (en producción: `https://asista.onrender.com`). |
+| `HUELLERO_WS_URL` | `string` (`ws://localhost:3000`) | No | URL del servidor WebSockets (Socket.IO) para la comunicación bidireccional en tiempo real con el aula (en producción: `wss://asista.onrender.com`). |
+
+---
+
+#### 8. Submódulo del Robot (`rpa/.env`)
+
+Archivo de configuración independiente ubicado en `rpa/.env` para cuando el robot se ejecuta como worker o script CLI autónomo:
+
+```ini
+# rpa/.env
+API_BASE_URL=https://asista.onrender.com
+HEADLESS=true
+RPA_DRY_RUN=true
+RPA_API_KEY=d63f4abf1647c78b61a22316a56d76de1b34b003a43afc3a009faa24b9fa94e36480ebb44a52bcd9b8f18eae9e220757
+```
 
 ---
 
