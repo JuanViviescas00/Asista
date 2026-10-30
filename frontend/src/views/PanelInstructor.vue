@@ -1283,10 +1283,6 @@ async function toggleExcusa(estId) {
     reg.tiempoTardanza = '0 horas'
     reg.horaMarcacion = '—'
   }
-
-  reg.excusa = false
-  reg.motivoExcusa = ''
-  reg.estado = reg.previo ? 'Falta' : 'Presente'
   reg.horasFallidas = horasAuto(reg)
 
   await sincronizarCambioNube(estId)
@@ -1626,21 +1622,6 @@ function descargarExcel(data, nombreArchivo) {
             >
               <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               <span class="tab-label">Equipo Ejecutor</span>
-            </button>
-
-            <!-- Botón-switch de pase de lista: rojo = apagado, verde = encendido -->
-            <button
-              type="button"
-              class="switch-pase-lista"
-              :class="sesionRemotaActiva ? 'is-on' : 'is-off'"
-              role="switch"
-              :aria-checked="sesionRemotaActiva"
-              :disabled="alternandoSesion || finalizando || (!sesionRemotaActiva && jornadaInhabilitada)"
-              :title="sesionRemotaActiva ? 'Pase de lista encendido: clic para apagar' : 'Pase de lista apagado: clic para encender'"
-              @click="alternarSesionRemota"
-            >
-              <svg v-if="!sesionRemotaActiva" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
 
             <!-- Botón-switch de pase de lista: rojo = apagado, verde = encendido -->

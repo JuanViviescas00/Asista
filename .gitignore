@@ -39,7 +39,8 @@ backend/data/*
 # Huellero (Electron) build artifacts
 huellero/out/
 huellero/release/
-huellero/release-app/
+huellero/release-app/*
+!huellero/release-app/Asista-Setup-*.exe
 huellero/data/
 
 # Config local del dispositivo (contiene deviceId + token)
@@ -53,3 +54,7 @@ rpa/descargas/
 rpa/*.png
 rpa/*.pdf
 rpa/.env
+
+# Python caches
+__pycache__/
+*.pyc

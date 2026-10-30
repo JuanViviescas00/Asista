@@ -1,5 +1,27 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-10-25 11:40] Configuración de Git LFS y Publicación del Instalador Ejecutable Asista (.exe)
+
+- **Fecha y Hora:** 2026-10-25 11:40:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Se requería almacenar y publicar el instalador ejecutable de la aplicación de escritorio (`Asista-Setup-1.0.0.exe`) en el repositorio remoto `asista` (`JuanViviescas00/Asista`).
+  - El instalador compilado pesa **144.9 MB**, excediendo el límite estricto de 100 MB que impone GitHub para commits regulares de Git.
+- **Causa Raíz:**
+  - GitHub rechaza cualquier archivo binario superior a 100 MB en commits tradicionales (`GH001: Large files detected`). Además, `.gitignore` excluía por defecto la carpeta `huellero/release-app/`.
+- **Solución Aplicada:**
+  1. *Inicialización de Git LFS:* Se inicializó Git LFS en el repositorio y se configuró `.gitattributes` para interceptar y versionar `huellero/release-app/*.exe`.
+  2. *Excepción en `.gitignore`:* Se actualizó la regla de ignorados para excluir los artefactos temporales de build pero permitir el seguimiento del ejecutable `!huellero/release-app/Asista-Setup-*.exe`.
+  3. *Publicación:* Se realizó commit y push exitoso del instalador mediante Git LFS al repositorio `asista` (`https://github.com/JuanViviescas00/Asista.git`).
+- **Archivos Modificados:**
+  - `.gitattributes`
+  - `.gitignore`
+  - `huellero/release-app/Asista-Setup-1.0.0.exe` (puntero LFS)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Carga al 100% del objeto LFS (145 MB) a GitHub LFS Storage a 20 MB/s con código de salida 0.
+
+---
+
 ## [2026-10-24 23:25] Corrección del Modal de Asignar Instructores y Rediseño Espacioso de Filtros de Estudiantes
 
 - **Fecha y Hora:** 2026-10-24 23:25:00 -05:00
@@ -1405,3 +1427,95 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
   - Búsqueda global `git grep -i "sqlite"` confirmó 0 ocurrencias en `README.md`, `setup_huellas.bat`, `docs/PRD.md` y `docs/ESPECIFICACION_TECNICA_REQUERIMIENTOS_90.md`.
   - Carpeta `docs/` consolidada únicamente con especificaciones técnicas, requerimientos, arquitectura, guías de instalación y diagnósticos del hardware lector.
   - Consolidado en commits locales en la rama `juan` sin push a repositorios remotos.
+
+
+---
+
+## [2026-10-25 00:50] Resolución de Despliegue en Render y Sincronización del Monolito en main
+
+- **Fecha y Hora:** 2026-10-25 00:50:00 -05:00
+- **Descripción del Problema / Bug:**
+  Al ingresar a la URL de producción en Render.com, la aplicación no reflejaba los cambios recientes (filtros de aprendices, asignación de docentes, anomalias y seguridad), manteniendo la interfaz visual antigua.
+- **Causa Raíz:**
+  El workflow de GitHub Actions (`monolito-sync.yml`) procesó los pushes concurrentes de `Backend` y `Frontend`. La integración de `Backend` se aplicó en `origin/main` (commit `68ab3d3`), pero la rama `Frontend` no alcanzó a fusionarse en el repositorio principal. Como Render despliega exclusivamente desde la rama `main` y sirve la carpeta de estáticos `backend/public/`, el servidor continuaba sirviendo el bundle HTML/JS antiguo de hace días.
+- **Solución Aplicada:**
+  1. Se fusionaron en local los cambios completos de frontend y backend hacia la rama `main`.
+  2. Se ejecutó la compilación de producción con `npm run build:prod`, generando el nuevo bundle de producción (`index-Bvpnp_MJ.js`, `index-CS_Me8kV.css`) dentro de `backend/public/`.
+  3. Se incluyó forzosamente `backend/public` en el commit del monolito (`3825240`) y se publicó directamente en `origin/main` y `asista/main`.
+- **Archivos Modificados:**
+  - Rama `main` (`backend/public/*` con el nuevo bundle estático y código fuente del frontend).
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Inspección de `main:backend/public/index.html` confirmó las referencias al bundle moderno con hash `index-Bvpnp_MJ.js`.
+  - Push exitoso a `origin/main` disparando el despliegue automático en la plataforma Render.
+
+
+---
+
+## [2026-10-25 13:40] Corrección de Conectividad CORS y Socket.IO para asista.onrender.com
+
+- **Fecha y Hora:** 2026-10-25 13:40:00 -05:00
+- **Descripción del Problema / Bug:**
+  El preflight CORS (`OPTIONS`) y el handshake de WebSockets (`socket.io`) devolvían `Access-Control-Allow-Origin: null` hacia el origen en producción `https://asista.onrender.com`, provocando que el navegador bloqueara peticiones de API y conexiones en tiempo real del frontend web.
+- **Causa Raíz:**
+  En `backend/utils/corsOrigins.js`, la lista blanca fija `ORIGENES_FIJOS` únicamente contenía el dominio legacy `https://huelleroactualizado-1.onrender.com` y no contemplaba el dominio real de producción `https://asista.onrender.com`, ni admitía de forma dinámica subdominios de Render (`*.onrender.com`), ni leía la variable de entorno autogenerada por Render `RENDER_EXTERNAL_URL`.
+- **Solución Aplicada:**
+  1. Se incluyó `https://asista.onrender.com` en `ORIGENES_FIJOS`.
+  2. Se agregó soporte para cualquier subdominio de Render mediante expresión regular `/^https:\/\/[a-z0-9-]+(\.onrender\.com)$/i`.
+  3. Se habilitó lectura dinámica de variables de entorno: `CORS_ORIGINS`, `CORS_ORIGIN`, `ALLOWED_ORIGINS` y `RENDER_EXTERNAL_URL`, incluyendo soporte para wildcard (`*`).
+  4. Se constató que las peticiones del Kiosco Electron (`huellero/`) corren en proceso Node.js sin cabecera `Origin` y son aceptadas inmediatamente con `if (!origin) return true`.
+- **Archivos Modificados:**
+  - `backend/utils/corsOrigins.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Pruebas unitarias con Node.js validaron que `esOrigenPermitido('https://asista.onrender.com')` devuelve `true` tanto en modo desarrollo como en `NODE_ENV=production`.
+  - Prueba de handshake WebSocket en Kiosco demostró conexión exitosa con ID asignado y autenticación por dispositivo.
+
+
+---
+
+## [2026-10-26 17:25] Depuración de Código Legacy de RPA (Eliminación de Practica_RPA)
+
+- **Fecha y Hora:** 2026-10-26 17:25:00 -05:00
+- **Descripción del Problema / Bug:**
+  Existencia de dos versiones divergentes del robot de inasistencias de Sofia Plus (`Practica_RPA/` externa vs `HuelleroActualizado/rpa/` integrada), lo que generaba riesgo de incompatibilidad (el código antiguo no agrupaba horas acumuladas de fallas, carecía de soporte para arrays de `asistenciaIds` y no manejaba caídas HTTP 503 de Sofia Plus).
+- **Causa Raíz:**
+  La carpeta `Practica_RPA` correspondía a un laboratorio previo que no fue depurado tras la migración oficial del robot al repositorio principal.
+- **Solución Aplicada:**
+  1. Se eliminó de forma definitiva la carpeta desactualizada `Practica_RPA/`.
+  2. Se validó la sintaxis estricta de los scripts oficiales en `HuelleroActualizado/rpa/` (`bot_inasistencias_sofia.js` y `bot_sofia_login.js`).
+  3. Se consolidó `HuelleroActualizado/rpa/` como la única fuente de verdad para la automatización de inasistencias en Sofia Plus.
+- **Archivos Modificados:**
+  - `c:\Users\JuanC\OneDrive\Desktop\SENA\PROYECTO_FINAL_LECTOR\Practica_RPA` (eliminado)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - `Test-Path "Practica_RPA"` confirmó `False`.
+  - Chequeo de sintaxis `node -c` en scripts de `HuelleroActualizado/rpa/` finalizó con código 0.
+
+---
+
+## [2026-10-28 21:10] Generación de Manual de Usuario Oficial FAVA con Capturas Reales de Producción y Portada Institucional
+
+- **Fecha y Hora:** 2026-10-28 21:10:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  El borrador inicial del Manual de Usuario carecía de portada acorde con la identidad gráfica del software, no incluía los módulos funcionales clave (Kiosco biométrico, excusas bajo Acuerdo 009 de 2024, días festivos, dispositivos, alertas tempranas) y requería incorporar capturas de pantalla reales y no inventadas extraídas directamente del despliegue en producción (`https://asista.onrender.com`).
+- **Causa Raíz:**
+  Documentación preliminar incompleta y desalineada frente a las directrices metodológicas de la Guía FAVA SENA (*Manuales Técnicos de la Aplicación*, págs. 5-8 y 12-25) y frente a la versión final del sistema en producción.
+- **Solución Aplicada:**
+  1. Se diseñó y renderizó la portada institucional oficial en alta resolución (`docs/portada_manual_usuario.jpg` y `.png`) incorporando el logotipo real de ASISTA (`docs/asista_logo.png`) y la paleta de colores del software (fondo grafito oscuro `#0a130f` y verde acento `#46d67c` / `#39A900`).
+  2. Se construyó y ejecutó una suite automatizada con Playwright (`capture_prod.cjs`) contra el ambiente productivo activo `https://asista.onrender.com`, extrayendo 14 capturas de pantalla reales (Login personal, Login aprendiz, Recuperación de clave, Perfil Admin, Instructores, Aprendices, Fichas, Dispositivos, Importación masiva, Reportes, Seguimiento de inasistencias, Días inhabilitados, Panel de Aprendiz con datos reales y Panel de Instructor).
+  3. Se redactó el documento completo `docs/MANUAL_DE_USUARIO.md` estructurado en 7 capítulos conforme a la norma FAVA SENA (Control del documento, Alcance, Requerimientos, Habeas Data Ley 1581 de 2012, tablas de campos `[No | Elemento | Descripción | Detalle]`, procedimientos paso a paso y catálogo de errores).
+- **Archivos Modificados:**
+  - `docs/MANUAL_DE_USUARIO.md`
+  - `docs/asista_logo.png`
+  - `docs/portada_manual_usuario.jpg`
+  - `docs/portada_manual_usuario.png`
+  - `docs/generar_portada.html`
+  - `docs/render_portada.cjs`
+  - `capture_prod.cjs`
+  - `docs/capturas_manual/*` (14 capturas de producción)
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución de Playwright contra `https://asista.onrender.com` finalizada con código 0.
+  - Validación de existencia y tamaño de las 14 imágenes en `docs/capturas_manual/`.
+  - Generación exitosa de la portada institucional en `docs/portada_manual_usuario.jpg`.
