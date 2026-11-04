@@ -1,5 +1,33 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-03 21:30] Desacoplamiento de Robot RPA Sofia Plus hacia GitHub Actions y Optimizaciones de Memoria en Contenedores
+
+- **Fecha y Hora:** 2026-11-03 21:30:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Se evaluó la arquitectura de ejecución del Robot RPA de inasistencias para Sofia Plus en entornos de despliegue en la nube (Render Free Tier vs GitHub Actions).
+  - En instancias con 512 MB de RAM, el motor Chromium de Playwright puede provocar picos de memoria (OOM Error 137) al renderizar la interfaz JavaServer Faces de Sofia Plus.
+  - Se requería una solución 100% gratuita, con alta disponibilidad de memoria (7 GB), ejecución desatendida los sábados en la noche, y almacenamiento de evidencias fotográficas descargables.
+- **Causa Raíz:**
+  - Ejecutar Playwright dentro del contenedor web de Render Free saturaría la memoria disponible compartida entre Express y Chromium (/dev/shm limitado a 64 MB).
+- **Solución Aplicada:**
+  1. *Workflow de Automatización en GitHub Actions (`.github/workflows/rpa-sabado.yml`):*
+     - Programación cron semanal para los sábados a las 11:00 PM hora Colombia (`cron: '0 4 * * 0'`).
+     - Disparador manual (`workflow_dispatch`) con selección de modo (`dry-run` vs `confirmar`), filtro opcional por documento de docente y límite de novedades.
+     - Almacenamiento automático de evidencias fotográficas generadas en Sofia Plus como artefacto descargable (`actions/upload-artifact@v4`) durante 14 días.
+  2. *Optimizaciones de Memoria Compartida en Chromium (`rpa/bot_inasistencias_sofia.js`):*
+     - Incorporadas las banderas `--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage` y `--disable-gpu` para evitar colapsos por cuota de `/dev/shm`.
+  3. *Resolución Robusta de Rutas (`backend/services/rpaService.js`):*
+     - Soporte para `process.env.RPA_SCRIPT_PATH` con fallback dinámico para operar transparentemente tanto en desarrollo local como en contenedores Docker.
+- **Archivos Modificados:**
+  - `.github/workflows/rpa-sabado.yml`
+  - `rpa/bot_inasistencias_sofia.js`
+  - `backend/services/rpaService.js`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Sintaxis de Playwright y Node validada sin errores (`node -c rpa/bot_inasistencias_sofia.js`).
+  - Suite de pruebas completa del backend pasando (39/39 passing).
+
+---
 ## [2026-11-03 19:15] Auditor�a y Correcci�n Integral de la Sincronizaci�n de Novedades (Inasistencias, Excusas y Tardanzas)
 
 - **Fecha y Hora:** 2026-11-03 19:15:00 -05:00

@@ -1,0 +1,104 @@
+name: RPA Sofia Plus - Sincronización de Inasistencias
+
+on:
+  schedule:
+    # Sábado a las 11:00 PM hora Colombia (UTC-5) -> Domingo 04:00 AM UTC
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Modo de ejecución'
+        required: true
+        default: 'dry-run'
+        type: choice
+        options:
+          - 'dry-run'
+          - 'confirmar'
+      docente:
+        description: 'Cédula de un docente específico (dejar vacío para todos)'
+        required: false
+        default: ''
+        type: string
+      limite:
+        description: 'Límite de inasistencias a procesar por docente (ej. 2)'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: rpa-sofia-plus
+  cancel-in-progress: false
+
+jobs:
+  sincronizar_sofia_plus:
+    name: Ejecutar Robot RPA Sofia Plus
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 1. Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: 2. Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: rpa/package.json
+
+      - name: 3. Instalar dependencias del Robot RPA
+        working-directory: rpa
+        run: |
+          npm install
+
+      - name: 4. Instalar navegador Chromium y librerías del sistema
+        working-directory: rpa
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: 5. Ejecutar Robot RPA de Inasistencias
+        working-directory: rpa
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          RPA_API_KEY: ${{ secrets.RPA_API_KEY }}
+          HEADLESS: 'true'
+        run: |
+          ARGS="--auto --headless"
+
+          # Determinar modo: cron siempre ejecuta en modo real si no es workflow_dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.modo }}" = "confirmar" ]; then
+              ARGS="$ARGS --confirmar-registro"
+            else
+              ARGS="$ARGS --dry-run"
+            fi
+            
+            if [ -n "${{ github.event.inputs.docente }}" ]; then
+              ARGS="$ARGS --doc ${{ github.event.inputs.docente }}"
+            else
+              ARGS="$ARGS --batch"
+            fi
+
+            if [ -n "${{ github.event.inputs.limite }}" ]; then
+              ARGS="$ARGS --limite ${{ github.event.inputs.limite }}"
+            fi
+          else
+            # Ejecución automática de sábado en la noche
+            ARGS="$ARGS --batch --confirmar-registro"
+          fi
+
+          echo "===================================================="
+          echo "🤖 Ejecutando Robot RPA con los parámetros:"
+          echo "node bot_inasistencias_sofia.js $ARGS"
+          echo "===================================================="
+
+          node bot_inasistencias_sofia.js $ARGS
+
+      - name: 6. Guardar evidencias fotográficas de Sofia Plus
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidencias-sofia-plus-${{ github.run_id }}
+          path: rpa/descargas/evidencias_inasistencias/
+          retention-days: 14
+          if-no-files-found: ignore

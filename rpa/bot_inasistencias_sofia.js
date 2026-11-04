@@ -834,7 +834,13 @@ async function ejecutarRobotInasistencias() {
   const browser = await chromium.launch({
     headless: cli.headless,
     slowMo: 60,
-    args: ['--disable-blink-features=AutomationControlled'],
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
   });
 
   const consolidadoFinalResultados = [];

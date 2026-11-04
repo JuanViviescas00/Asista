@@ -4,7 +4,10 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const RPA_SCRIPT_PATH = path.resolve(__dirname, '../../rpa/bot_inasistencias_sofia.js')
+const RPA_SCRIPT_PATH = process.env.RPA_SCRIPT_PATH
+  || (fs.existsSync(path.resolve(__dirname, '../../rpa/bot_inasistencias_sofia.js'))
+      ? path.resolve(__dirname, '../../rpa/bot_inasistencias_sofia.js')
+      : path.resolve(__dirname, '../rpa/bot_inasistencias_sofia.js'))
 
 // Estado en memoria de la ejecución del robot RPA
 const estadoRPA = {
