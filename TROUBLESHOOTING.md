@@ -1,5 +1,48 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-03 19:15] Auditor�a y Correcci�n Integral de la Sincronizaci�n de Novedades (Inasistencias, Excusas y Tardanzas)
+
+- **Fecha y Hora:** 2026-11-03 19:15:00 -05:00
+- **Descripci�n del Problema / Requerimiento:**
+  - El usuario solicit� la revisi�n completa del flujo de sincronizaci�n de las novedades acad�micas: **inasistencias**, **excusas** y **tardanzas**.
+  - Al auditar el ciclo de vida de cada novedad (Huellero Biom�trico -> Backend API -> WebSocket en vivo -> Cron Nocturno -> Encolador Sofia Plus -> Robot RPA), se detectaron 4 anomal�as cr�ticas de sincronizaci�n:
+    1. *Omisi�n de Tardanzas en el Cron Semanal de Sofia Plus:* En `backend/services/cronService.js` (`revisarYEncolarSofiaPlus`), la consulta filtraba �nicamente `tipo: { $in: ['Falta', 'Excusada'] }`. Aunque el esquema `SofiaPlusSync`, el modelo `Inasistencia` y los endpoints del RPA contemplan `Tardanza`, las tardanzas que cumpl�an su periodo h�bil quedaban fuera del encolamiento autom�tico de Sof�a Plus.
+    2. *Fallo de Validaci�n al Radicar Excusas desde la Vista Administrativía:* En `frontend/src/views/Excusas.vue`, el formulario enviaba `tipoExcusa`, `adjuntoNombre`, `adjuntoData` y `horasDescontar`, pero omit�a el campo `motivo`. Dado que `backend/models/Excusa.js` declaraba `motivo: { required: true }`, la creaci�n de excusas desde dicha vista arrojaba un error de validaci�n de Mongoose (`Path 'motivo' is required`).
+    3. *P�rdida del Estado Aprobado al Radicar Excusas desde el Panel del Instructor:* Al marcar una novedad como "Excusada" en `PanelInstructor.vue`, el frontend enviaba `estado: 'Aprobada'`. Sin embargo, `backend/controllers/excusaController.js` (`createExcusa`) forzaba est�ticamente `estado: 'Pendiente'`, provocando que al refrescar la pantalla `buscarExcusaAprobada` retornara nulo y la justificaci�n desapareciera de la fila del docente.
+    4. *P�rdida de la Justificaci�n Real al Aprobar Excusas:* En `aprobarExcusa`, al actualizar la inasistencia a tipo `Excusada`, se asignaba `descripcion: existente?.descripcion || ''`. Si la inasistencia original no ten�a descripci�n previa, se ignoraba el `excusa.motivo` redactado por el aprendiz/instructor, provocando que el robot RPA enviara la etiqueta gen�rica "Con excusa" a Sofia Plus en lugar de la justificaci�n real.
+    5. *Desfase de Badges y M�tricas en Consulta de Aprendiz:* En `ConsultaEstudiante.vue`, las m�tricas y badges buscaban `a.tipo === 'Falla' || a.tipo === 'Ausente'`, omitiendo `'Falta'` y `'Excusada'`.
+- **Causa Ra�z:**
+  - Divergencia hist�rica entre las ramas `Maria` y `main` durante la transici�n al esquema de dos colecciones (`Inasistencia` y `Jornada`). Los esquemas de Mongoose y las vistas del frontend presentaban discrepancias de nombres de atributos (`motivo` vs `tipoExcusa`) y filtros restrictivos que no contemplaban `Tardanza` en el encolador ni `Falta` en el consultor individual.
+- **Soluci�n Aplicada:**
+  1. *Ampliaci�n del Esquema de Excusas (`backend/models/Excusa.js`):*
+     - A�adidos los campos `tipoExcusa` (`enum: ['Medica', 'Personal', 'Institucional']`), `adjuntoNombre`, `adjuntoData` y `horasDescontar` con valores por defecto.
+  2. *Robustecimiento del Controlador de Excusas (`backend/controllers/excusaController.js`):*
+     - `createExcusa`: Soporte de fallback autom�tico de `motivo` a partir de `tipoExcusa` si este no viene expl�cito. Permitir a usuarios no estudiantes (Instructores/Admins) radicar excusas directamente en estado `Aprobada`.
+     - `aprobarExcusa`: Asignar `descripcion: (existente?.descripcion || '').trim() || (excusa.motivo || '').trim() || ''` para preservar la justificaci�n oficial de cara a Sof�a Plus.
+     - Emitir el evento de WebSocket `emitirAsistenciaRegistrada` para sincronizaci�n reactiva inmediata entre clientes conectados.
+  3. *Inclusi�n de Tardanzas en el Cron de Encolamiento Sof�a Plus (`backend/services/cronService.js`):*
+     - Actualizado el filtro en `revisarYEncolarSofiaPlus` a `tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] }`.
+  4. *Alineaci�n de Formularios e Interfaces en Frontend (`frontend/src/views/Excusas.vue` y `ConsultaEstudiante.vue`):*
+     - En `Excusas.vue`: A�adido campo de motivo/justificaci�n en el modal y tabla, pasando `motivo` expl�cito en `api.excusas.create`.
+     - En `ConsultaEstudiante.vue`: Soporte integral para `a.estado || a.tipo` reconociendo `'Falta'`, `'Tardanza'` y `'Excusada'` con sus respectivos badges e �ndice de asistencia.
+     - En `frontend/src/styles/consultaEstudiante.css`: A�adida la clase `.student-consult-badge-info` para novedades excusadas.
+  5. *Pruebas Unitarias de Regresi�n (`backend/controllers/excusas.test.js`):*
+     - Se a�adieron 4 pruebas automatizadas validando la preservaci�n de descripciones de excusa, el fallback de motivos y los permisos de estado inicial seg�n el rol.
+- **Archivos Modificados:**
+  - `backend/models/Excusa.js`
+  - `backend/controllers/excusaController.js`
+  - `backend/services/cronService.js`
+  - `backend/controllers/excusas.test.js`
+  - `frontend/src/views/Excusas.vue`
+  - `frontend/src/views/ConsultaEstudiante.vue`
+  - `frontend/src/styles/consultaEstudiante.css`
+  - `backend/public/` (Sincronizado v�a `npm run build:prod`)
+  - `TROUBLESHOOTING.md`
+- **Verificaci�n:**
+  - Suite de pruebas completa del backend pasando al 100% (39 de 39 pruebas en verde con `node --test`).
+  - Compilaci�n exitosa del frontend con Vite y empaquetado a producci�n (`npm run build:prod`) en 3.56s sin errores.
+
+---
 ## [2026-10-25 11:40] Configuración de Git LFS y Publicación del Instalador Ejecutable Asista (.exe)
 
 - **Fecha y Hora:** 2026-10-25 11:40:00 -05:00

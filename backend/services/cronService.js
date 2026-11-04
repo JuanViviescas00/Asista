@@ -300,7 +300,7 @@ export function iniciarCronJobs() {
 export async function revisarYEncolarSofiaPlus() {
   // 1. Leer Inasistencias que estén en LISTO_PARA_SUBIR (Falta o Excusada)
   const inasistencias = await Inasistencia.find({
-    tipo: { $in: ['Falta', 'Excusada'] },
+    tipo: { $in: ['Falta', 'Tardanza', 'Excusada'] },
     estadoCarga: 'LISTO_PARA_SUBIR'
   }).populate('fichaId', 'jornada instructorLiderId')
 

@@ -6,7 +6,7 @@ import Dispositivo from '../models/Dispositivo.js'
 import Clase from '../models/Clase.js'
 import Ficha from '../models/Ficha.js'
 import { verificarTokenJWT } from '../middlewares/auth.js'
-import { finalizarClase } from './asistenciaService.js'
+import { finalizarClase, getHoyString } from './asistenciaService.js'
 import { esOrigenPermitido, esMismoOrigen } from '../utils/corsOrigins.js'
 
 let io = null
@@ -157,7 +157,7 @@ export function initSocket(httpServer) {
       const sesion = {
         activa: true,
         iniciadoPor: instructorNombre || 'Docente',
-        fecha: fecha || new Date().toISOString().split('T')[0],
+        fecha: fecha || getHoyString(),
         jornada,
         fichaCodigo,
         nombrePrograma,

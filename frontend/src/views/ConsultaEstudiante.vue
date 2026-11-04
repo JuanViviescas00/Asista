@@ -241,7 +241,7 @@ function asistenciaBadge(estado) {
                 <td>{{ asis.fecha }}</td>
                 <td>{{ asis.hora }}</td>
                 <td>
-                  <span class="student-consult-badge" :class="asistenciaBadge(asis.tipo)">{{ asis.tipo }}</span>
+                  <span class="student-consult-badge" :class="asistenciaBadge(asis.estado || asis.tipo)">{{ asis.estado || asis.tipo }}</span>
                 </td>
               </tr>
               <tr v-if="asistenciasEstudiante.length === 0">

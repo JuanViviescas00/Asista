@@ -6,7 +6,7 @@ import { calcularEstadoCarga } from '../utils/inasistenciaEstado.js'
 import { getHoyString } from '../services/asistenciaService.js'
 import Estudiante from '../models/Estudiante.js'
 import Ficha from '../models/Ficha.js'
-
+import { emitirAsistenciaRegistrada } from '../services/socketService.js'
 
 export async function getExcusas(req, res) {
   try {
@@ -29,12 +29,41 @@ export async function getExcusas(req, res) {
 
 export async function createExcusa(req, res) {
   try {
-    // Solo campos permitidos: el estado siempre inicia en 'Pendiente'
-    const { estudianteId, fichaId, fechaInasistencia, motivo } = req.body
+    const {
+      estudianteId,
+      fichaId,
+      fechaInasistencia,
+      motivo,
+      tipoExcusa,
+      adjuntoNombre,
+      adjuntoData,
+      horasDescontar,
+      estado
+    } = req.body
+
     if (req.usuario?.rol === 'Estudiante' && String(estudianteId) !== String(req.usuario.estudianteId || req.usuario.id)) {
       return res.status(403).json({ error: 'Solo puedes radicar excusas a tu nombre' })
     }
-    const excusa = new Excusa({ estudianteId, fichaId, fechaInasistencia, motivo, estado: 'Pendiente' })
+
+    // Si el usuario no es Estudiante (ej. Instructor o Administrador) y envía estado, permitirlo ('Aprobada' o 'Pendiente')
+    const estadoFinal = (req.usuario?.rol !== 'Estudiante' && estado) ? String(estado) : 'Pendiente'
+
+    const motivoFinal = (motivo && String(motivo).trim()) || (tipoExcusa ? `Excusa ${tipoExcusa}` : '')
+    if (!motivoFinal) {
+      return res.status(400).json({ error: 'El motivo de la excusa es obligatorio.' })
+    }
+
+    const excusa = new Excusa({
+      estudianteId,
+      fichaId,
+      fechaInasistencia,
+      motivo: motivoFinal,
+      tipoExcusa: tipoExcusa || 'Medica',
+      adjuntoNombre: adjuntoNombre || '',
+      adjuntoData: adjuntoData || null,
+      horasDescontar: Number(horasDescontar) || 6,
+      estado: estadoFinal
+    })
     await excusa.save()
     res.status(201).json(excusa)
   } catch (err) {
@@ -45,8 +74,8 @@ export async function createExcusa(req, res) {
 export async function updateExcusa(req, res) {
   try {
     const permitidos = {}
-    for (const campo of ['fechaInasistencia', 'motivo', 'motivoRechazo']) {
-      if (req.body[campo] !== undefined) permitidos[campo] = String(req.body[campo])
+    for (const campo of ['fechaInasistencia', 'motivo', 'tipoExcusa', 'adjuntoNombre', 'adjuntoData', 'horasDescontar', 'motivoRechazo']) {
+      if (req.body[campo] !== undefined) permitidos[campo] = req.body[campo]
     }
     const excusa = await Excusa.findByIdAndUpdate(req.params.id, permitidos, { new: true, runValidators: true })
     if (!excusa) return res.status(404).json({ error: 'Excusa no encontrada' })
@@ -96,6 +125,9 @@ export async function aprobarExcusa(req, res) {
     const festivosSet = new Set(festivosDocs.map((d) => d.fecha))
     const estadoCarga = calcularEstadoCarga({ fecha: excusa.fechaInasistencia, tipo: 'Excusada', jornada: fichaDoc?.jornada || '', festivosSet, hoyStr: getHoyString() })
 
+    // Conservar descripción previa o asignar el motivo de la excusa radicada
+    const descripcion = (existente?.descripcion || '').trim() || (excusa.motivo || '').trim() || ''
+
     // 1. Actualizar o crear Inasistencia con tipo 'Excusada'.
     const inasistencia = await Inasistencia.findOneAndUpdate(
       {
@@ -111,7 +143,7 @@ export async function aprobarExcusa(req, res) {
           tiempoTardanza: '0 horas',
           instructorId,
           estadoCarga,
-          descripcion: existente?.descripcion || ''
+          descripcion
         },
         $setOnInsert: {
           origen: 'manual'
@@ -121,6 +153,24 @@ export async function aprobarExcusa(req, res) {
     )
 
     await Estudiante.findByIdAndUpdate(excusa.estudianteId, { estadoAsistencia: 'Excusada' })
+
+    // Emitir evento por Socket.io para actualización en tiempo real en los paneles
+    try {
+      emitirAsistenciaRegistrada(String(excusa.fichaId), {
+        asistenciaId: inasistencia._id,
+        estudianteId: excusa.estudianteId,
+        nombres: estudianteDoc?.nombres || '',
+        apellidos: estudianteDoc?.apellidos || '',
+        estado: 'Excusada',
+        hora: inasistencia.hora,
+        tiempoTardanza: inasistencia.tiempoTardanza,
+        horasTardanza: 0,
+        metodo: inasistencia.origen === 'huellero' ? 'HUELLA' : 'MANUAL',
+        fecha: excusa.fechaInasistencia
+      })
+    } catch (wsErr) {
+      console.warn('[Socket] Error emitiendo excusa aprobada:', wsErr.message)
+    }
 
     res.json({ ok: true, excusa, inasistencia })
   } catch (err) {

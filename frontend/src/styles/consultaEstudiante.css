@@ -23,6 +23,7 @@
 .student-consult-badge-success { background: #d4edda; color: #155724; }
 .student-consult-badge-warning { background: #fff3cd; color: #856404; }
 .student-consult-badge-danger { background: #f8d7da; color: #721c24; }
+.student-consult-badge-info { background: #e0f2fe; color: #0369a1; }
 .student-consult-badge-neutral { background: #f1f5f9; color: #64748b; }
 .student-consult-report-actions { margin-bottom: 20px; }
 .student-consult-report-action-group { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; }

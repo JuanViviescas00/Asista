@@ -4,7 +4,7 @@ import { topeHorasPorJornada, validarHorasInasistencia } from '../utils/jornadaU
 
 // ---------------------------------------------------------------------------
 // Pruebas de la lógica pura de cálculo de horas para 'Excusada' y del flujo de
-// decisión de aprobarExcusa.
+// decisión de aprobarExcusa y createExcusa.
 //
 // NOTA DE ALCANCE: este entorno no tiene `node_modules` instalado (mongoose,
 // jsonwebtoken, etc.) y el alcance del cambio prohíbe `npm install`. Por eso,
@@ -35,6 +35,7 @@ function calcularHorasPropuestas(estado, horasTardanza, tope) {
 //   1. Si la Inasistencia existente está 'SUBIDA' -> 409 y NO se aprueba la excusa.
 //   2. Horas: si la existente es 'Tardanza' se conservan sus horas; si no, el tope.
 //   3. instructorId: el existente; si no, el líder de la ficha; si no, null.
+//   4. descripcion: existente.descripcion || excusa.motivo || ''
 function aprobarExcusaDecision({ excusa, existente, instructorLiderId, tope }) {
   if (existente?.estadoCarga === 'SUBIDA') {
     return { status: 409, error: 'Esta inasistencia ya fue reportada a Sofía Plus y no se puede modificar.' }
@@ -42,7 +43,15 @@ function aprobarExcusaDecision({ excusa, existente, instructorLiderId, tope }) {
   excusa.estado = 'Aprobada'
   const horas = existente?.tipo === 'Tardanza' ? existente.horas : tope
   const instructorId = existente?.instructorId || instructorLiderId || null
-  return { status: 200, ok: true, horas, instructorId }
+  const descripcion = (existente?.descripcion || '').trim() || (excusa.motivo || '').trim() || ''
+  return { status: 200, ok: true, horas, instructorId, descripcion }
+}
+
+// excusaController.js (createExcusa): resolución de motivo y estado inicial
+function resolverMotivoYEstado({ rolUsuario, estadoBody, motivoBody, tipoExcusaBody }) {
+  const estadoFinal = (rolUsuario !== 'Estudiante' && estadoBody) ? String(estadoBody) : 'Pendiente'
+  const motivoFinal = (motivoBody && String(motivoBody).trim()) || (tipoExcusaBody ? `Excusa ${tipoExcusaBody}` : '')
+  return { estadoFinal, motivoFinal }
 }
 
 test('createAsistencia: Excusada con horasTardanza=2 y tope=6 usa 2 horas', () => {
@@ -124,4 +133,52 @@ test('aprobarExcusa: usa el líder de la ficha cuando no hay instructorId existe
 
   assert.equal(r.status, 200)
   assert.equal(r.instructorId, 'lider-nuevo')
+})
+
+test('aprobarExcusa: preserva excusa.motivo si la Inasistencia existente no tenía descripcion', () => {
+  const r = aprobarExcusaDecision({
+    excusa: { estado: 'Pendiente', motivo: 'Cita médica EPS Sanitas' },
+    existente: { tipo: 'Falta', horas: 6, instructorId: 'inst-1', descripcion: '' },
+    instructorLiderId: 'lider-1',
+    tope: 6,
+  })
+
+  assert.equal(r.status, 200)
+  assert.equal(r.descripcion, 'Cita médica EPS Sanitas')
+})
+
+test('createExcusa: fallback de motivo desde tipoExcusa si viene vacío', () => {
+  const r = resolverMotivoYEstado({
+    rolUsuario: 'Administrador',
+    estadoBody: 'Pendiente',
+    motivoBody: '',
+    tipoExcusaBody: 'Personal'
+  })
+
+  assert.equal(r.motivoFinal, 'Excusa Personal')
+  assert.equal(r.estadoFinal, 'Pendiente')
+})
+
+test('createExcusa: instructor puede radicar directamente en estado Aprobada', () => {
+  const r = resolverMotivoYEstado({
+    rolUsuario: 'Instructor',
+    estadoBody: 'Aprobada',
+    motivoBody: 'Permiso avalado en clase',
+    tipoExcusaBody: 'Institucional'
+  })
+
+  assert.equal(r.estadoFinal, 'Aprobada')
+  assert.equal(r.motivoFinal, 'Permiso avalado en clase')
+})
+
+test('createExcusa: aprendiz siempre inicia en estado Pendiente aunque envíe Aprobada', () => {
+  const r = resolverMotivoYEstado({
+    rolUsuario: 'Estudiante',
+    estadoBody: 'Aprobada',
+    motivoBody: 'Incapacidad médica',
+    tipoExcusaBody: 'Medica'
+  })
+
+  assert.equal(r.estadoFinal, 'Pendiente')
+  assert.equal(r.motivoFinal, 'Incapacidad médica')
 })

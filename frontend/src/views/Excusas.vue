@@ -14,8 +14,13 @@ const loading = ref(false)
 const HORAS_POR_DIA = 6
 
 const excusaForm = reactive({
-  estudianteId: null, fechaInasistencia: '', tipoExcusa: 'Medica',
-  adjuntoNombre: '', adjuntoData: null, horasDescontar: HORAS_POR_DIA,
+  estudianteId: null,
+  fechaInasistencia: '',
+  tipoExcusa: 'Medica',
+  motivo: '',
+  adjuntoNombre: '',
+  adjuntoData: null,
+  horasDescontar: HORAS_POR_DIA,
 })
 
 const fichasList = ref([])
@@ -64,8 +69,13 @@ function onEstudianteChange() {
 
 function openCreate() {
   Object.assign(excusaForm, {
-    estudianteId: null, fechaInasistencia: '', tipoExcusa: 'Medica',
-    adjuntoNombre: '', adjuntoData: null, horasDescontar: HORAS_POR_DIA,
+    estudianteId: null,
+    fechaInasistencia: '',
+    tipoExcusa: 'Medica',
+    motivo: '',
+    adjuntoNombre: '',
+    adjuntoData: null,
+    horasDescontar: HORAS_POR_DIA,
   })
   showModal.value = true
 }
@@ -98,6 +108,7 @@ async function guardarExcusa() {
       estudianteId: excusaForm.estudianteId,
       fichaId: est ? est.fichaId : null,
       fechaInasistencia: excusaForm.fechaInasistencia,
+      motivo: excusaForm.motivo.trim() || `Excusa ${excusaForm.tipoExcusa}`,
       tipoExcusa: excusaForm.tipoExcusa,
       adjuntoNombre: excusaForm.adjuntoNombre,
       adjuntoData: excusaForm.adjuntoData,
@@ -117,7 +128,7 @@ async function aprobarExcusa(excusa) {
   try {
     await api.excusas.aprobar(excusa._id)
     await loadExcusas()
-    showToastFn(`Excusa aprobada. ${excusa.horasDescontar} horas descontadas del contador de fallas.`)
+    showToastFn(`Excusa aprobada. ${excusa.horasDescontar || 6} horas descontadas del contador de fallas.`)
   } catch (e) {
     showToastFn('Error: ' + e.message, 'error')
   }
@@ -160,7 +171,7 @@ function estadoBadge(estado) {
 <template>
   <div class="page-header">
     <h1>Excusas</h1>
-    <p>Gestiona y aprueba excusas medicas, personales e institucionales con recalculo automatico de horas</p>
+    <p>Gestiona y aprueba excusas médicas, personales e institucionales con recálculo automático de horas</p>
   </div>
 
   <div class="card">
@@ -179,14 +190,14 @@ function estadoBadge(estado) {
     </div>
 
     <div v-if="excusasFiltradas.length === 0" class="empty-state">
-      <p>No hay excusas registradas. Usa el boton "Registrar Excusa" para agregar una.</p>
+      <p>No hay excusas registradas. Usa el botón "Registrar Excusa" para agregar una.</p>
     </div>
 
     <div v-else class="table-container">
       <table>
         <thead>
           <tr>
-            <th>Aprendiz</th><th>Ficha</th><th>Fecha Inasistencia</th><th>Tipo</th><th>Adjunto</th><th>Horas</th><th>Estado</th><th>Acciones</th>
+            <th>Aprendiz</th><th>Ficha</th><th>Fecha Inasistencia</th><th>Tipo</th><th>Motivo</th><th>Adjunto</th><th>Horas</th><th>Estado</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -197,9 +208,10 @@ function estadoBadge(estado) {
             </td>
             <td><span class="badge badge-ficha">{{ getFichaById(e.fichaId)?.codigoFicha || '—' }}</span></td>
             <td>{{ e.fechaInasistencia }}</td>
-            <td><span class="badge" :class="tipoBadge(e.tipoExcusa)">{{ e.tipoExcusa }}</span></td>
+            <td><span class="badge" :class="tipoBadge(e.tipoExcusa || 'Medica')">{{ e.tipoExcusa || 'Medica' }}</span></td>
+            <td><span style="font-size: 13px;">{{ e.motivo || '—' }}</span></td>
             <td><span v-if="e.adjuntoNombre" style="font-size: 12px; color: var(--text-secondary);">{{ e.adjuntoNombre.length > 20 ? e.adjuntoNombre.slice(0, 20) + '...' : e.adjuntoNombre }}</span><span v-else>—</span></td>
-            <td><strong>{{ e.horasDescontar }}h</strong></td>
+            <td><strong>{{ e.horasDescontar || 6 }}h</strong></td>
             <td>
               <span class="badge" :class="estadoBadge(e.estado)">{{ e.estado }}</span>
               <div v-if="e.estado === 'Rechazada' && e.motivoRechazo" class="motivo-texto">{{ e.motivoRechazo }}</div>
@@ -210,7 +222,7 @@ function estadoBadge(estado) {
                   <button class="btn btn-success btn-sm" @click="aprobarExcusa(e)">Aprobar</button>
                   <button class="btn btn-danger btn-sm" @click="abrirRechazar(e)">Rechazar</button>
                 </template>
-                <span v-else style="font-size: 12px; color: var(--text-secondary);">{{ e.fechaRegistro }}</span>
+                <span v-else style="font-size: 12px; color: var(--text-secondary);">{{ e.createdAt ? new Date(e.createdAt).toLocaleDateString('es-CO') : (e.fechaRegistro || '—') }}</span>
               </div>
             </td>
           </tr>
@@ -232,9 +244,13 @@ function estadoBadge(estado) {
         </div>
         <div class="form-group"><label>Fecha de Inasistencia</label><input v-model="excusaForm.fechaInasistencia" type="date" /></div>
         <div class="form-group"><label>Tipo de Excusa</label><select v-model="excusaForm.tipoExcusa"><option value="Medica">Medica</option><option value="Personal">Personal</option><option value="Institucional">Institucional</option></select></div>
+        <div class="form-group">
+          <label>Motivo / Justificación</label>
+          <input v-model="excusaForm.motivo" type="text" placeholder="Ej: Cita médica EPS, incapacidad, calamidad..." />
+        </div>
         <div class="form-group"><label>Horas a Descontar</label><input v-model.number="excusaForm.horasDescontar" type="number" min="1" max="24" /></div>
         <div class="form-group">
-          <label>Adjunto PDF</label>
+          <label>Adjunto PDF o Imagen</label>
           <div class="file-upload-wrapper">
             <input type="file" accept=".pdf,.jpg,.jpeg,.png" @change="handleFileUpload" class="file-input" />
             <label class="file-label">{{ excusaForm.adjuntoNombre || 'Seleccionar archivo (PDF, JPG, PNG)' }}</label>
@@ -254,7 +270,7 @@ function estadoBadge(estado) {
       <p style="color: var(--text-secondary); margin-bottom: 16px;">Indica el motivo por el cual se rechaza esta excusa.</p>
       <div class="form-group">
         <label>Motivo de Rechazo</label>
-        <textarea v-model="rechazarMotivo" rows="3" placeholder="Ej: Documento no valido, falta informacion, fuera de plazo..." style="width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 14px; font-family: var(--sans); resize: vertical;"></textarea>
+        <textarea v-model="rechazarMotivo" rows="3" placeholder="Ej: Documento no válido, fuera de plazo, información ilegible..." style="width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 14px; font-family: var(--sans); resize: vertical;"></textarea>
       </div>
       <div class="btn-group" style="margin-top: 24px; justify-content: flex-end;">
         <button class="btn btn-outline" @click="showRechazarModal = false">Cancelar</button>
