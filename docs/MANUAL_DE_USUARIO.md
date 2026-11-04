@@ -54,7 +54,7 @@ Bogotá D.C., Colombia — 2026
    - 3.2 Radicación de Excusas Justificadas (Acuerdo 009 de 2024)
 4. [Capítulo 4: Portal del Instructor](#capítulo-4-portal-del-instructor)
    - 4.1 Panel de Mis Fichas / Grupos Asignados
-   - 4.2 Toma de Asistencia Manual y Contingencia en Aula
+   - 4.2 Toma de Asistencia Manual, Marcación de Novedades y Sincronización Inmediata
    - 4.3 Gestión y Aprobación de Excusas Radicadas
 5. [Capítulo 5: Módulos de Administración del Sistema](#capítulo-5-módulos-de-administración-del-sistema)
    - 5.1 Perfil y Métricas del Administrador
@@ -66,12 +66,13 @@ Bogotá D.C., Colombia — 2026
    - 5.7 Generación de Reportes y Descargas
    - 5.8 Seguimiento de Inasistencias y Alerta Temprana de Deserción
    - 5.9 Gestión de Días Inhabilitados y Festivos
-6. [Capítulo 6: Aplicación de Aula (Kiosco Huellero de Escritorio)](#capítulo-6-aplicación-de-aula-kiosco-huellero-de-escritorio)
+6. [Capítulo 6: Aplicación de Aula (Kiosco Huellero de Escritorio) y Automatización RPA](#capítulo-6-aplicación-de-aula-kiosco-huellero-de-escritorio)
    - 6.1 Instalación y Ejecución de ASISTA Desktop
    - 6.2 Inicio de Clase por el Docente
    - 6.3 Marcación Biométrica Dactilar (1:N)
    - 6.4 Tiempos de Asistencia, Retardos y Auto-Cierre
    - 6.5 Módulo de Enrolamiento de Huellas Dactilares
+   - 6.6 Ciclo Legal de Excusas (Acuerdo 009 de 2024) y Sincronización Automática con SENA Sofia Plus (Robot RPA)
 7. [Capítulo 7: Soporte Técnico, Mesa de Ayuda y Errores](#capítulo-7-soporte-técnico-mesa-de-ayuda-y-errores)
    - 7.1 Directorio de Mesa de Ayuda
    - 7.2 Protocolo de Escalamiento a Tres Niveles
@@ -251,11 +252,17 @@ Permite a cada docente consultar las fichas formativas bajo su responsabilidad, 
 ![Panel del Instructor](capturas_manual/15_panel_instructor.png)  
 *Figura 4.1: Panel de Fichas y Toma de Asistencia del Instructor en Producción*
 
-### 4.2 Toma de Asistencia Manual y Contingencia en Aula
-Si por razones de fuerza mayor el lector biométrico no está disponible en el ambiente de formación (o un aprendiz presenta quemaduras/vendajes en sus dedos):
-1. El instructor ingresa a la ficha activa desde la plataforma web.
-2. En la lista de aprendices matriculados, conmuta el selector de estado entre **Presente**, **Retardo** o **Inasistencia**.
-3. El sistema aplica autoguardado en tiempo real sin requerir recargar la página.
+### 4.2 Toma de Asistencia Manual, Marcación de Novedades y Sincronización Inmediata
+El panel del instructor permite gestionar la asistencia en tiempo real con sincronización atómica hacia la base de datos en la nube (MongoDB Atlas):
+
+![Marcación de Novedades en Producción](capturas_manual/17_asista_novedades_produccion.png)  
+*Figura 4.2: Marcación Inmediata de Novedades y Cálculo Automático de Tardanza en Producción*
+
+1. **Cálculo Automático de Tardanza:** Al marcar a un aprendiz como *Presente*, se captura la hora exacta de marcación. Si supera los 10 minutos de inicio de jornada (Noche: 5 horas totales, Diurna: 6 horas totales), el sistema asigna automáticamente el estado **Tardanza** con las horas de retraso correspondientes. Quienes queden sin marcar se registrarán como **Falta** al finalizar la jornada.
+2. **Marcar Falla Directa:** La casilla «Marcar Falla» permite radicar la inasistencia completa de forma instantánea. Al hacer clic, se activa el indicador de sincronización en caliente (`●` *Guardando…* → `✓` *Guardado*) sin requerir presionar ningún botón de guardar general. Si se desmarca, el sistema revierte el registro y restablece al aprendiz como *Presente*.
+3. **Excusa Presencial (F2F - Face to Face):** Si el aprendiz presenta una justificación física directamente en el aula, la casilla «Excusa (F2F)» abre un modal para ingresar la observación o motivo. El sistema registra inmediatamente la novedad como **Excusada** en MongoDB Atlas y genera el documento de excusa en estado **Aprobada**.
+4. **Horas Fallidas Editables:** El campo numérico de horas (ej. `0 / 5`) cuenta con un temporizador inteligente (*debounce* de 800 ms): si el aprendiz asiste parcialmente (por ejemplo 2 horas de retraso), el docente ajusta el número y el sistema persiste la tardanza exacta de forma inmediata.
+5. **Modo Offline Resiliente:** Si se pierde la conectividad a internet en el aula, las novedades se almacenan localmente en la cola offline del navegador (`draftStore`) y se sincronizan de forma autónoma con la nube tan pronto se restablece el enlace.
 
 ### 4.3 Gestión y Aprobación de Excusas Radicadas
 El instructor evalúa las solicitudes radicadas por los aprendices de sus fichas:
@@ -386,6 +393,21 @@ Cuando un aprendiz nuevo ingresa al programa o requiere re-enrolar su huella:
 2. Selecciona al aprendiz de la lista.
 3. Solicita la firma o aceptación verbal del consentimiento de tratamiento de datos personales.
 4. El aprendiz coloca el dedo sobre el lector cuatro (4) veces consecutivas hasta que el indicador de calidad biométrica alcance el 100%.
+
+### 6.6 Ciclo Legal de Excusas (Acuerdo 009 de 2024) y Sincronización Automática con SENA Sofia Plus (Robot RPA)
+ASISTA cuenta con un subsistema de Automatización Robótica de Procesos (RPA) desarrollado con Playwright en Node.js y orquestado mediante **GitHub Actions**, encargado de reportar oficialmente las fallas y novedades en el portal institucional **SENA Sofia Plus**:
+
+![Diligenciamiento de Inasistencia en Sofia Plus](capturas_manual/16_rpa_sofia_plus_formulario.png)  
+*Figura 6.1: Diligenciamiento Oficial Autónomo en Sofia Plus por el Robot RPA para el Aprendiz CC 1100954208*
+
+1. **Ventana Legal de 5 Días Hábiles (Acuerdo 009 de 2024):** Conforme al Reglamento del Aprendiz SENA, cuando se registra una inasistencia o tardanza, esta entra en estado inicial **`EN_ESPERA`**. Durante los 5 días hábiles siguientes (excluyendo sábados, domingos y días festivos registrados en el sistema), el aprendiz tiene derecho a radicar su excusa médica o justificación laboral.
+2. **Transición Automática a Lista para Subir:** El cron nocturno evalúa a diario la antigüedad de cada novedad. Si transcurren los 5 días hábiles sin excusa aprobada, la novedad pasa automáticamente al estado **`LISTO_PARA_SUBIR`**. Si la excusa fue aprobada por el instructor, la novedad pasa a **`LISTO_PARA_SUBIR`** con la justificación y motivo redactados por el docente para que Sofia Plus registre la novedad justificada.
+3. **Orquestación en la Nube con GitHub Actions:**
+   * **Programación Nocturna:** Todos los sábados a las 11:00 p.m. hora Colombia (`cron: '0 4 * * 0'`), un flujo automatizado de GitHub Actions despierta una máquina virtual con 7 GB de RAM.
+   * **Disparo Manual / Pruebas:** Los administradores pueden ejecutar el flujo bajo demanda desde la pestaña *Actions* de GitHub mediante el botón *Run workflow*, eligiendo entre **Modo Seguro (`dry-run`)** para simular con capturas sin guardar cambios o **Modo Real (`confirmar`)** para persistir oficialmente en Sofia Plus.
+   * **Ejecución Secuencial:** El robot procesa docente por docente, abriendo una sola instancia de Chromium para evitar saturar la memoria y evadir bloqueos por rate limiting o firewall en Sofia Plus.
+4. **Candado de Seguridad y Trazabilidad:** Al completar el reporte exitoso en Sofia Plus, la novedad se actualiza en MongoDB Atlas con `estadoCarga = 'SUBIDA'` y `subidoSofia = true`. En la interfaz web del instructor, la fila se bloquea con una insignia verde permanente (**Reportado Sofia Plus 🔒**), impidiendo cualquier modificación posterior no autorizada.
+5. **Evidencias Fotográficas Descargables:** En cada ejecución, GitHub Actions empaqueta automáticamente todas las capturas de pantalla tomadas durante el proceso (`rpa/descargas/evidencias_inasistencias/`) y las adjunta como un artefacto `.zip` descargable durante 14 días para auditoría y control de calidad.
 
 ---
 

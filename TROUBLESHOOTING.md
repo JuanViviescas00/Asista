@@ -1,5 +1,35 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-03 22:05] Actualización Documental Integral: Módulo RPA Sofia Plus, GitHub Actions y Evidencias de Producción
+
+- **Fecha y Hora:** 2026-11-03 22:05:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Se requería actualizar la documentación oficial institucional (`MANUAL_DE_USUARIO.md`, documento Word FAVA SENA, `rpa/README.md` y `README.md` raíz) para reflejar la sincronización inmediata de novedades y el subsistema RPA en la nube con capturas de producción.
+- **Causa Raíz:**
+  - El manual y los esquemas arquitectónicos previos no contemplaban el componente desacoplado del Robot RPA en GitHub Actions, el ciclo reglamentario de 5 días hábiles para excusas (Acuerdo 009 de 2024), ni la preservación de evidencias fotográficas para auditoría.
+- **Solución Aplicada:**
+  1. *Manual de Usuario FAVA SENA (`docs/MANUAL_DE_USUARIO.md` y `.docx`):*
+     - Ampliada la Sección 4.2 con la toma de asistencia inmediata, cálculo automático de tardanza (tolerancia de 10 min, jornada nocturna de 5h y diurna de 6h) y persistencia atómica en MongoDB Atlas (`Figura 4.2`).
+     - Creada la Sección 6.6 que detalla el ciclo legal de excusas, la orquestación desatendida semanal los sábados a las 11:00 PM con GitHub Actions, la ejecución de Chromium Playwright en máquina virtual de 7 GB de RAM y el bloqueo permanente `subidoSofia` (`Figura 6.1`).
+     - Regenerados los documentos Word institucionales oficiales (`docs/Manuales/MANUAL_DE_USUARIO_ASISTA_OFICIAL.docx` y `docs/MANUAL_DE_USUARIO_ASISTA.docx`) vía `docs/convertir_a_word.py`.
+  2. *Documentación Técnica del Módulo RPA (`rpa/README.md`):*
+     - Diagrama de flujo Mermaid de producción, guía de ejecución vía `workflow_dispatch` y cron, configuración de secrets y gestión de artefactos de evidencia.
+  3. *Arquitectura del Monolito y Robot (`README.md`):*
+     - Actualizado a 4 componentes desacoplados con diagrama Mermaid integrando el canal `x-rpa-key` y conexión hacia Sofia Plus.
+- **Archivos Modificados:**
+  - `docs/MANUAL_DE_USUARIO.md`
+  - `docs/Manuales/MANUAL_DE_USUARIO_ASISTA_OFICIAL.docx`
+  - `docs/MANUAL_DE_USUARIO_ASISTA.docx`
+  - `docs/capturas_manual/16_rpa_sofia_plus_formulario.png`
+  - `docs/capturas_manual/17_asista_novedades_produccion.png`
+  - `rpa/README.md`
+  - `README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Script `docs/convertir_a_word.py` ejecutado exitosamente con inclusión de tablas, márgenes institucionales e imágenes.
+  - Verificación de la suite de pruebas del backend (39/39 passing).
+
+---
 ## [2026-11-03 21:30] Desacoplamiento de Robot RPA Sofia Plus hacia GitHub Actions y Optimizaciones de Memoria en Contenedores
 
 - **Fecha y Hora:** 2026-11-03 21:30:00 -05:00

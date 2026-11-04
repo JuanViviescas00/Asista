@@ -6,7 +6,7 @@ Módulo de **RPA (Robotic Process Automation)** desarrollado en **Node.js** con 
 
 ## 🎯 Objetivo Único
 
-Automatizar el reporte de inasistencias (Falta, Tardanza, Excusada) directamente en el formulario JSF oficial de Sofia Plus (`Gestión de Tiempos -> Registrar Inasistencia del Aprendiz`) utilizando las credenciales seguras del instructor asignado a cada ficha.
+Automatizar el reporte de inasistencias (**Falta**, **Tardanza**, **Excusada**) directamente en el formulario JSF oficial de Sofia Plus (`Gestión de Tiempos -> Registrar Inasistencia del Aprendiz`) utilizando las credenciales seguras del instructor asignado a cada ficha formativa.
 
 ---
 
@@ -15,28 +15,36 @@ Automatizar el reporte de inasistencias (Falta, Tardanza, Excusada) directamente
 ```text
 rpa/
 ├── bot_inasistencias_sofia.js  # Robot orquestador autónomo de inasistencias en Sofia Plus
+├── bot_sofia_login.js          # Asistente de validación y prueba de login individual
 ├── package.json                # Dependencias (playwright, dotenv) y scripts de ejecución
-├── .env.example                # Plantilla de variables de entorno (API_BASE_URL, etc.)
+├── .env.example                # Plantilla de variables de entorno (API_BASE_URL, RPA_API_KEY)
 ├── .gitignore                  # Exclusión de evidencias de pantalla y archivos temporales
+├── descargas/                  # Evidencias fotográficas generadas en cada ejecución
+│   └── evidencias_inasistencias/
 └── README.md                   # Documentación técnica del módulo
 ```
 
 ---
 
-## 🔄 Flujo de Automatización
+## 🔄 Flujo de Sincronización en Producción
 
 ```mermaid
 flowchart TD
-    A["1. Cron / Disparador Backend"] --> B["2. Consulta API Asista (/api/instructores/todos-inasistencias-rpa)"]
-    B --> C["3. Inicio de Sesión por Docente en Sofia Plus"]
-    C --> D["4. Cambio a Rol 'Instructor'"]
-    D --> E["5. Navegación a 'Registrar Inasistencia del Aprendiz'"]
-    E --> F["6. Selección de Ficha y Búsqueda Paginada de Aprendiz"]
-    F --> G["7. Diligenciamiento de Horas, Justificación y Fechas"]
-    G --> H{"¿Modo Real o Dry-Run?"}
-    H -- "Modo Real" --> I["Clic en Registrar Novedad + Confirmación a API Asista"]
-    H -- "Dry-Run" --> J["Resaltar botón + Captura de Evidencia fotográfica"]
-    I --> K["Bloqueo en Asista: subidoSofia = true (Candado 🔒)"]
+    A["1. Docente / Huellero marca Asistencia"] --> B["2. Inasistencia en MongoDB Atlas (estadoCarga: 'EN_ESPERA')"]
+    B --> C{"3. Ventana de 5 Días Hábiles (Acuerdo 009/2024)"}
+    C -- "Con Excusa Aprobada" --> D["estadoCarga: 'LISTO_PARA_SUBIR' (Motivo oficial guardado)"]
+    C -- "Sin Excusa (Cumple 5 días)" --> E["Cron nocturno: estadoCarga: 'LISTO_PARA_SUBIR'"]
+    D --> F["4. Sábado 11:00 PM: Disparo de GitHub Actions"]
+    E --> F
+    F --> G["5. Consulta API Asista (/api/instructores/todos-inasistencias-rpa)"]
+    G --> H["6. Chromium Headless: Login Seguro del Docente en Sofia Plus"]
+    H --> I["7. Diligenciamiento de Formulario JSF Oficial"]
+    I --> J{"¿Modo Real o Dry-Run?"}
+    J -- "Modo Real (--confirmar-registro)" --> K["Clic en Registrar + Confirmar a API Asista"]
+    J -- "Modo Seguro (--dry-run)" --> L["Resaltar botón + Captura de Evidencia fotográfica"]
+    K --> M["Novedad bloqueada: subidoSofia = true (Candado 🔒)"]
+    L --> N["Subida de Artefacto .zip con Fotos a GitHub Actions"]
+    M --> N
 ```
 
 ---
@@ -51,15 +59,38 @@ flowchart TD
    Si el portal devuelve errores HTTP 500/502/503/504, el robot realiza una pausa dinámica de 5 minutos con cuenta regresiva antes de reintentar.
 4. **Pausa Humana:**  
    Pausas aleatorias entre aprendices (3 a 5 segundos) y entre instructores (5 segundos) para no saturar los servidores del SENA.
+5. **Aislamiento de Memoria en Linux / Docker:**  
+   El navegador Chromium corre con banderas de contención (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`) para garantizar ejecución fluida en entornos contenerizados o en la nube sin agotar memoria compartida.
 
 ---
 
 ## 🚀 Modos de Ejecución
 
-### 1. Desde el Cron de Asista (Desatendido / Automático)
+### 1. En la Nube vía GitHub Actions (Recomendado para Producción)
+
+El flujo [`.github/workflows/rpa-sabado.yml`](../.github/workflows/rpa-sabado.yml) gestiona la ejecución autónoma en máquinas virtuales con 7 GB de RAM sin recargar el servidor web de Render:
+
+* **Automático:** Se activa todos los **sábados a las 11:00 p.m. hora Colombia** (`cron: '0 4 * * 0'`).
+* **Bajo Demanda:** Desde la pestaña **Actions** en GitHub, selecciona *RPA Sofia Plus - Sincronización de Inasistencias* y pulsa **Run workflow**:
+  * **Modo:** `dry-run` (Modo Seguro con capturas) o `confirmar` (Modo Real con persistencia).
+  * **Docente (opcional):** Filtrar por documento de identidad de un docente específico.
+  * **Límite (opcional):** Procesar un número acotado de novedades (ej. 2 para pruebas rápidas).
+* **Artefactos:** Al finalizar, descarga el archivo `evidencias-sofia-plus-<run_id>.zip` desde la sección *Artifacts* de la ejecución para auditar las capturas de pantalla de Sofia Plus.
+
+#### Secrets Requeridos en GitHub:
+Configura en **Settings -> Secrets and variables -> Actions**:
+* `API_BASE_URL`: URL pública de la API de Asista (ej: `https://tu-app.onrender.com`).
+* `RPA_API_KEY`: Clave secreta compartida con el backend para autorizar al robot.
+
+---
+
+### 2. Desde el Cron Interno del Backend (Servidor Local / Dedicado)
+
 El cron semanal nocturno de Asista (`backend/services/cronService.js`) invoca automáticamente el servicio `backend/services/rpaService.js` en modo desatendido (`--batch --auto --headless`).
 
-### 2. Desde la Línea de Comandos (CLI)
+---
+
+### 3. Desde la Línea de Comandos (CLI)
 
 ```powershell
 # Ejecutar todas las inasistencias en modo seguro (dry-run)
@@ -76,27 +107,10 @@ node rpa/bot_inasistencias_sofia.js --batch --auto --confirmar-registro --headle
 
 ## 🔑 Autenticación del Robot frente a la API (RPA_API_KEY)
 
-Los endpoints de Asista que consume el robot (`/api/instructores/todos-inasistencias-rpa`,
-`/api/instructores/documento/:documento/inasistencias-rpa` y
-`/api/instructores/confirmar-subida-sofia`) requieren autenticación. El robot envía una
-clave compartida en la cabecera `x-rpa-key`, que debe coincidir con `RPA_API_KEY` definida
-en el backend.
+Los endpoints de Asista que consume el robot (`/api/instructores/todos-inasistencias-rpa`, `/api/instructores/documento/:documento/inasistencias-rpa` y `/api/instructores/confirmar-subida-sofia`) requieren autenticación mediante la cabecera `x-rpa-key`, la cual debe coincidir con `RPA_API_KEY` en el `.env` del backend.
 
-Configura la misma clave en ambos lados:
-
-1. En `rpa/.env` (usado por el robot):
-   ```
-   RPA_API_KEY=<clave-larga-y-aleatoria>
-   ```
-2. En `backend/.env` (usado por la API):
-   ```
-   RPA_API_KEY=<la-misma-clave>
-   ```
-
-Genera una clave aleatoria con:
+Genera una clave criptográficamente segura con:
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
-
-Si el robot se ejecuta sin `RPA_API_KEY` definida, aborta al inicio con un mensaje de error.

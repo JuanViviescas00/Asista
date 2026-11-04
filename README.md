@@ -8,13 +8,14 @@
 
 ## Arquitectura
 
-El sistema tiene 3 componentes desacoplados:
+El sistema tiene 4 componentes desacoplados:
 
 | Componente | Descripción |
 | :--- | :--- |
 | **`huellero/`** | App de escritorio (Electron + Vue 3) que se ejecuta en el computador del aula, conectado físicamente al lector DigitalPersona U.are.U 4500. Hace la captura y comparación biométrica en el cliente usando `koffi` (FFI) y las DLLs nativas de DigitalPersona. |
 | **`backend/`** | API REST y servidor de tiempo real (Node.js + Express + Socket.IO). Persistencia centralizada en la nube con **MongoDB Atlas**. |
 | **`frontend/`** | Panel web (Vue 3 + Quasar + Vite) para administradores e instructores: gestión de fichas, aprendices, reportes, dispositivos y monitoreo en vivo. |
+| **`rpa/`** | Robot de automatización (Node.js + Playwright) orquestado vía **GitHub Actions** para el reporte oficial y autónomo de inasistencias en **SENA Sofia Plus**. |
 
 ```mermaid
 flowchart LR
@@ -30,9 +31,15 @@ flowchart LR
     subgraph Frontend[frontend/ — Panel web]
         Panel[Admin / instructores / reportes]
     end
+    subgraph RPA[rpa/ — GitHub Actions]
+        Bot[Playwright Robot]
+        Sofia[SENA Sofia Plus]
+    end
     Lector --> Captura
     Huellero <-->|REST + WebSockets| Backend
     Frontend <-->|REST + WebSockets| Backend
+    Backend <-->|x-rpa-key| RPA
+    Bot -->|Reporte Oficial| Sofia
     API --> Mongo
 ```
 
