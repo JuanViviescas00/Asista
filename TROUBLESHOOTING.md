@@ -1,5 +1,23 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-03 22:26] Seguridad Proactiva (AgentShield): Remoción de Clave Real RPA_API_KEY Expuesta en README.md
+
+- **Fecha y Hora:** 2026-11-03 22:26:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario cuestionó si la clave `RPA_API_KEY` debía estar documentada en el `README.md`.
+  - Al auditar el archivo, se identificó que en la Sección 8 (`rpa/.env`) se encontraba expuesta en texto plano la clave secreta real de 96 caracteres hex (`d63f4abf...`), idéntica a la utilizada en los archivos locales `.env`.
+- **Causa Raíz:**
+  - En un commit documental anterior (`1c0976e`), se copió un bloque de ejemplo con la clave real del entorno de desarrollo en lugar de un marcador de posición (*placeholder*).
+- **Solución Aplicada:**
+  1. Se reemplazó de inmediato el valor confidencial en `README.md` por el marcador genérico `<clave_secreta_compartida_hex_96_caracteres>`.
+  2. Se instruyó al usuario sobre el procedimiento de rotación de credenciales para actualizar la clave en `backend/.env`, `rpa/.env` y en los `Secrets` de GitHub Actions.
+- **Archivos Modificados:**
+  - `README.md`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Búsqueda en el árbol de trabajo con `git grep` confirma que la cadena hex ya no está presente en ningún archivo público rastreado por Git.
+
+---
 ## [2026-11-03 22:05] Actualización Documental Integral: Módulo RPA Sofia Plus, GitHub Actions y Evidencias de Producción
 
 - **Fecha y Hora:** 2026-11-03 22:05:00 -05:00

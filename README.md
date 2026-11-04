@@ -210,7 +210,7 @@ Archivo de configuración independiente ubicado en `rpa/.env` para cuando el rob
 API_BASE_URL=https://asista.onrender.com
 HEADLESS=true
 RPA_DRY_RUN=true
-RPA_API_KEY=d63f4abf1647c78b61a22316a56d76de1b34b003a43afc3a009faa24b9fa94e36480ebb44a52bcd9b8f18eae9e220757
+RPA_API_KEY=<clave_secreta_compartida_hex_96_caracteres>
 ```
 
 ---
