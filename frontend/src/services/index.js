@@ -184,6 +184,7 @@ const api = {
 
   dispositivos: {
     listar() { return request('/dispositivos') },
+    actualizarNombre(id, nombre) { return request(`/dispositivos/${id}/nombre`, { method: 'PUT', body: JSON.stringify({ nombre }) }) },
     asociarFichas(id, fichaIds) { return request(`/dispositivos/${id}/fichas`, { method: 'PUT', body: JSON.stringify({ fichaIds }) }) },
     resetFingerprint(id) { return request(`/dispositivos/${id}/reset-fingerprint`, { method: 'PUT' }) },
     aprobar(id) { return request(`/dispositivos/${id}/aprobar`, { method: 'PUT' }) },

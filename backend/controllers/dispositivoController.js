@@ -191,3 +191,30 @@ export async function eliminar(req, res) {
     res.status(500).json({ error: err.message })
   }
 }
+
+export async function actualizarNombre(req, res) {
+  try {
+    const { id } = req.params
+    const { nombre } = req.body || {}
+
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({ error: 'ID de dispositivo inválido' })
+    }
+
+    const dispositivo = await Dispositivo.findById(id)
+    if (!dispositivo) {
+      return res.status(404).json({ error: 'Dispositivo no encontrado' })
+    }
+
+    dispositivo.nombre = typeof nombre === 'string' ? nombre.trim().slice(0, 100) : ''
+    await dispositivo.save()
+
+    const obj = dispositivo.toObject()
+    delete obj.tokenHash
+    delete obj.hardwareFingerprintHash
+
+    res.json({ ok: true, message: 'Apodo del dispositivo actualizado.', dispositivo: obj })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+}

@@ -7,6 +7,7 @@ const router = Router()
 
 router.post('/registrar', registroDispositivoLimiter, dispositivoController.registrar)
 router.get('/', autenticarJWT, verificarRol(['Administrador']), dispositivoController.getDispositivos)
+router.put('/:id/nombre', autenticarJWT, verificarRol(['Administrador']), dispositivoController.actualizarNombre)
 router.put('/:id/fichas', autenticarJWT, verificarRol(['Administrador']), dispositivoController.asociarFichas)
 router.put('/:id/reset-fingerprint', autenticarJWT, verificarRol(['Administrador']), dispositivoController.resetFingerprint)
 router.put('/:id/aprobar', autenticarJWT, verificarRol(['Administrador']), dispositivoController.aprobar)

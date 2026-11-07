@@ -124,7 +124,7 @@ function showToast(message, type = 'success') {
 }
 
 function deviceLabel(d) {
-  return d.nombre || d.deviceId || d._id
+  return d.nombre || d.hostname || d.deviceId || d._id
 }
 
 function toggleFicha(deviceId, fichaId) {
@@ -296,6 +296,35 @@ function formatFecha(iso) {
     return iso
   }
 }
+
+const editandoNombreId = ref(null)
+const nombreTemp = ref('')
+const guardandoNombre = ref(false)
+
+function iniciarEdicionNombre(d) {
+  editandoNombreId.value = d._id
+  nombreTemp.value = d.nombre || ''
+}
+
+function cancelarEdicionNombre() {
+  editandoNombreId.value = null
+  nombreTemp.value = ''
+}
+
+async function guardarNombre(d) {
+  if (guardandoNombre.value) return
+  guardandoNombre.value = true
+  try {
+    const res = await api.dispositivos.actualizarNombre(d._id, nombreTemp.value)
+    d.nombre = res?.dispositivo?.nombre ?? nombreTemp.value.trim()
+    showToast('Apodo del dispositivo actualizado')
+    cancelarEdicionNombre()
+  } catch (e) {
+    showToast('Error al actualizar apodo: ' + (e.message || 'Error desconocido'), 'error')
+  } finally {
+    guardandoNombre.value = false
+  }
+}
 </script>
 
 <template>
@@ -331,8 +360,38 @@ function formatFecha(iso) {
       <div v-for="d in pendientes" :key="d._id" class="card card-pendiente">
         <div class="card-header">
           <div>
-            <h3>{{ d.hostname || deviceLabel(d) }}</h3>
+            <div class="device-title-row">
+              <template v-if="editandoNombreId === d._id">
+                <input
+                  v-model="nombreTemp"
+                  type="text"
+                  class="input-nombre-apodo"
+                  placeholder="Apodo (ej: Portátil Prof. Silvia)"
+                  maxlength="60"
+                  @keyup.enter="guardarNombre(d)"
+                  @keyup.esc="cancelarEdicionNombre"
+                  autofocus
+                />
+                <button class="btn-apodo-action btn-apodo-save" :disabled="guardandoNombre" @click="guardarNombre(d)" title="Guardar apodo">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button class="btn-apodo-action btn-apodo-cancel" :disabled="guardandoNombre" @click="cancelarEdicionNombre" title="Cancelar">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </template>
+              <template v-else>
+                <h3>{{ deviceLabel(d) }}</h3>
+                <button class="btn-edit-apodo" @click="iniciarEdicionNombre(d)" :title="d.nombre ? 'Cambiar apodo' : 'Asignar apodo'">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <span>{{ d.nombre ? 'Cambiar apodo' : '+ Apodo' }}</span>
+                </button>
+              </template>
+            </div>
             <span class="device-id">{{ d.deviceId }}</span>
+            <span v-if="d.hostname && d.nombre" class="muted">Equipo: {{ d.hostname }}</span>
             <span class="muted">Registrado: {{ formatFecha(d.createdAt) }}</span>
           </div>
           <div class="card-actions">
@@ -353,9 +412,38 @@ function formatFecha(iso) {
       <div v-for="d in activosFiltrados" :key="d._id" class="card">
         <div class="card-header">
           <div>
-            <h3>{{ deviceLabel(d) }}</h3>
-            <span class="device-id">{{ d.nombre ? d.deviceId : '' }}</span>
-            <span v-if="d.hostname" class="muted">{{ d.hostname }}</span>
+            <div class="device-title-row">
+              <template v-if="editandoNombreId === d._id">
+                <input
+                  v-model="nombreTemp"
+                  type="text"
+                  class="input-nombre-apodo"
+                  placeholder="Apodo (ej: Portátil Prof. Silvia)"
+                  maxlength="60"
+                  @keyup.enter="guardarNombre(d)"
+                  @keyup.esc="cancelarEdicionNombre"
+                  autofocus
+                />
+                <button class="btn-apodo-action btn-apodo-save" :disabled="guardandoNombre" @click="guardarNombre(d)" title="Guardar apodo">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button class="btn-apodo-action btn-apodo-cancel" :disabled="guardandoNombre" @click="cancelarEdicionNombre" title="Cancelar">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </template>
+              <template v-else>
+                <h3>{{ deviceLabel(d) }}</h3>
+                <button class="btn-edit-apodo" @click="iniciarEdicionNombre(d)" :title="d.nombre ? 'Cambiar apodo' : 'Asignar apodo'">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <span>{{ d.nombre ? 'Cambiar apodo' : '+ Apodo' }}</span>
+                </button>
+              </template>
+            </div>
+            <span class="device-id">{{ d.deviceId }}</span>
+            <span v-if="d.hostname && d.nombre" class="muted">Equipo: {{ d.hostname }}</span>
             <span v-if="d.createdAt" class="muted">Registrado: {{ formatFecha(d.createdAt) }}</span>
             <span class="badge" :class="d.activo ? 'badge-success' : 'badge-danger'">
               {{ d.activo ? 'Activo' : 'Inactivo' }}
@@ -468,8 +556,38 @@ function formatFecha(iso) {
       <div v-for="d in deshabilitados" :key="d._id" class="card card-deshabilitado">
         <div class="card-header">
           <div>
-            <h3>{{ d.hostname || deviceLabel(d) }}</h3>
+            <div class="device-title-row">
+              <template v-if="editandoNombreId === d._id">
+                <input
+                  v-model="nombreTemp"
+                  type="text"
+                  class="input-nombre-apodo"
+                  placeholder="Apodo (ej: Portátil Prof. Silvia)"
+                  maxlength="60"
+                  @keyup.enter="guardarNombre(d)"
+                  @keyup.esc="cancelarEdicionNombre"
+                  autofocus
+                />
+                <button class="btn-apodo-action btn-apodo-save" :disabled="guardandoNombre" @click="guardarNombre(d)" title="Guardar apodo">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button class="btn-apodo-action btn-apodo-cancel" :disabled="guardandoNombre" @click="cancelarEdicionNombre" title="Cancelar">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </template>
+              <template v-else>
+                <h3>{{ deviceLabel(d) }}</h3>
+                <button class="btn-edit-apodo" @click="iniciarEdicionNombre(d)" :title="d.nombre ? 'Cambiar apodo' : 'Asignar apodo'">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  <span>{{ d.nombre ? 'Cambiar apodo' : '+ Apodo' }}</span>
+                </button>
+              </template>
+            </div>
             <span class="device-id">{{ d.deviceId }}</span>
+            <span v-if="d.hostname && d.nombre" class="muted">Equipo: {{ d.hostname }}</span>
             <span class="badge badge-danger">Inactivo</span>
           </div>
           <div class="card-actions">
@@ -826,4 +944,92 @@ function formatFecha(iso) {
   font-size: 13px;
   padding: 12px 0;
 }
+
+.device-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.device-title-row h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+
+.input-nombre-apodo {
+  padding: 4px 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 1.5px solid #39a900;
+  border-radius: 6px;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+  min-width: 220px;
+  box-shadow: 0 0 0 2px rgba(57, 169, 0, 0.15);
+}
+
+.btn-edit-apodo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-edit-apodo:hover {
+  background: #f0fdf4;
+  border-color: #39a900;
+  border-style: solid;
+  color: #166534;
+}
+
+.btn-apodo-action {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-apodo-save {
+  background: #39a900;
+  color: #ffffff;
+}
+
+.btn-apodo-save:hover:not(:disabled) {
+  background: #2f8c00;
+}
+
+.btn-apodo-cancel {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+}
+
+.btn-apodo-cancel:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.btn-apodo-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 </style>

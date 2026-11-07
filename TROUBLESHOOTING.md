@@ -1,5 +1,88 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-06 22:45] Asignación y Gestión de Apodos / Nombres Amigables para Dispositivos de Docentes
+
+- **Fecha y Hora:** 2026-11-06 22:45:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - Debido a la rotación de equipos y al uso provisional de computadores personales por parte de instructores para tomar lista con lectores biométricos móviles, los administradores enfrentaban dificultad para identificar qué dispositivo correspondía a cada docente en `PanelDispositivos.vue`, visualizando únicamente nombres de red genéricos (`DESKTOP-XXXXX`) o identificadores UUID.
+  - Se requería la capacidad de asignar, editar y visualizar un "apodo" o nombre amigable (ej: "Portátil Prof. Silvia", "Lector Móvil 1") directamente desde el panel de control.
+- **Causa Raíz:**
+  - Aunque el esquema de base de datos MongoDB (`Dispositivo.js`) ya contemplaba el campo `nombre: { type: String, default: '' }`, no existía un endpoint en el backend para su actualización independiente por administradores, ni controles reactivos en la interfaz frontend de `PanelDispositivos.vue` para su edición inline.
+- **Solución Aplicada:**
+  1. *Backend (`backend/controllers/dispositivoController.js` y `backend/routes/dispositivos.js`):*
+     - Creado el endpoint atómico `PUT /api/dispositivos/:id/nombre` protegido con autenticación JWT y verificación de rol `Administrador`.
+     - Implementada la función `actualizarNombre`: valida `mongoose.Types.ObjectId`, sanitiza el texto (`trim`), limita a 100 caracteres y excluye `tokenHash` en la respuesta.
+     - Implementada suite de pruebas unitarias en `backend/controllers/dispositivoNombre.test.js` (validación de IDs inválidos, actualización exitosa y sanitización).
+  2. *Frontend (`frontend/src/services/index.js` y `frontend/src/views/PanelDispositivos.vue`):*
+     - Añadido el método `actualizarNombre(id, nombre)` en `api.dispositivos`.
+     - Actualizada la función `deviceLabel(d)` para priorizar `d.nombre || d.hostname || d.deviceId || d._id`.
+     - Creado componente interactivo de edición inline con soporte de teclado (`Enter` para guardar, `Esc` para cancelar), botón de edición y retroalimentación reactiva en las secciones de Pendientes, Activos y Deshabilitados.
+     - Subtítulo descriptivo que mantiene visible el `hostname` y `deviceId` técnico debajo del apodo asignado.
+  3. *Compilación y Sincronización Monolito:*
+     - Ejecutado `npm run build:prod` sincronizando el nuevo bundle optimizado en `backend/public/`.
+- **Archivos Modificados:**
+  - `backend/controllers/dispositivoController.js`
+  - `backend/routes/dispositivos.js`
+  - `backend/controllers/dispositivoNombre.test.js`
+  - `frontend/src/services/index.js`
+  - `frontend/src/views/PanelDispositivos.vue`
+  - `backend/public/`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Ejecución de 41 pruebas unitarias automáticas en Node.js (`node --test controllers/*.test.js middlewares/*.test.js`) con 100% de éxito.
+  - Compilación de Vite a producción sin errores.
+
+---
+
+## [2026-11-05 18:40] Corrección de Ajustes de Organización de Cards y Optimización Tipográfica en Diapositivas HTML, PDF y PPTX
+
+- **Fecha y Hora:** 2026-11-05 18:40:00 -05:00
+- **Descripción del Problema / Bug:**
+  - El usuario reportó desbalance en la organización de las tarjetas en `docs/presentacion_asista.html` y fuentes tipográficas demasiado pequeñas para ser leídas al proyectar o al abrir la exportación a PDF.
+  - Al auditar visualmente los renders de 1920x1080:
+    1. En las diapositivas 3, 4, 5, 6 y 9, las tarjetas tenían alturas fijas con poco texto, generando un vacío negro de más del 50% entre el párrafo superior y la píldora inferior.
+    2. En la diapositiva 7 (2x2), las tarjetas inferiores se desbordaban verticalmente, cortando las píldoras inferiores y la nota al pie del reglamento.
+    3. En las diapositivas 2 y 8 (layout dividido con captura de pantalla), el contenedor de la imagen provocaba un desfase que ocultaba parcialmente el inicio de la nota al pie.
+    4. En la diapositiva 10, las 3 tarjetas de métricas empíricas se veían desproporcionadas y vacías.
+- **Causa Raíz:**
+  - Reglas CSS de flexbox con `height: 100%` en grids donde los elementos hijos no poseían `min-height: 0`, causando que los contenedores calculasen alturas mayores al viewport visible de 1080px.
+  - Párrafos con `font-size: 19px - 21px`, insuficientes para lectura lejana en auditorios y proyecciones.
+- **Solución Aplicada:**
+  1. *Refactorización CSS de Grids y Flexbox (`docs/presentacion_asista.html`):*
+     - Establecido `flex: 1` con `min-height: 0` y `overflow: hidden` en `.slide-body`, `.grid-preview-layout` y `.gamma-grid`.
+     - Ajustado el padding general del deck a `56px 36px 24px 36px` y la altura del slide a `calc(100vh - 84px)` con `max-height: 980px` para ganar espacio vertical sin colisiones.
+     - Separación explícita mediante `gap: 12px` y `justify-content: flex-start` en `.slide`, garantizando que la nota al pie (`.slide-footer-note`) conserve siempre su espacio visible sin ser tapada.
+  2. *Equilibrio de Contenido y Enriquecimiento Armónico:*
+     - **Diapositiva 4 (Tecnologías):** Transformadas las insignias flotantes en 3 filas estructuradas por tarjeta (`.tech-item-row`) con iconos, nombres de tecnología y su rol en la arquitectura limpia.
+     - **Diapositiva 5 (Tiempos de Llegada):** Incorporados dos bloques de detalle (`.card-detail-box`) por estado ("Cómputo en Ficha" y "Recomendación / Causal Deserción").
+     - **Diapositiva 6 (Excusas Médicas):** Incorporados detalles de conteo de días hábiles, carga digital sin fotocopias y seguridad jurídica.
+     - **Diapositiva 7 (Habeas Data):** Rediseñado el grid 2x2 con tarjetas compactas de ~270px, agrupando número/badge en la cabecera para eliminar todo desbordamiento vertical.
+     - **Diapositiva 9 (Monitoreo Preventivo):** Añadido semáforo formativo con estado del aprendiz, acompañamiento docente y debido proceso.
+     - **Diapositiva 10 (Cierre):** Tarjetas de métricas balanceadas con números gigantes luminosos (129, ~800 ms, 5), subtítulo, caja de producción real y badges institucionales.
+  3. *Aumento General de Fuentes Tipográficas:*
+     - Títulos de diapositivas: 48px - 60px.
+     - Títulos de tarjetas: 26px - 32px.
+     - Párrafos descriptivos: 20px - 22px con interlineado de 1.5.
+     - Cajas de detalle: 18.5px - 19.5px.
+     - Notas al pie: 18.5px.
+  4. *Regeneración de Entregables:*
+     - Ejecutado `node docs/export_slides.cjs` con Playwright a escala 2x capturando las 10 diapositivas en `docs/slides_img/`.
+     - Generado `docs/PRESENTACION_SISTEMA_ASISTA.pdf` con calidad visual intacta en alta resolución.
+     - Generado `docs/PRESENTACION_SISTEMA_ASISTA.pptx` (y réplica de respaldo) en formato panorámico 16:9 con notas de orador completas para cada lámina.
+- **Archivos Modificados:**
+  - `docs/presentacion_asista.html`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pdf`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pptx`
+  - `docs/PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`
+  - `docs/generate_pdf_and_pptx.py`
+  - `docs/slides_img/*.png`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Inspección directa de imágenes de las 10 diapositivas confirmando que no hay desbordamientos, textos recortados ni áreas desiertas.
+  - Ejecución limpia de scripts sin errores y verificación de los archivos PDF y PPTX compilados.
+
+---
+
 ## [2026-11-03 22:26] Seguridad Proactiva (AgentShield): Remoción de Clave Real RPA_API_KEY Expuesta en README.md
 
 - **Fecha y Hora:** 2026-11-03 22:26:00 -05:00
