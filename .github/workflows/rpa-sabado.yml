@@ -1,4 +1,4 @@
-name: RPA Sofia Plus - Sincronización de Inasistencias
+name: RPA Sofia Plus - Subir Novedades a Sofia Plus
 
 on:
   schedule:
@@ -7,20 +7,20 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: 'Modo de ejecución'
+        description: 'Modo de ejecución (confirmar = Registrar y subir novedades reales / dry-run = Simulación)'
         required: true
-        default: 'dry-run'
+        default: 'confirmar'
         type: choice
         options:
-          - 'dry-run'
           - 'confirmar'
+          - 'dry-run'
       docente:
-        description: 'Cédula de un docente específico (dejar vacío para todos)'
+        description: 'Cédula de un docente específico (dejar vacío para procesar todas las fichas)'
         required: false
         default: ''
         type: string
       limite:
-        description: 'Límite de inasistencias a procesar por docente (ej. 2)'
+        description: 'Límite de inasistencias a procesar por docente (ej. 2 para pruebas, o vacío para todas)'
         required: false
         default: ''
         type: string
@@ -56,16 +56,21 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
 
-      - name: 5. Ejecutar Robot RPA de Inasistencias
+      - name: 5. Ejecutar Robot RPA de Inasistencias y Novedades
         working-directory: rpa
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           RPA_API_KEY: ${{ secrets.RPA_API_KEY }}
           HEADLESS: 'true'
         run: |
+          # Fallback automático a la API productiva de Asista si no hay secreto configurado
+          if [ -z "$API_BASE_URL" ]; then
+            export API_BASE_URL="https://asista.onrender.com"
+          fi
+
           ARGS="--auto --headless"
 
-          # Determinar modo: cron siempre ejecuta en modo real si no es workflow_dispatch
+          # Determinar modo: cron o dispatch confirmar ejecutan en modo real
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ github.event.inputs.modo }}" = "confirmar" ]; then
               ARGS="$ARGS --confirmar-registro"
@@ -83,11 +88,12 @@ jobs:
               ARGS="$ARGS --limite ${{ github.event.inputs.limite }}"
             fi
           else
-            # Ejecución automática de sábado en la noche
+            # Ejecución automática programada (sábado 11:00 PM Colombia)
             ARGS="$ARGS --batch --confirmar-registro"
           fi
 
           echo "===================================================="
+          echo "🤖 Servidor API Asista: $API_BASE_URL"
           echo "🤖 Ejecutando Robot RPA con los parámetros:"
           echo "node bot_inasistencias_sofia.js $ARGS"
           echo "===================================================="

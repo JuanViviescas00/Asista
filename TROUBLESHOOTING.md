@@ -1,5 +1,29 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-06 23:05] Optimización del Orquestador RPA para Subida Activa de Novedades a Sofia Plus
+
+- **Fecha y Hora:** 2026-11-06 23:05:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - En el repositorio de Asista (`GitHub Actions`), al ejecutar manualmente el flujo `.github/workflows/rpa-sabado.yml`, el selector por defecto iniciaba en `dry-run` (simulación), requiriendo intervención manual para cambiarlo a modo de confirmación real. Adicionalmente, si el secreto `API_BASE_URL` no estaba definido en los secretos del repositorio, el robot intentaba conectarse por defecto a `localhost:3000` en el runner de GitHub, provocando error de conexión.
+  - Se requería que el workflow estuviera preparado para subir las novedades directamente (`confirmar` por defecto) y con enlace directo a la API de producción de Asista (`https://asista.onrender.com`).
+- **Causa Raíz:**
+  - La directiva `inputs.modo.default` en el archivo YAML estaba fijada en `'dry-run'` y la variable de entorno `API_BASE_URL` carecía de fallback hacia el dominio de producción `https://asista.onrender.com` en el entorno Linux del runner.
+- **Solución Aplicada:**
+  1. *Workflow de GitHub Actions (`.github/workflows/rpa-sabado.yml`):*
+     - Renombrado a `RPA Sofia Plus - Subir Novedades a Sofia Plus` para claridad operativa.
+     - Configurado `default: 'confirmar'` en el parámetro interactivo `modo`.
+     - Añadido fallback en bash: si `API_BASE_URL` está vacía en los secretos, se exporta automáticamente `https://asista.onrender.com`.
+  2. *Sincronización y Publicación:*
+     - Commit y push directo hacia la rama `main` de los repositorios remotos `asista` y `origin`.
+- **Archivos Modificados:**
+  - `.github/workflows/rpa-sabado.yml`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Validación de sintaxis YAML de GitHub Actions.
+  - Pruebas unitarias del backend ejecutadas sin regresiones.
+
+---
+
 ## [2026-11-06 22:45] Asignación y Gestión de Apodos / Nombres Amigables para Dispositivos de Docentes
 
 - **Fecha y Hora:** 2026-11-06 22:45:00 -05:00
