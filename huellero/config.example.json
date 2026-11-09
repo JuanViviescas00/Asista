@@ -1,0 +1,7 @@
+{
+  "deviceId": null,
+  "token": null,
+  "backendUrl": "https://asista.onrender.com",
+  "wsUrl": "wss://asista.onrender.com",
+  "BIOMETRIC_MATCH_THRESHOLD": 21474
+}

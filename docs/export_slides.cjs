@@ -16,9 +16,9 @@ const fs = require('fs');
   console.log('Loading:', fileUrl);
   await page.goto(fileUrl, { waitUntil: 'networkidle' });
 
-  // Hide the floating bottom-nav buttons for clean presentation export
+  // Hide the floating bottom-nav buttons and top progress bar for clean presentation export
   await page.addStyleTag({
-    content: '.bottom-nav { display: none !important; }'
+    content: '.bottom-nav, .progress-bar-container { display: none !important; }'
   });
 
   const totalSlides = await page.evaluate(() => document.querySelectorAll('.slide').length);

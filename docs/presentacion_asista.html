@@ -3,32 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SISTEMA ASISTA · Inducción y Presentación Dinámica para Nuevos Aprendices</title>
+  <title>SISTEMA ASISTA · Inducción ADSO</title>
   
   <!-- Tipografía moderna estilo Gamma -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
     :root {
       --bg-dark: #060b08;
-      --card-bg: rgba(14, 25, 19, 0.94);
-      --card-border: rgba(70, 214, 124, 0.28);
-      --card-hover: rgba(70, 214, 124, 0.55);
+      --card-bg: rgba(14, 25, 19, 0.90);
+      --card-border: rgba(70, 214, 124, 0.24);
       --green-accent: #46d67c;
       --green-sena: #39A900;
-      --cyan-tech: #38bdf8;
-      --purple-tech: #c084fc;
       --amber-tech: #fbbf24;
       --orange-tech: #f97316;
       --red-tech: #ef4444;
-      --text-main: #f8fafc;
+      --text-main: #ffffff;
       --text-muted: #cbd5e1;
       --text-dim: #94a3b8;
       --radius-lg: 26px;
       --radius-md: 18px;
-      --radius-sm: 12px;
+      --radius-sm: 14px;
     }
 
     * {
@@ -52,21 +49,21 @@
       position: fixed;
       inset: 0;
       background-image: 
-        linear-gradient(rgba(36, 56, 44, 0.22) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(36, 56, 44, 0.22) 1px, transparent 1px);
-      background-size: 55px 55px;
+        linear-gradient(rgba(36, 56, 44, 0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(36, 56, 44, 0.18) 1px, transparent 1px);
+      background-size: 60px 60px;
       pointer-events: none;
       z-index: 0;
     }
 
     .ambient-glow {
       position: fixed;
-      width: 900px;
-      height: 900px;
+      width: 950px;
+      height: 950px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(57, 169, 0, 0.18) 0%, transparent 70%);
-      top: -240px;
-      right: -180px;
+      top: -220px;
+      right: -160px;
       pointer-events: none;
       z-index: 0;
     }
@@ -76,9 +73,9 @@
       width: 850px;
       height: 850px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(56, 189, 248, 0.13) 0%, transparent 70%);
-      bottom: -240px;
-      left: -180px;
+      background: radial-gradient(circle, rgba(56, 189, 248, 0.11) 0%, transparent 70%);
+      bottom: -220px;
+      left: -160px;
       pointer-events: none;
       z-index: 0;
     }
@@ -89,650 +86,599 @@
       top: 0;
       left: 0;
       width: 100%;
-      height: 6px;
-      background: rgba(255, 255, 255, 0.1);
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
       z-index: 100;
     }
 
     .progress-bar {
       height: 100%;
       width: 10%;
-      background: linear-gradient(90deg, var(--green-sena), var(--green-accent), var(--cyan-tech));
-      box-shadow: 0 0 18px var(--green-accent);
-      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      background: linear-gradient(90deg, var(--green-sena), var(--green-accent));
+      box-shadow: 0 0 16px var(--green-accent);
+      transition: width 0.35s ease;
     }
 
-    /* Header flotante superior */
-    .top-nav {
-      position: fixed;
-      top: 16px;
-      left: 40px;
-      right: 40px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      z-index: 50;
-      pointer-events: none;
-    }
-
-    .brand-tag {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      background: rgba(14, 25, 19, 0.92);
-      backdrop-filter: blur(18px);
-      border: 1px solid var(--card-border);
-      padding: 7px 20px;
-      border-radius: 999px;
-      pointer-events: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    }
-
-    .brand-logo-mini {
-      width: 28px;
-      height: 28px;
-      object-fit: contain;
-    }
-
-    .brand-name {
-      font-size: 16px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      color: #fff;
-    }
-
-    .brand-pill {
-      font-size: 13px;
-      font-weight: 700;
-      background: rgba(70, 214, 124, 0.22);
-      color: var(--green-accent);
-      padding: 3px 12px;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .slide-counter {
-      font-family: 'Space Grotesk', monospace;
-      font-size: 16px;
-      font-weight: 700;
-      color: #fff;
-      background: rgba(14, 25, 19, 0.92);
-      backdrop-filter: blur(18px);
-      border: 1px solid var(--card-border);
-      padding: 7px 20px;
-      border-radius: 999px;
-      pointer-events: auto;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    }
-
-    /* Contenedor central de diapositivas */
-    .deck-container {
+    /* Diapositivas */
+    .slide-deck {
       position: relative;
       width: 100vw;
       height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 56px 36px 24px 36px;
       z-index: 10;
     }
 
     .slide {
       position: absolute;
-      width: 96vw;
-      max-width: 1840px;
-      height: calc(100vh - 84px);
-      max-height: 980px;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: none;
+      padding: 60px 100px;
+      box-sizing: border-box;
       opacity: 0;
-      transform: translateY(20px) scale(0.985);
-      pointer-events: none;
-      transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      gap: 12px;
-      padding: 4px 12px;
+      transition: opacity 0.3s ease;
     }
 
     .slide.active {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-      pointer-events: auto;
-    }
-
-    /* Cabecera de diapositiva */
-    .slide-header {
-      flex-shrink: 0;
-    }
-
-    .slide-body {
-      flex: 1;
       display: flex;
       flex-direction: column;
-      min-height: 0;
-      overflow: hidden;
+      justify-content: center;
+      opacity: 1;
+    }
+
+    /* Tipografía común */
+    .eyebrow {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--green-accent);
+      margin-bottom: 16px;
+    }
+
+    .slide-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 56px;
+      font-weight: 700;
+      line-height: 1.15;
+      color: var(--text-main);
+      margin-bottom: 38px;
+      letter-spacing: -0.02em;
     }
 
     .slide-footer-note {
-      flex-shrink: 0;
-      font-size: 18.5px;
+      font-size: 21px;
       color: var(--text-dim);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding-top: 4px;
-    }
-
-    /* Tipografía de Alto Impacto */
-    .gamma-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 16.5px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--green-accent);
-      margin-bottom: 4px;
-    }
-
-    .eyebrow-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--green-accent);
-      box-shadow: 0 0 10px var(--green-accent);
-    }
-
-    .gamma-title {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: clamp(36px, 2.8vw, 48px);
-      font-weight: 800;
-      color: #ffffff;
-      line-height: 1.15;
-      letter-spacing: -0.5px;
-      margin-bottom: 4px;
-    }
-
-    .gamma-title span {
-      background: linear-gradient(135deg, #ffffff 25%, var(--green-accent) 80%, var(--cyan-tech) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .gamma-subtitle {
-      font-size: clamp(19px, 1.35vw, 23px);
-      color: var(--text-muted);
-      line-height: 1.42;
-      max-width: 1600px;
-    }
-
-    /* Grids expansivos */
-    .gamma-grid {
-      display: grid;
-      gap: 20px;
-      width: 100%;
-      height: 100%;
-      align-items: stretch;
-      min-height: 0;
-    }
-
-    .grid-2 { grid-template-columns: repeat(2, 1fr); }
-    .grid-3 { grid-template-columns: repeat(3, 1fr); }
-    .grid-4 { grid-template-columns: repeat(4, 1fr); }
-
-    .grid-preview-layout {
-      display: grid;
-      grid-template-columns: 38% 1fr;
-      gap: 22px;
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      align-items: stretch;
-    }
-
-    /* Tarjetas estilo Gamma con distribución armónica */
-    .gamma-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(18px);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-md);
-      padding: 24px 24px;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 12px;
-      height: 100%;
-      min-height: 0;
-      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.45);
-    }
-
-    .gamma-card:hover {
-      border-color: var(--card-hover);
-      transform: translateY(-2px);
-      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.6), 0 0 25px rgba(70, 214, 124, 0.16);
-    }
-
-    .card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .card-badge {
-      font-size: 15px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      padding: 5px 14px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-    }
-
-    .badge-green {
-      background: rgba(70, 214, 124, 0.2);
-      color: var(--green-accent);
-      border: 1px solid rgba(70, 214, 124, 0.45);
-    }
-
-    .badge-blue {
-      background: rgba(56, 189, 248, 0.2);
-      color: var(--cyan-tech);
-      border: 1px solid rgba(56, 189, 248, 0.45);
-    }
-
-    .badge-purple {
-      background: rgba(192, 132, 252, 0.2);
-      color: var(--purple-tech);
-      border: 1px solid rgba(192, 132, 252, 0.45);
-    }
-
-    .badge-amber {
-      background: rgba(245, 158, 11, 0.2);
-      color: var(--amber-tech);
-      border: 1px solid rgba(245, 158, 11, 0.45);
-    }
-
-    .badge-orange {
-      background: rgba(249, 115, 22, 0.2);
-      color: var(--orange-tech);
-      border: 1px solid rgba(249, 115, 22, 0.45);
-    }
-
-    .badge-red {
-      background: rgba(239, 68, 68, 0.2);
-      color: var(--red-tech);
-      border: 1px solid rgba(239, 68, 68, 0.45);
-    }
-
-    .card-title {
-      font-size: 27px;
-      font-weight: 800;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      line-height: 1.25;
-    }
-
-    .card-text {
-      font-size: 21.5px;
-      color: var(--text-muted);
+      margin-top: 36px;
       line-height: 1.5;
     }
 
-    .card-detail-box {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      border-radius: var(--radius-sm);
-      padding: 12px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
+    .text-green { color: var(--green-accent); }
+    .text-amber { color: var(--amber-tech); }
+    .text-orange { color: var(--orange-tech); }
+    .text-red { color: var(--red-tech); }
 
-    .card-detail-title {
-      font-size: 19px;
-      font-weight: 700;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .card-detail-desc {
-      font-size: 18.5px;
-      color: var(--text-muted);
-      line-height: 1.42;
-    }
-
-    .card-footer-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      color: #e2e8f0;
-      background: rgba(255, 255, 255, 0.06);
-      padding: 8px 16px;
-      border-radius: 999px;
-      align-self: flex-start;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-    }
-
-    /* Números y Métricas */
-    .stat-number {
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 76px;
-      font-weight: 800;
-      color: var(--green-accent);
-      line-height: 1;
-      text-shadow: 0 0 24px rgba(70, 214, 124, 0.35);
-    }
-
-    .stat-label {
-      font-size: 19px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #fff;
-    }
-
-    /* Tecnologías en Lista Estructurada */
-    .tech-item-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      transition: all 0.2s ease;
-    }
-
-    .tech-item-row:hover {
-      background: rgba(70, 214, 124, 0.12);
-      border-color: rgba(70, 214, 124, 0.4);
-    }
-
-    .tech-item-icon {
-      font-size: 24px;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    .tech-item-name {
-      font-size: 19.5px;
-      font-weight: 800;
-      color: #fff;
-      display: block;
-    }
-
-    .tech-item-desc {
-      font-size: 17.5px;
-      color: var(--text-muted);
-      line-height: 1.38;
-      margin-top: 2px;
-    }
-
-    /* Diagrama de Arquitectura / Viaje del Dato */
-    .data-journey-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      background: rgba(14, 25, 19, 0.9);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-md);
-      padding: 12px 22px;
-      margin-bottom: 12px;
-      flex-shrink: 0;
-    }
-
-    .journey-step {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 17.5px;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    .journey-step-num {
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      background: var(--green-sena);
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      font-weight: 800;
-    }
-
-    .journey-arrow {
-      color: var(--green-accent);
-      font-size: 20px;
-      font-weight: 800;
-    }
-
-    /* Timeline Horizontal */
-    .timeline-container {
-      display: flex;
-      gap: 16px;
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-    }
-
-    .timeline-step {
-      flex: 1;
+    /* Tarjetas base */
+    .card-base {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: var(--radius-md);
-      padding: 22px 20px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 10px;
-      height: 100%;
-      min-height: 0;
-      position: relative;
-      box-shadow: 0 14px 35px rgba(0, 0, 0, 0.45);
-      transition: all 0.25s ease;
+      border-radius: var(--radius-lg);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
     }
 
-    .timeline-step:hover {
-      border-color: var(--card-hover);
-      transform: translateY(-2px);
-    }
-
-    .step-time {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 19px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-    }
-
-    /* Marco para Screenshots Reales */
-    .app-preview-frame {
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      background: #09120e;
-      height: 100%;
-      max-height: 100%;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.65), 0 0 30px rgba(70, 214, 124, 0.12);
-    }
-
-    .app-preview-header {
-      background: #13221a;
-      padding: 10px 18px;
-      display: flex;
+    /* ========================================================
+       SLIDE 1: PORTADA (Logo ASISTA reemplaza al check)
+       ======================================================== */
+    .slide-1 {
       align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      flex-shrink: 0;
+      text-align: center;
     }
 
-    .preview-header-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .preview-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-
-    .preview-title {
-      font-size: 14.5px;
-      font-weight: 700;
-      color: #94a3b8;
-      margin-left: 8px;
-      font-family: 'Space Grotesk', monospace;
-    }
-
-    .preview-badge-live {
-      font-size: 12.5px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      background: rgba(70, 214, 124, 0.2);
-      color: var(--green-accent);
-      border: 1px solid rgba(70, 214, 124, 0.45);
-      padding: 2px 10px;
-      border-radius: 999px;
-    }
-
-    .app-preview-body {
-      flex: 1;
+    .asista-hero-box {
+      width: 108px;
+      height: 108px;
+      border-radius: 26px;
+      border: 1.5px solid rgba(70, 214, 124, 0.5);
+      background: rgba(57, 169, 0, 0.08);
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #050a07;
-      padding: 10px;
-      min-height: 0;
-      overflow: hidden;
+      margin-bottom: 24px;
+      box-shadow: 0 0 36px rgba(57, 169, 0, 0.30);
     }
 
-    .app-preview-img {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
+    .asista-hero-logo {
+      width: 68px;
       height: auto;
-      object-fit: contain !important;
-      display: block;
-      border-radius: 6px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-      image-rendering: -webkit-optimize-contrast;
+      max-height: 76px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 10px rgba(70, 214, 124, 0.45));
     }
 
-    /* Portada Hero */
-    .hero-center {
+    .hero-eyebrow {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--green-accent);
+      margin-bottom: 18px;
+    }
+
+    .hero-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 104px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 24px;
+    }
+
+    .hero-subtitle {
+      font-size: 24px;
+      color: var(--text-muted);
+      max-width: 1020px;
+      line-height: 1.55;
+      margin-bottom: 38px;
+    }
+
+    .author-pills-row {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .author-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+      padding: 12px 28px;
+      font-size: 19px;
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+
+    .hero-footer {
+      font-size: 17px;
+      color: var(--text-dim);
+      margin-top: 32px;
+    }
+
+    /* ========================================================
+       SLIDE 2: FINALIDAD DEL SISTEMA
+       ======================================================== */
+    .grid-4-cols {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      width: 100%;
+    }
+
+    .card-slide-2 {
+      padding: 46px 34px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-slide-2 h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--green-accent);
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-slide-2 p {
+      font-size: 22px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 3: OBJETIVOS
+       ======================================================== */
+    .card-slide-3 {
+      padding: 46px 34px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .num-badge {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--green-accent);
+      margin-bottom: 18px;
+    }
+
+    .card-slide-3 h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 20px;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+
+    .card-slide-3 p {
+      font-size: 22px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 4: ARQUITECTURA Y TECNOLOGÍA
+       ======================================================== */
+    .steps-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 16px;
+      width: 100%;
+      margin-bottom: 30px;
+    }
+
+    .step-box {
+      padding: 24px 18px;
+      min-height: 125px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border: 1px solid rgba(70, 214, 124, 0.35);
+    }
+
+    .step-num {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--green-accent);
+      margin-bottom: 8px;
+    }
+
+    .step-val {
+      font-size: 21px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.3;
+    }
+
+    .grid-3-cols {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 26px;
+      width: 100%;
+    }
+
+    .card-slide-4 {
+      padding: 42px 36px;
+      min-height: 250px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .card-slide-4 h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 16px;
+    }
+
+    .card-slide-4 p {
+      font-size: 23px;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 5: TIEMPOS DE LLEGADA
+       ======================================================== */
+    .top-row-slide-5 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 22px;
+      width: 100%;
+      margin-bottom: 24px;
+    }
+
+    .card-slide-5-top {
+      padding: 34px 26px;
+      min-height: 260px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .time-range {
+      font-size: 21px;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .status-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 46px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 14px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-slide-5-top p {
+      font-size: 21px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+
+    .card-border-green { border-color: rgba(70, 214, 124, 0.65); }
+    .card-border-amber { border-color: rgba(251, 191, 36, 0.65); }
+    .card-border-orange { border-color: rgba(249, 115, 22, 0.65); }
+    .card-border-red { border-color: rgba(239, 68, 68, 0.65); }
+
+    .bottom-row-slide-5 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      width: 100%;
+    }
+
+    .card-slide-5-bottom {
+      padding: 30px 34px;
+      min-height: 130px;
+      display: flex;
+      align-items: center;
+    }
+
+    .card-slide-5-bottom p {
+      font-size: 22px;
+      line-height: 1.55;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 6: EXCUSAS · ACUERDO 009 DE 2024
+       ======================================================== */
+    .grid-2-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      width: 100%;
+    }
+
+    .card-slide-6 {
+      padding: 54px 48px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .giant-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 140px;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--green-accent);
+      margin-bottom: 14px;
+      letter-spacing: -0.03em;
+    }
+
+    .giant-word {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 70px;
+      font-weight: 800;
+      line-height: 1.1;
+      color: var(--green-accent);
+      margin-bottom: 16px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-lead {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 18px;
+    }
+
+    .card-slide-6 p {
+      font-size: 23px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 7: SEGURIDAD Y DATOS PERSONALES
+       ======================================================== */
+    .card-slide-7 {
+      padding: 46px 34px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-slide-7 h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--green-accent);
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-slide-7 p {
+      font-size: 22px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 8: ROBOT RPA · SOFÍA PLUS
+       ======================================================== */
+    .card-slide-8 {
+      padding: 48px 40px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .phase-tag {
+      font-size: 21px;
+      font-weight: 600;
+      color: var(--green-accent);
+      margin-bottom: 20px;
+    }
+
+    .phase-val {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 22px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .card-slide-8 p {
+      font-size: 23px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 9: MONITOREO PREVENTIVO
+       ======================================================== */
+    .card-slide-9 {
+      padding: 50px 42px;
+      min-height: 410px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-slide-9 h3 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 48px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .card-slide-9 p {
+      font-size: 23px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    /* ========================================================
+       SLIDE 10: GRACIAS / PREGUNTAS
+       ======================================================== */
+    .slide-10 {
+      align-items: center;
+      text-align: center;
+    }
+
+    .slide-10-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 104px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin-bottom: 26px;
+    }
+
+    .slide-10-subtitle {
+      font-size: 24px;
+      color: var(--text-muted);
+      max-width: 980px;
+      line-height: 1.55;
+      margin-bottom: 50px;
+    }
+
+    .metrics-row {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 50px;
+    }
+
+    .metric-card {
+      width: 310px;
+      padding: 42px 30px;
       text-align: center;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100%;
     }
 
-    .hero-logo-box {
-      width: 170px;
-      height: 170px;
-      border-radius: 36px;
-      background: radial-gradient(circle, rgba(70, 214, 124, 0.3) 0%, transparent 70%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 2px solid rgba(70, 214, 124, 0.55);
-      margin-bottom: 20px;
-      box-shadow: 0 0 50px rgba(70, 214, 124, 0.35);
+    .metric-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 68px;
+      font-weight: 800;
+      color: var(--green-accent);
+      line-height: 1;
+      margin-bottom: 14px;
+      letter-spacing: -0.02em;
     }
 
-    .hero-logo-box img {
-      width: 125px;
-      height: 125px;
-      object-fit: contain;
+    .metric-label {
+      font-size: 21px;
+      color: var(--text-muted);
     }
 
-    .team-pills {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-      max-width: 1300px;
-      margin-top: 24px;
-    }
-
-    .team-pill {
-      font-size: 17.5px;
-      font-weight: 600;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      padding: 9px 20px;
-      border-radius: 999px;
-      color: #e2e8f0;
-    }
-
-    /* Controles de Navegación */
+    /* Controles de navegación en pantalla */
     .bottom-nav {
       position: fixed;
-      bottom: 16px;
+      bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
       align-items: center;
-      gap: 16px;
-      background: rgba(14, 25, 19, 0.94);
-      backdrop-filter: blur(18px);
-      border: 1px solid var(--card-border);
-      padding: 7px 22px;
-      border-radius: 999px;
+      gap: 20px;
+      background: rgba(14, 25, 19, 0.85);
+      border: 1px solid rgba(70, 214, 124, 0.25);
+      padding: 10px 24px;
+      border-radius: 9999px;
+      backdrop-filter: blur(12px);
       z-index: 50;
-      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.65);
     }
 
     .nav-btn {
       background: transparent;
       border: none;
       color: var(--text-main);
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
+      cursor: pointer;
+      font-size: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      transition: background 0.2s;
     }
 
     .nav-btn:hover {
-      background: rgba(70, 214, 124, 0.25);
-      color: var(--green-accent);
+      background: rgba(255, 255, 255, 0.1);
     }
 
-    .nav-hints {
-      font-size: 14px;
-      color: var(--text-dim);
-      padding: 0 16px;
-      border-left: 1px solid rgba(255, 255, 255, 0.12);
-      border-right: 1px solid rgba(255, 255, 255, 0.12);
+    .slide-counter {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-muted);
+      min-width: 60px;
+      text-align: center;
     }
   </style>
 </head>
 <body>
 
+  <!-- Elementos de fondo ambiental -->
   <div class="bg-grid"></div>
   <div class="ambient-glow"></div>
   <div class="ambient-glow-2"></div>
@@ -742,896 +688,367 @@
     <div class="progress-bar" id="progressBar"></div>
   </div>
 
-  <!-- Header Superior -->
-  <header class="top-nav">
-    <div class="brand-tag">
-      <img src="asista_logo.png" alt="Logo" class="brand-logo-mini">
-      <span class="brand-name">ASISTA</span>
-      <span class="brand-pill">Inducción ADSO</span>
-    </div>
-    <div class="slide-counter" id="slideCounter">01 / 10</div>
-  </header>
+  <!-- Contenedor del mazo de diapositivas -->
+  <div class="slide-deck">
 
-  <!-- CONTENEDOR DE DIAPOSITIVAS -->
-  <main class="deck-container">
+    <!-- ==========================================
+         SLIDE 1: PORTADA
+         ========================================== -->
+    <section class="slide slide-1 active" id="slide-1">
+      <div class="asista-hero-box">
+        <img src="asista_fingerprint_clean.png" alt="Logo ASISTA" class="asista-hero-logo">
+      </div>
+      <div class="hero-eyebrow">Inducción a nuevos aprendices · Formación profesional integral</div>
+      <h1 class="hero-title">SISTEMA <span class="text-green">ASISTA</span></h1>
+      <p class="hero-subtitle">Control biométrico de asistencia institucional, seguimiento al debido proceso formativo y la ingeniería de software real que aprenderás a construir en el SENA.</p>
+      
+      <div class="author-pills-row">
+        <span class="author-pill">Ivan Rene Figueroa</span>
+        <span class="author-pill">Cesar Alejandro Salamanca</span>
+        <span class="author-pill">Maria Juliana Saavedra</span>
+      </div>
+      <div class="author-pills-row">
+        <span class="author-pill">Oscar Andres Arciniegas</span>
+        <span class="author-pill">Juan Camilo Viviescas</span>
+      </div>
 
-    <!-- SLIDE 1: BIENVENIDA HERO -->
-    <section class="slide active hero-center">
-      <div class="hero-logo-box">
-        <img src="asista_logo.png" alt="ASISTA Biometría">
-      </div>
-      <div class="gamma-eyebrow">
-        <span class="eyebrow-dot"></span>
-        Inducción a Nuevos Aprendices · Formación Profesional Integral
-      </div>
-      <h1 class="gamma-title" style="font-size: 74px; margin-bottom: 14px;">
-        SISTEMA <span>ASISTA</span>
-      </h1>
-      <p class="gamma-subtitle" style="text-align: center; max-width: 1250px; font-size: 24px; margin-bottom: 20px;">
-        Control biométrico de asistencia institucional, seguimiento al debido proceso formativo y la ingeniería de software real que aprenderás a construir en el SENA.
-      </p>
+      <div class="hero-footer">Tecnología en Análisis y Desarrollo de Software (ADSO) · Centro Agroturístico · Regional Santander</div>
+    </section>
 
-      <div class="team-pills">
-        <span class="team-pill">👨‍💻 Ivan Rene Figueroa</span>
-        <span class="team-pill">👨‍💻 Cesar Alejandro Salamanca</span>
-        <span class="team-pill">👩‍💻 Maria Juliana Saavedra</span>
-        <span class="team-pill">👨‍💻 Oscar Andres Arciniegas</span>
-        <span class="team-pill">👨‍💻 Juan Camilo Viviescas</span>
+    <!-- ==========================================
+         SLIDE 2: FINALIDAD DEL SISTEMA
+         ========================================== -->
+    <section class="slide" id="slide-2">
+      <div class="eyebrow">Finalidad del sistema</div>
+      <h2 class="slide-title">Menos filas. Más tiempo para<br>formarte.</h2>
+      
+      <div class="grid-4-cols">
+        <div class="card-base card-slide-2">
+          <h3>Sin filas</h3>
+          <p>Tu asistencia se registra con la huella en menos de un segundo, sin llamado a lista de 20 minutos.</p>
+        </div>
+        <div class="card-base card-slide-2">
+          <h3>Consulta</h3>
+          <p>Revisa tus inasistencias y tardanzas con tu número de documento desde un portal público.</p>
+        </div>
+        <div class="card-base card-slide-2">
+          <h3>Excusas</h3>
+          <p>Radica tu excusa en digital dentro de los 5 días hábiles, desde el celular o el computador.</p>
+        </div>
+        <div class="card-base card-slide-2">
+          <h3>Móvil</h3>
+          <p>El portal es responsive: funciona igual de bien en el celular.</p>
+        </div>
       </div>
-      <div style="margin-top: 24px; font-size: 19.5px; color: var(--text-muted); font-weight: 600;">
-        Tecnología en Análisis y Desarrollo de Software (ADSO) · Centro Agroturístico · Regional Santander
+
+      <div class="slide-footer-note">Pensado para que el aprendiz siempre sepa cómo va su proceso, antes de que sea tarde.</div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 3: OBJETIVOS
+         ========================================== -->
+    <section class="slide" id="slide-3">
+      <div class="eyebrow">Objetivos</div>
+      <h2 class="slide-title">Automatizar la asistencia y proteger el<br>debido proceso del aprendiz.</h2>
+      
+      <div class="grid-4-cols">
+        <div class="card-base card-slide-3">
+          <div class="num-badge">01</div>
+          <h3>Identificación biométrica 1:N</h3>
+          <p>Una sola huella identifica al aprendiz entre todos los registrados.</p>
+        </div>
+        <div class="card-base card-slide-3">
+          <div class="num-badge">02</div>
+          <h3>Offline-first</h3>
+          <p>Si se cae internet, el huellero sigue registrando y sincroniza después.</p>
+        </div>
+        <div class="card-base card-slide-3">
+          <div class="num-badge">03</div>
+          <h3>Debido proceso</h3>
+          <p>Excusas con plazo, soportes y trazabilidad de cada decisión.</p>
+        </div>
+        <div class="card-base card-slide-3">
+          <div class="num-badge">04</div>
+          <h3>Robot RPA</h3>
+          <p>Un robot lleva las novedades a Sofía Plus para evitar la digitación manual.</p>
+        </div>
       </div>
     </section>
 
-    <!-- SLIDE 2: FINALIDAD + CAPTURA REAL DEL PORTAL -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Propósito y Beneficios</div>
-        <h2 class="gamma-title">La Finalidad: ¿Cómo te <span>beneficia a ti</span>?</h2>
-        <p class="gamma-subtitle">ASISTA elimina la pérdida de tiempo del papel y te entrega autonomía directa sobre tu seguimiento escolar desde tu celular o computador.</p>
-      </div>
-
-      <div class="slide-body">
-        <div class="grid-preview-layout">
-          <!-- Columna izquierda: 3 Beneficios Claros -->
-          <div style="display: flex; flex-direction: column; gap: 12px; height: 100%; justify-content: space-between; min-height: 0;">
-            <div class="gamma-card" style="padding: 18px 22px; gap: 6px;">
-              <div class="card-top">
-                <span class="card-badge badge-green">Rapidez en Aula</span>
-                <span style="font-size: 24px;">⚡</span>
-              </div>
-              <div class="card-title" style="font-size: 24px;">Cero Filas ni Llamados</div>
-              <p class="card-text" style="font-size: 19.5px;">Pones tu dedo en el sensor óptico y en <strong>menos de 1 segundo</strong> quedas registrado como Presente. Se recuperan más de 20 minutos de formación diaria que antes se perdían pasando lista.</p>
-            </div>
-
-            <div class="gamma-card" style="padding: 18px 22px; gap: 6px;">
-              <div class="card-top">
-                <span class="card-badge badge-blue">Transparencia Total</span>
-                <span style="font-size: 24px;">📱</span>
-              </div>
-              <div class="card-title" style="font-size: 24px;">Consulta por Documento</div>
-              <p class="card-text" style="font-size: 19.5px;">Sin contraseñas complicadas: ingresas con tu <strong>número de documento</strong> y auditas al instante tus asistencias, horas de retardo acumuladas y porcentaje en vivo.</p>
-            </div>
-
-            <div class="gamma-card" style="padding: 18px 22px; gap: 6px;">
-              <div class="card-top">
-                <span class="card-badge badge-purple">Debido Proceso</span>
-                <span style="font-size: 24px;">📄</span>
-              </div>
-              <div class="card-title" style="font-size: 24px;">Radicación Digital de Excusas</div>
-              <p class="card-text" style="font-size: 19.5px;">¿Tuviste cita médica o incapacidad? Radica tus soportes de EPS o SURA en PDF o foto directamente desde el portal dentro de los <strong>5 días hábiles</strong> reglamentarios.</p>
-            </div>
-          </div>
-
-          <!-- Columna derecha: Captura real del Portal del Aprendiz Completa y Nítida -->
-          <div class="app-preview-frame">
-            <div class="app-preview-header">
-              <div class="preview-header-left">
-                <span class="preview-dot" style="background: #ef4444;"></span>
-                <span class="preview-dot" style="background: #fbbf24;"></span>
-                <span class="preview-dot" style="background: #46d67c;"></span>
-                <span class="preview-title">Portal del Aprendiz SENA · Vista Oficial en Producción</span>
-              </div>
-              <span class="preview-badge-live">En Línea</span>
-            </div>
-            <div class="app-preview-body">
-              <img src="capturas_manual/13_panel_aprendiz.png" alt="Portal del Aprendiz SENA" class="app-preview-img">
-            </div>
-          </div>
+    <!-- ==========================================
+         SLIDE 4: ARQUITECTURA Y TECNOLOGÍA
+         ========================================== -->
+    <section class="slide" id="slide-4">
+      <div class="eyebrow">Arquitectura y tecnología</div>
+      <h2 class="slide-title">Del sensor a Sofía Plus, en seis pasos</h2>
+      
+      <div class="steps-row">
+        <div class="card-base step-box">
+          <div class="step-num">1 · Sensor</div>
+          <div class="step-val">Lector U.are.U 4500</div>
+        </div>
+        <div class="card-base step-box">
+          <div class="step-num">2 · Huellero</div>
+          <div class="step-val">App Electron + Koffi (C++)</div>
+        </div>
+        <div class="card-base step-box">
+          <div class="step-num">3 · API</div>
+          <div class="step-val">REST en Node 22 + MongoDB</div>
+        </div>
+        <div class="card-base step-box">
+          <div class="step-num">4 · Web</div>
+          <div class="step-val">Vue 3 + Quasar</div>
+        </div>
+        <div class="card-base step-box">
+          <div class="step-num">5 · Robot</div>
+          <div class="step-val">RPA con Playwright</div>
+        </div>
+        <div class="card-base step-box">
+          <div class="step-num">6 · Destino</div>
+          <div class="step-val">Sofía Plus</div>
         </div>
       </div>
 
-      <div class="slide-footer-note">
-        💡 <em>El portal es de acceso público y responsive: puedes consultarlo desde cualquier navegador móvil o de escritorio.</em>
+      <div class="grid-3-cols">
+        <div class="card-base card-slide-4">
+          <h3>Ambiente</h3>
+          <p>Electron 30 · Koffi FFI · SDK DigitalPersona</p>
+        </div>
+        <div class="card-base card-slide-4">
+          <h3>Backend y nube</h3>
+          <p>Node 22 · Express · MongoDB Atlas · Socket.IO</p>
+        </div>
+        <div class="card-base card-slide-4">
+          <h3>Frontend y RPA</h3>
+          <p>Vue 3 · Vite · Quasar 2 · Playwright</p>
+        </div>
       </div>
     </section>
 
-    <!-- SLIDE 3: OBJETIVOS DEL PROYECTO -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Metas de Ingeniería</div>
-        <h2 class="gamma-title">Objetivos del <span>Sistema ASISTA</span></h2>
-        <p class="gamma-subtitle">Los compromisos técnicos y funcionales cumplidos por el equipo para modernizar y garantizar el debido proceso en la asistencia.</p>
-      </div>
-
-      <div class="slide-body">
-        <div class="gamma-grid grid-2">
-          <!-- Columna Izquierda: Objetivo General y Alcance -->
-          <div class="gamma-card" style="border-left: 6px solid var(--green-accent);">
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-              <div class="card-badge badge-green" style="align-self: flex-start;">Objetivo General</div>
-              <div class="card-title" style="font-size: 32px;">Automatizar el Control Integral de Asistencia</div>
-              <p class="card-text" style="font-size: 22px;">
-                Diseñar, construir e implementar una solución integral que identifique biométricamente a los aprendices en el aula presencial, compute retardos según la jornada, garantice trazabilidad y sincronice de forma autónoma con <strong>SENA Sofia Plus</strong>.
-              </p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box" style="background: rgba(70,214,124,0.08); border-color: rgba(70,214,124,0.25);">
-                <div class="card-detail-title" style="color: var(--green-accent);">🎯 Alcance Técnico Integral:</div>
-                <div class="card-detail-desc">Cubre captura física con drivers C++ en el aula, backend en la nube, portal web y automatización robótica hacia la plataforma institucional.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">⚡ Eficiencia Operativa:</div>
-                <div class="card-detail-desc">Elimina el papel, previene errores de digitación y reduce el tiempo de registro de 20 minutos a menos de 1 segundo por aprendiz.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">🚀 Solución completa de aula a nube institucional</div>
-          </div>
-
-          <!-- Columna Derecha: 4 Módulos de Arquitectura Integrados -->
-          <div class="gamma-card" style="border-left: 6px solid var(--cyan-tech);">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-badge badge-blue" style="align-self: flex-start;">Arquitectura de 4 Módulos</div>
-              <div class="card-title" style="font-size: 32px;">Componentes de Ingeniería</div>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-              <div class="card-detail-box" style="border-color: rgba(56,189,248,0.25);">
-                <div class="card-detail-title" style="color: var(--cyan-tech);">⚡ 1. Identificación Biométrica 1:N</div>
-                <div class="card-detail-desc">Motor de subsegundo que compara la huella contra la base de datos local al instante sin esperas en el aula.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">💾 2. Operación Offline-First</div>
-                <div class="card-detail-desc">Capacidad de registrar asistencias de manera ininterrumpida sin conexión a internet y sincronizar al volver la red.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: var(--purple-tech);">⚖️ 3. Gestión del Debido Proceso</div>
-                <div class="card-detail-desc">Radicación y verificación digital de excusas médicas conforme a los términos del Acuerdo 009 de 2024.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: var(--green-accent);">🤖 4. Automatización Robótica (RPA)</div>
-                <div class="card-detail-desc">Robot autónomo con Playwright que digita las fallas consolidadas directamente en el portal SENA Sofia Plus.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">🛠️ Módulos desacoplados y coordinados</div>
-          </div>
+    <!-- ==========================================
+         SLIDE 5: TIEMPOS DE LLEGADA
+         ========================================== -->
+    <section class="slide" id="slide-5">
+      <div class="eyebrow">Tiempos de llegada</div>
+      <h2 class="slide-title">El reloj corre desde que el instructor activa la clase</h2>
+      
+      <div class="top-row-slide-5">
+        <div class="card-base card-slide-5-top card-border-green">
+          <div class="time-range text-green">00 – 10 min</div>
+          <div class="status-title">Presente</div>
+          <p>Llegaste a tiempo.</p>
+        </div>
+        <div class="card-base card-slide-5-top card-border-amber">
+          <div class="time-range text-amber">11 – 60 min</div>
+          <div class="status-title">Tardanza</div>
+          <p>Se acumula 1 hora de retardo.</p>
+        </div>
+        <div class="card-base card-slide-5-top card-border-orange">
+          <div class="time-range text-orange">61 – 120 min</div>
+          <div class="status-title">Tardanza</div>
+          <p>Se acumulan 2 horas de retardo.</p>
+        </div>
+        <div class="card-base card-slide-5-top card-border-red">
+          <div class="time-range text-red">Más de 120 min</div>
+          <div class="status-title">Falta</div>
+          <p>Falta de la jornada completa (6 h diurna, 5 h nocturna).</p>
         </div>
       </div>
 
-      <div class="slide-footer-note">
-        📌 <em>Proyecto formativo desarrollado y validado en ambientes reales de formación del Centro Agroturístico.</em>
+      <div class="bottom-row-slide-5">
+        <div class="card-base card-slide-5-bottom">
+          <p>El tiempo se mide desde que el instructor inicia la clase. Si no hay inicio registrado, se toma el horario de la jornada.</p>
+        </div>
+        <div class="card-base card-slide-5-bottom">
+          <p>Estos rangos están sujetos a las directrices de coordinación académica y pueden ajustarse.</p>
+        </div>
       </div>
     </section>
 
-    <!-- SLIDE 4: TECNOLOGÍAS + DIAGRAMA DE FLUJO DEL DATO -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Stack Tecnológico & Arquitectura</div>
-        <h2 class="gamma-title">Las Tecnologías que <span>Impulsan ASISTA</span></h2>
-        <p class="gamma-subtitle">Una arquitectura moderna basada en JavaScript moderno (ES Modules) de extremo a extremo, enlace con C++ nativo y nube distribuida.</p>
-      </div>
-
-      <div class="slide-body">
-        <!-- Diagrama visual del viaje del dato -->
-        <div class="data-journey-bar">
-          <div class="journey-step">
-            <span class="journey-step-num">1</span>
-            <span>Sensor U.are.U 4500</span>
-          </div>
-          <span class="journey-arrow">→</span>
-          <div class="journey-step">
-            <span class="journey-step-num">2</span>
-            <span>Kiosco (Electron + Koffi C++)</span>
-          </div>
-          <span class="journey-arrow">→</span>
-          <div class="journey-step">
-            <span class="journey-step-num">3</span>
-            <span>API REST (Node.js 22 + Mongo)</span>
-          </div>
-          <span class="journey-arrow">→</span>
-          <div class="journey-step">
-            <span class="journey-step-num">4</span>
-            <span>Web (Vue 3 / Quasar)</span>
-          </div>
-          <span class="journey-arrow">→</span>
-          <div class="journey-step">
-            <span class="journey-step-num">5</span>
-            <span>Robot RPA (Playwright)</span>
-          </div>
-          <span class="journey-arrow">→</span>
-          <div class="journey-step" style="color: var(--green-accent);">
-            <span class="journey-step-num" style="background: var(--green-accent); color: #000;">✓</span>
-            <span>SENA Sofia Plus</span>
-          </div>
+    <!-- ==========================================
+         SLIDE 6: EXCUSAS · ACUERDO 009 DE 2024
+         ========================================== -->
+    <section class="slide" id="slide-6">
+      <div class="eyebrow">Excusas · Acuerdo 009 de 2024</div>
+      <h2 class="slide-title">Tienes 5 días hábiles para justificar</h2>
+      
+      <div class="grid-2-cols">
+        <div class="card-base card-slide-6">
+          <div class="giant-num">5</div>
+          <div class="card-lead">días hábiles</div>
+          <p>Contados desde la inasistencia para radicar tu excusa en el sistema.</p>
         </div>
-
-        <!-- 3 Cards de Tecnologías con Filas Estructuradas -->
-        <div class="gamma-grid grid-3">
-          <div class="gamma-card">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-green">Cliente de Aula</span>
-                <span style="font-size: 24px;">🖥️</span>
-              </div>
-              <div class="card-title" style="font-size: 26px;">Aula (Escritorio)</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">Kiosco táctil con enlace binario de bajo nivel a los drivers del sensor óptico.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="tech-item-row">
-                <span class="tech-item-icon">⚡</span>
-                <div>
-                  <span class="tech-item-name">Electron 30</span>
-                  <span class="tech-item-desc">Shell de escritorio y entorno táctil para la terminal de aula.</span>
-                </div>
-              </div>
-              <div class="tech-item-row">
-                <span class="tech-item-icon">⚙️</span>
-                <div>
-                  <span class="tech-item-name">Koffi C++ FFI</span>
-                  <span class="tech-item-desc">Enlace nativo C++ de ultra bajo overhead con las DLLs biométricas.</span>
-                </div>
-              </div>
-              <div class="tech-item-row">
-                <span class="tech-item-icon">🔍</span>
-                <div>
-                  <span class="tech-item-name">DigitalPersona SDK</span>
-                  <span class="tech-item-desc">Extracción y match biométrico de minucias FMD en tiempo real.</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">🔌 Enlace binario nativo C++</div>
-          </div>
-
-          <div class="gamma-card">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-blue">Servicios Centrales</span>
-                <span style="font-size: 24px;">☁️</span>
-              </div>
-              <div class="card-title" style="font-size: 26px;">Backend & Nube</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">Servicios RESTful distribuidos, eventos en tiempo real y base de datos NoSQL.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="tech-item-row">
-                <span class="tech-item-icon">🟢</span>
-                <div>
-                  <span class="tech-item-name">Node.js 22 LTS & Express</span>
-                  <span class="tech-item-desc">API modular desacoplada con alta concurrencia y validaciones.</span>
-                </div>
-              </div>
-              <div class="tech-item-row">
-                <span class="tech-item-icon">🍃</span>
-                <div>
-                  <span class="tech-item-name">MongoDB Atlas</span>
-                  <span class="tech-item-desc">Base de datos cloud con modelos atómicos y trazabilidad de auditoría.</span>
-                </div>
-              </div>
-              <div class="tech-item-row">
-                <span class="tech-item-icon">🔌</span>
-                <div>
-                  <span class="tech-item-name">Socket.IO WebSockets</span>
-                  <span class="tech-item-desc">Emisión bidireccional instantánea entre aula y paneles web.</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">🛡️ Alta disponibilidad y persistencia segura</div>
-          </div>
-
-          <div class="gamma-card">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-purple">Usuario & RPA</span>
-                <span style="font-size: 24px;">🎨</span>
-              </div>
-              <div class="card-title" style="font-size: 26px;">Frontend & RPA</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">Portal web responsivo para aprendices e instructores y agentes autónomos.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="tech-item-row">
-                <span class="tech-item-icon">💚</span>
-                <div>
-                  <span class="tech-item-name">Vue 3 & Vite</span>
-                  <span class="tech-item-desc">Arquitectura SPA reactiva de carga ultrarrápida para celulares y PC.</span>
-                </div>
-              </div>
-              <div class="tech-item-row">
-                <span class="tech-item-icon">💎</span>
-                <div>
-                  <span class="tech-item-name">Quasar Framework 2</span>
-                  <span class="tech-item-desc">Componentes de interfaz Material Design con diseño accesible.</span>
-                </div>
-              </div>
-              <div class="tech-item-row">
-                <span class="tech-item-icon">🤖</span>
-                <div>
-                  <span class="tech-item-name">Playwright + GitHub Actions</span>
-                  <span class="tech-item-desc">Robot autónomo en la nube que digita novedades en Sofia Plus.</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">📱 Experiencia ágil y automatizada</div>
-          </div>
+        <div class="card-base card-slide-6">
+          <div class="giant-word">Aprobada</div>
+          <div class="card-lead">se descuentan las horas</div>
+          <p>Si el instructor la aprueba, esas horas dejan de contar como inasistencia injustificada.</p>
         </div>
       </div>
 
-      <div class="slide-footer-note">
-        💡 <em>Todo el código fue escrito por aprendices de la ficha ADSO, aplicando principios de arquitectura limpia.</em>
+      <div class="slide-footer-note">Pasado el plazo sin excusa, la inasistencia se reporta a Sofía Plus como injustificada.</div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 7: SEGURIDAD Y DATOS PERSONALES
+         ========================================== -->
+    <section class="slide" id="slide-7">
+      <div class="eyebrow">Seguridad y datos personales</div>
+      <h2 class="slide-title">¿Mi huella está segura?</h2>
+      
+      <div class="grid-4-cols">
+        <div class="card-base card-slide-7">
+          <h3>Sin imagen</h3>
+          <p>No se guarda la imagen de tu huella, solo una plantilla matemática (FMD).</p>
+        </div>
+        <div class="card-base card-slide-7">
+          <h3>Ley 1581</h3>
+          <p>Tu huella se registra solo con tu autorización previa, conforme a la ley de protección de datos.</p>
+        </div>
+        <div class="card-base card-slide-7">
+          <h3>En tránsito</h3>
+          <p>La comunicación viaja cifrada con HTTPS/TLS.</p>
+        </div>
+        <div class="card-base card-slide-7">
+          <h3>Contraseñas</h3>
+          <p>Se guardan con hash bcrypt, nunca en texto plano.</p>
+        </div>
+      </div>
+
+      <div class="slide-footer-note">Ningún sistema es infalible, por eso seguimos reforzando la seguridad del huellero y del servidor.</div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 8: ROBOT RPA · SOFÍA PLUS
+         ========================================== -->
+    <section class="slide" id="slide-8">
+      <div class="eyebrow">Robot RPA · Sofía Plus</div>
+      <h2 class="slide-title">Un robot lleva las novedades a Sofía Plus</h2>
+      
+      <div class="grid-3-cols">
+        <div class="card-base card-slide-8">
+          <div class="phase-tag">Fase 1 · Registro en espera</div>
+          <div class="phase-val">5 días hábiles</div>
+          <p>Cada inasistencia queda en espera mientras corre el plazo para radicar la excusa.</p>
+        </div>
+        <div class="card-base card-slide-8">
+          <div class="phase-tag">Fase 2 · Ejecución semanal</div>
+          <div class="phase-val">Sábado, 12:00 a. m.</div>
+          <p>El servidor lanza el robot de Playwright, que carga en Sofía Plus lo que ya cumplió el plazo.</p>
+        </div>
+        <div class="card-base card-slide-8">
+          <div class="phase-tag">Fase 3 · Candado de seguridad</div>
+          <div class="phase-val">Con evidencia</div>
+          <p>El robot guarda capturas de pantalla para que cada carga pueda revisarse.</p>
+        </div>
       </div>
     </section>
 
-    <!-- SLIDE 5: CRONOMETRÍA Y REGLAS DE ASISTENCIA -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Reglas de Convivencia y Asistencia</div>
-        <h2 class="gamma-title">Tiempos de Llegada: <span>¡Cuida tu Formación!</span></h2>
-        <p class="gamma-subtitle">Estados de marcación calculados de forma automática según la hora de inicio oficial de tu jornada formativa.</p>
-      </div>
-
-      <div class="slide-body">
-        <div class="timeline-container">
-          <!-- Card 1: 00-10 -->
-          <div class="timeline-step" style="border-top: 5px solid #46d67c;">
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <div class="step-time" style="color: #46d67c;">00 a 10 MINUTOS</div>
-              <span class="card-badge badge-green" style="align-self: flex-start;">PRESENTE</span>
-              <div class="card-title" style="font-size: 26px;">Tiempo de Gracia</div>
-              <p class="card-text" style="font-size: 20px;">Llegada puntual dentro del rango de tolerancia inicial. Se registran <strong>0 horas</strong> de inasistencia en tu hoja de vida formativa.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #46d67c;">✔ Cómputo en Ficha:</div>
-                <div class="card-detail-desc">0 horas de falla. Registro de puntualidad 100% limpio en la jornada.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">💡 Recomendación:</div>
-                <div class="card-detail-desc">Marca siempre al ingresar al aula para validar tu presencia al instante.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #46d67c; border-color: rgba(70,214,124,0.35);">🟢 0 horas de falla</div>
-          </div>
-
-          <!-- Card 2: 11-60 -->
-          <div class="timeline-step" style="border-top: 5px solid #fbbf24;">
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <div class="step-time" style="color: #fbbf24;">11 a 60 MINUTOS</div>
-              <span class="card-badge badge-amber" style="align-self: flex-start;">TARDANZA 1H</span>
-              <div class="card-title" style="font-size: 26px;">Primer Retardo</div>
-              <p class="card-text" style="font-size: 20px;">Ingreso posterior al tiempo de gracia. El sistema computa automáticamente <strong>1 hora</strong> de inasistencia en el acumulado trimestral.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fbbf24;">⚠️ Cómputo en Ficha:</div>
-                <div class="card-detail-desc">+1 hora de inasistencia acumulada en la sesión formativa.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">📌 Bolsa de Tardanzas:</div>
-                <div class="card-detail-desc">Al sumar las horas completas de una jornada, equivale a 1 día de falta.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #fbbf24; border-color: rgba(245,158,11,0.35);">🟡 +1 hora registrada</div>
-          </div>
-
-          <!-- Card 3: 61-120 -->
-          <div class="timeline-step" style="border-top: 5px solid #f97316;">
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <div class="step-time" style="color: #f97316;">61 a 120 MINUTOS</div>
-              <span class="card-badge badge-orange" style="align-self: flex-start;">TARDANZA 2H</span>
-              <div class="card-title" style="font-size: 26px;">Segundo Retardo</div>
-              <p class="card-text" style="font-size: 20px;">Retraso severo en la sesión formativa. Se acumulan <strong>2 horas</strong> de inasistencia en tu hoja de seguimiento.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #f97316;">⚠️ Cómputo en Ficha:</div>
-                <div class="card-detail-desc">+2 horas de inasistencia acumuladas en la jornada.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">🤝 Acción Preventiva:</div>
-                <div class="card-detail-desc">Dialoga con tu instructor líder para evitar que comprometa tu porcentaje.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #f97316; border-color: rgba(249,115,22,0.35);">🟠 +2 horas registradas</div>
-          </div>
-
-          <!-- Card 4: > 120 -->
-          <div class="timeline-step" style="border-top: 5px solid #ef4444;">
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <div class="step-time" style="color: #ef4444;">&gt; 120 MINUTOS</div>
-              <span class="card-badge badge-red" style="align-self: flex-start;">FALTA COMPLETA</span>
-              <div class="card-title" style="font-size: 26px;">Inasistencia Total</div>
-              <p class="card-text" style="font-size: 20px;">Ausencia total a la jornada. Cierre automático al finalizar: <strong>6 horas</strong> en diurna y <strong>5 horas</strong> en nocturna.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #ef4444;">🚨 Pérdida de Jornada:</div>
-                <div class="card-detail-desc">Pérdida del bloque completo de formación del día.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">⚖️ Causal Deserción:</div>
-                <div class="card-detail-desc">3 inasistencias continuas injustificadas activan proceso de deserción.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #ef4444; border-color: rgba(239,68,68,0.35);">🔴 Jornada completa fallida</div>
-          </div>
+    <!-- ==========================================
+         SLIDE 9: MONITOREO PREVENTIVO
+         ========================================== -->
+    <section class="slide" id="slide-9">
+      <div class="eyebrow">Monitoreo preventivo</div>
+      <h2 class="slide-title">El semáforo te avisa antes de que sea tarde</h2>
+      
+      <div class="grid-3-cols">
+        <div class="card-base card-slide-9 card-border-green">
+          <h3 class="text-green">Normal</h3>
+          <p>Vas bien. Sigue asistiendo con regularidad.</p>
+        </div>
+        <div class="card-base card-slide-9 card-border-amber">
+          <h3 class="text-amber">En ruta</h3>
+          <p>Amarillo: 2 inasistencias seguidas o 3 acumuladas.</p>
+        </div>
+        <div class="card-base card-slide-9 card-border-red">
+          <h3 class="text-red">Riesgo de deserción</h3>
+          <p>Rojo: 3 inasistencias seguidas o 5 acumuladas, sin justificar.</p>
         </div>
       </div>
 
-      <div class="slide-footer-note">
-        ⚖️ <em>Parámetros configurados en ASISTA según la programación de jornadas del centro (sujetos a directrices de coordinación).</em>
-      </div>
+      <div class="slide-footer-note">Criterio basado en el Reglamento del Aprendiz, art. 30. Las excusas aprobadas no cuentan.</div>
     </section>
 
-    <!-- SLIDE 6: MARCO LEGAL Y EXCUSAS -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Reglamento del Aprendiz · Debido Proceso</div>
-        <h2 class="gamma-title">Excusas Médicas: <span>Acuerdo 009 de 2024</span></h2>
-        <p class="gamma-subtitle">El sistema protege tu debido proceso formativo automatizando la radicación y verificación oportuna de tus soportes legales.</p>
-      </div>
-
-      <div class="slide-body">
-        <div class="gamma-grid grid-3">
-          <!-- Card 1: 5 Días -->
-          <div class="gamma-card">
-            <div>
-              <div class="stat-number">5 Días</div>
-              <div class="stat-label">Hábiles Perentorios</div>
-              <p class="card-text" style="margin-top: 6px;">Tienes <strong>hasta 5 días hábiles</strong> (sin contar sábados, domingos ni festivos) a partir de la inasistencia para radicar tu justificación en la plataforma web.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: var(--green-accent);">⏰ Conteo Hábil:</div>
-                <div class="card-detail-desc">El calendario calcula solo días laborables institucionales sin perjudicarte.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">⏳ Término Legal:</div>
-                <div class="card-detail-desc">Vencido este plazo reglamentario, el sistema cierra la ventana y consolida la falla.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">📅 Calendario legal automatizado</div>
-          </div>
-
-          <!-- Card 2: Soportes Aceptados -->
-          <div class="gamma-card">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-blue">Documentación Válida</span>
-                <span style="font-size: 30px;">🏥</span>
-              </div>
-              <div class="card-title">Soportes Aceptados</div>
-              <p class="card-text">Soportes médicos oficiales emitidos por tu EPS o SURA, constancia de fuerza mayor demostrable o citación judicial formal en formato <strong>PDF o foto nítida</strong>.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box" style="background: rgba(56,189,248,0.08); border-color: rgba(56,189,248,0.25);">
-                <div class="card-detail-title" style="color: var(--cyan-tech);">📱 Carga Móvil:</div>
-                <div class="card-detail-desc">Tomas la foto desde tu teléfono o arrastras el PDF al portal sin fotocopias.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">📁 Expediente Seguro:</div>
-                <div class="card-detail-desc">El soporte queda archivado en la nube visible exclusivamente para tus instructores.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">📎 Carga digital sin papel</div>
-          </div>
-
-          <!-- Card 3: Descuento de Horas -->
-          <div class="gamma-card">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-green">Efecto Automático</span>
-                <span style="font-size: 30px;">✅</span>
-              </div>
-              <div class="card-title">Descuento de Horas</div>
-              <p class="card-text">Una vez tu instructor revisa y pulsa <strong>Aprobar</strong> en el panel de control, el sistema descuenta de forma automática las horas del cálculo de riesgo de deserción.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box" style="background: rgba(70,214,124,0.08); border-color: rgba(70,214,124,0.25);">
-                <div class="card-detail-title" style="color: var(--green-accent);">🛡️ Seguridad Jurídica:</div>
-                <div class="card-detail-desc">Queda registro inmutable con fecha, hora y usuario que autorizó la justificación.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">🔄 Sincronización Inmediata:</div>
-                <div class="card-detail-desc">La justificación aprobada anula el reporte nocturno hacia Sofia Plus.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill">🛡️ Trazabilidad de aprobación</div>
-          </div>
+    <!-- ==========================================
+         SLIDE 10: GRACIAS / PREGUNTAS
+         ========================================== -->
+    <section class="slide slide-10" id="slide-10">
+      <h1 class="slide-10-title">Gracias. <span class="text-green">¿Preguntas?</span></h1>
+      <p class="slide-10-subtitle">ASISTA fue desarrollado por aprendices de ADSO, con apoyo de herramientas de IA, para que el seguimiento de tu formación sea más justo y transparente.</p>
+      
+      <div class="metrics-row">
+        <div class="card-base metric-card">
+          <div class="metric-num">129</div>
+          <div class="metric-label">aprendices registrados</div>
+        </div>
+        <div class="card-base metric-card">
+          <div class="metric-num">&lt; 1 s</div>
+          <div class="metric-label">por registro de huella</div>
+        </div>
+        <div class="card-base metric-card">
+          <div class="metric-num">5</div>
+          <div class="metric-label">desarrolladores</div>
         </div>
       </div>
 
-      <div class="slide-footer-note">
-        📌 <em>Revisa siempre los lineamientos específicos de justificación con tu instructor líder de ficha y coordinación académica.</em>
-      </div>
+      <div class="hero-footer">Tecnología en Análisis y Desarrollo de Software (ADSO) · Centro Agroturístico · Regional Santander</div>
     </section>
 
-    <!-- SLIDE 7: HABEAS DATA Y SEGURIDAD BIOMÉTRICA (AJUSTE PERFECTO 2x2 SIN DESBORDAMIENTO) -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Ley 1581 de 2012 · Protección de Datos Personales</div>
-        <h2 class="gamma-title">¿Mi Huella está <span>Segura</span>? ¡Totalmente!</h2>
-        <p class="gamma-subtitle">ASISTA fue diseñado para salvaguardar tu privacidad y tus datos biométricos sensibles con altos estándares de seguridad y respeto a la ley.</p>
-      </div>
+  </div>
 
-      <div class="slide-body">
-        <div class="gamma-grid grid-2" style="gap: 16px;">
-          <!-- Card 1: 0% Fotos -->
-          <div class="gamma-card" style="padding: 18px 22px; gap: 8px;">
-            <div class="card-top">
-              <div class="stat-number" style="font-size: 50px; line-height: 1;">0%</div>
-              <span class="card-badge badge-green">Privacidad Estricta</span>
-            </div>
-            <div>
-              <div class="card-title" style="font-size: 24px;">Cero Fotos Almacenadas</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">
-                El sistema jamás guarda imágenes ni dibujos de tu huella. Al poner el dedo, solo se extraen coordenadas matemáticas de bifurcaciones (minucias).
-              </p>
-            </div>
-            <div class="card-detail-box" style="padding: 8px 14px;">
-              <span style="font-size: 17.5px; font-weight: 700; color: #fff;">🔒 Privacidad Blindada:</span>
-              <span style="font-size: 17px; color: var(--text-muted);">No existen archivos gráficos que puedan ser sustraídos ni vulnerados.</span>
-            </div>
-            <div class="card-footer-pill" style="font-size: 15px; padding: 6px 14px;">🛡️ Identidad 100% matemática</div>
-          </div>
-
-          <!-- Card 2: Diseño Minucias FMD -->
-          <div class="gamma-card" style="padding: 18px 22px; gap: 8px;">
-            <div class="card-top">
-              <div class="stat-number" style="font-size: 44px; line-height: 1; color: var(--cyan-tech); text-shadow: 0 0 20px rgba(56,189,248,0.3);">FMD</div>
-              <span class="card-badge badge-blue">Estándar ISO/IEC</span>
-            </div>
-            <div>
-              <div class="card-title" style="font-size: 24px;">Diseño No Reconstruible</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">
-                <strong>Diseñado para que no se pueda reconstruir tu huella:</strong> el algoritmo genera un vector binario numérico de una vía que imposibilita recrear tu huella física.
-              </p>
-            </div>
-            <div class="card-detail-box" style="padding: 8px 14px;">
-              <span style="font-size: 17.5px; font-weight: 700; color: var(--cyan-tech);">⚙️ Seguridad Biométrica:</span>
-              <span style="font-size: 17px; color: var(--text-muted);">Formato FMD de una sola vía bajo especificaciones internacionales.</span>
-            </div>
-            <div class="card-footer-pill" style="font-size: 15px; padding: 6px 14px;">🔒 Protección de identidad de una vía</div>
-          </div>
-
-          <!-- Card 3: Consentimiento Ley 1581 -->
-          <div class="gamma-card" style="padding: 18px 22px; gap: 8px;">
-            <div class="card-top">
-              <span class="card-badge badge-purple">Ley 1581 de 2012</span>
-              <span style="font-size: 24px;">📝</span>
-            </div>
-            <div>
-              <div class="card-title" style="font-size: 24px;">Autorización Previa y Expresa</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">
-                Por tratarse de un dato biométrico sensible, su tratamiento requiere obligatoriamente tu consentimiento informado y expreso antes del enrolamiento en el sistema.
-              </p>
-            </div>
-            <div class="card-detail-box" style="padding: 8px 14px;">
-              <span style="font-size: 17.5px; font-weight: 700; color: #c084fc;">⚖️ Habeas Data SENA:</span>
-              <span style="font-size: 17px; color: var(--text-muted);">Tratamiento de datos exclusivo para el control de asistencia educativa.</span>
-            </div>
-            <div class="card-footer-pill" style="font-size: 15px; padding: 6px 14px;">⚖️ Respeto al marco legal colombiano</div>
-          </div>
-
-          <!-- Card 4: Cifrado y Hash -->
-          <div class="gamma-card" style="padding: 18px 22px; gap: 8px;">
-            <div class="card-top">
-              <span class="card-badge badge-green">Criptografía Fuerte</span>
-              <span style="font-size: 24px;">🔐</span>
-            </div>
-            <div>
-              <div class="card-title" style="font-size: 24px;">Cifrado de Red y Credenciales</div>
-              <p class="card-text" style="font-size: 19.5px; margin-top: 4px;">
-                Toda la comunicación aula-nube viaja cifrada bajo <strong>HTTPS / TLS</strong>. Las contraseñas se almacenan con sellado criptográfico <strong>bcrypt con 10 rondas de salt</strong>.
-              </p>
-            </div>
-            <div class="card-detail-box" style="padding: 8px 14px;">
-              <span style="font-size: 17.5px; font-weight: 700; color: var(--green-accent);">🔑 Seguridad Dual:</span>
-              <span style="font-size: 17px; color: var(--text-muted);">Protección de datos blindada en tránsito por red y en reposo en la base de datos.</span>
-            </div>
-            <div class="card-footer-pill" style="font-size: 15px; padding: 6px 14px;">🛡️ Cifrado HTTPS + bcrypt</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="slide-footer-note">
-        🛡️ <em>Tus datos biométricos se emplean de forma exclusiva para el control de asistencia educativa dentro del centro de formación.</em>
-      </div>
-    </section>
-
-    <!-- SLIDE 8: EL ROBOT RPA + CAPTURA REAL DE SOFIA PLUS -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Automatización Robótica de Procesos (RPA)</div>
-        <h2 class="gamma-title">El Robot RPA: <span>Trabajando de Noche</span></h2>
-        <p class="gamma-subtitle">¿Cómo viajan las fallas validadas desde el aula hasta la plataforma central SENA Sofia Plus sin intervención manual?</p>
-      </div>
-
-      <div class="slide-body">
-        <div class="grid-preview-layout">
-          <!-- Columna izquierda: Las 3 Fases del Robot -->
-          <div style="display: flex; flex-direction: column; gap: 12px; height: 100%; justify-content: space-between; min-height: 0;">
-            <div class="gamma-card" style="padding: 18px 22px; gap: 6px;">
-              <div class="card-badge badge-green" style="align-self: flex-start; margin-bottom: 2px;">Fase 1: Aula & Web</div>
-              <div class="card-title" style="font-size: 24px;">Registro en Espera</div>
-              <p class="card-text" style="font-size: 19.5px;">Si no marcas presencia, la novedad entra en estado <code>EN_ESPERA</code> durante 5 días hábiles para garantizarte el tiempo legal de radicar tu justificación médica.</p>
-            </div>
-
-            <div class="gamma-card" style="padding: 18px 22px; gap: 6px;">
-              <div class="card-badge badge-blue" style="align-self: flex-start; margin-bottom: 2px;">Fase 2: Robot Playwright</div>
-              <div class="card-title" style="font-size: 24px;">Sábados · 11:00 PM</div>
-              <p class="card-text" style="font-size: 19.5px;">En la nube de GitHub Actions, un agente inteligente abre un navegador Chromium headless, ingresa con credenciales cifradas y digita las fallas consolidadas en Sofia Plus.</p>
-            </div>
-
-            <div class="gamma-card" style="padding: 18px 22px; gap: 6px;">
-              <div class="card-badge badge-purple" style="align-self: flex-start; margin-bottom: 2px;">Fase 3: Auditoría & Cierre</div>
-              <div class="card-title" style="font-size: 24px;">Candado de Seguridad</div>
-              <p class="card-text" style="font-size: 19.5px;">Sofia Plus confirma el reporte exitoso y el sistema sella el registro con un candado verde 🔒, almacenando capturas de pantalla como evidencia probatoria.</p>
-            </div>
-          </div>
-
-          <!-- Columna derecha: Captura real del Robot reportando en Sofia Plus Completa y Nítida -->
-          <div class="app-preview-frame">
-            <div class="app-preview-header">
-              <div class="preview-header-left">
-                <span class="preview-dot" style="background: #ef4444;"></span>
-                <span class="preview-dot" style="background: #fbbf24;"></span>
-                <span class="preview-dot" style="background: #46d67c;"></span>
-                <span class="preview-title">SENA Sofia Plus v9.0 · Formulario Diligenciado de Forma Autónoma</span>
-              </div>
-              <span class="preview-badge-live">RPA Activo</span>
-            </div>
-            <div class="app-preview-body">
-              <img src="capturas_manual/16_rpa_sofia_plus_formulario.png" alt="Robot en Sofia Plus" class="app-preview-img">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="slide-footer-note">
-        🤖 <em>La automatización elimina errores de transcripción humana y ahorra decenas de horas administrativas a los instructores.</em>
-      </div>
-    </section>
-
-    <!-- SLIDE 9: ALERTA TEMPRANA Y DESERCIÓN -->
-    <section class="slide">
-      <div class="slide-header">
-        <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Prevención y Acompañamiento Formativo</div>
-        <h2 class="gamma-title">Monitoreo Preventivo: <span>¡No Te Quedes Fuera!</span></h2>
-        <p class="gamma-subtitle">Semáforo de acompañamiento implementado en ASISTA para prevenir la pérdida del cupo formativo y apoyar al aprendiz.</p>
-      </div>
-
-      <div class="slide-body">
-        <div class="gamma-grid grid-3">
-          <!-- Verde -->
-          <div class="gamma-card" style="border-top: 6px solid #46d67c;">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-green">&lt; 10% Faltas</span>
-                <span style="font-size: 30px;">🟢</span>
-              </div>
-              <div class="card-title" style="font-size: 28px;">Estado Normal</div>
-              <p class="card-text" style="font-size: 21px; margin-top: 6px;">Asistencia constante y compromiso formativo impecable. No registras ausencias consecutivas y tu proceso formativo avanza sin ninguna observación.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box" style="background: rgba(70,214,124,0.08); border-color: rgba(70,214,124,0.25);">
-                <div class="card-detail-title" style="color: var(--green-accent);">📊 Situación del Aprendiz:</div>
-                <div class="card-detail-desc">Puntualidad en orden. Cumplimiento pleno de las competencias de la ficha.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">✨ Beneficio Formativo:</div>
-                <div class="card-detail-desc">Garantía de avance regular hacia la etapa productiva sin llamados de atención.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #46d67c; border-color: rgba(70,214,124,0.35);">✅ Cumplimiento óptimo</div>
-          </div>
-
-          <!-- Amarillo -->
-          <div class="gamma-card" style="border-top: 6px solid #fbbf24;">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-amber">10% a 14% Faltas</span>
-                <span style="font-size: 30px;">🟡</span>
-              </div>
-              <div class="card-title" style="font-size: 28px;">Alerta Preventiva</div>
-              <p class="card-text" style="font-size: 21px; margin-top: 6px;">Tu instructor líder recibe una alerta preventiva en el panel para dialogar contigo, conocer tus dificultades y acordar un plan de mejoramiento oportuno.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box" style="background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.25);">
-                <div class="card-detail-title" style="color: var(--amber-tech);">🤝 Acompañamiento Oportuno:</div>
-                <div class="card-detail-desc">Apoyo docente temprano antes de que las inasistencias alcancen el tope reglamentario.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">📝 Plan de Mejora:</div>
-                <div class="card-detail-desc">Compromisos formativos para nivelar actividades y recuperar horas pendientes.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #fbbf24; border-color: rgba(245,158,11,0.35);">⚠️ Acompañamiento temprano</div>
-          </div>
-
-          <!-- Rojo -->
-          <div class="gamma-card" style="border-top: 6px solid #ef4444;">
-            <div>
-              <div class="card-top" style="margin-bottom: 6px;">
-                <span class="card-badge badge-red">≥ 15% o 3 Días Seguidos</span>
-                <span style="font-size: 30px;">🔴</span>
-              </div>
-              <div class="card-title" style="font-size: 28px;">Riesgo de Deserción</div>
-              <p class="card-text" style="font-size: 21px; margin-top: 6px;"><strong>Criterio del Reglamento del Aprendiz:</strong> 3 días consecutivos injustificados o superar el límite acumulado genera reporte formal para citación a comité de evaluación.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <div class="card-detail-box" style="background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.25);">
-                <div class="card-detail-title" style="color: var(--red-tech);">⚖️ Debido Proceso:</div>
-                <div class="card-detail-desc">Notificación formal al aprendiz con oportunidad legal de presentar descargos.</div>
-              </div>
-              <div class="card-detail-box">
-                <div class="card-detail-title" style="color: #fff;">🚨 Consecuencia:</div>
-                <div class="card-detail-desc">Posible cancelación del registro de matrícula si no se justifica la causal.</div>
-              </div>
-            </div>
-
-            <div class="card-footer-pill" style="color: #ef4444; border-color: rgba(239,68,68,0.35);">🚨 Riesgo de Comité</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="slide-footer-note">
-        💡 <em>El objetivo de ASISTA no es sancionar, sino detectar a tiempo cualquier problema y ayudarte a culminar tu formación con éxito.</em>
-      </div>
-    </section>
-
-    <!-- SLIDE 10: INSPIRACIÓN Y DATOS REALES (BALANCE TOTAL) -->
-    <section class="slide hero-center">
-      <div class="gamma-eyebrow"><span class="eyebrow-dot"></span> Tu Futuro en el Software</div>
-      <h2 class="gamma-title" style="font-size: 60px; margin-bottom: 10px;">¡Bienvenidos al <span>Desarrollo de Software</span>!</h2>
-      <p class="gamma-subtitle" style="text-align: center; max-width: 1250px; font-size: 23px; margin-bottom: 16px;">
-        ASISTA es la prueba tangible de que en el SENA no solo aprendes teoría: desarrollas ingeniería de software productiva que soluciona problemas reales de nuestra comunidad.
-      </p>
-
-      <!-- 3 Tarjetas de Impacto con contenido balanceado que llenan la altura de forma armónica -->
-      <div class="gamma-grid grid-3" style="max-width: 1400px; width: 100%; height: 480px; gap: 24px;">
-        <div class="gamma-card" style="text-align: center; align-items: center; padding: 26px 22px;">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-            <div class="stat-number" style="font-size: 82px;">129</div>
-            <div class="stat-label" style="font-size: 21px; color: var(--green-accent);">Aprendices Registrados</div>
-            <p class="card-text" style="font-size: 20px; margin-top: 4px;">Población activa controlada a diario en aulas del Centro Agroturístico.</p>
-          </div>
-          <div class="card-detail-box" style="width: 100%;">
-            <div class="card-detail-title" style="justify-content: center; color: var(--green-accent);">✔ Producción Real:</div>
-            <div class="card-detail-desc">Fichas ADSO y Redes con enrolamiento biométrico y auditoría en MongoDB Atlas.</div>
-          </div>
-          <div class="card-footer-pill" style="align-self: center;">👥 Comunidad formativa conectada</div>
-        </div>
-
-        <div class="gamma-card" style="text-align: center; align-items: center; padding: 26px 22px;">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-            <div class="stat-number" style="font-size: 82px; color: var(--cyan-tech); text-shadow: 0 0 24px rgba(56,189,248,0.35);">~800 ms</div>
-            <div class="stat-label" style="font-size: 21px; color: var(--cyan-tech);">Velocidad de Verificación</div>
-            <p class="card-text" style="font-size: 20px; margin-top: 4px;">Tiempo promedio medido desde el toque dactilar hasta la confirmación en pantalla.</p>
-          </div>
-          <div class="card-detail-box" style="width: 100%;">
-            <div class="card-detail-title" style="justify-content: center; color: var(--cyan-tech);">⚡ Algoritmo 1:N Optimizado:</div>
-            <div class="card-detail-desc">Comparación matemática en memoria RAM. Cero filas y cero demoras en el ingreso.</div>
-          </div>
-          <div class="card-footer-pill" style="align-self: center;">⚡ Rendimiento de subsegundo</div>
-        </div>
-
-        <div class="gamma-card" style="text-align: center; align-items: center; padding: 26px 22px;">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-            <div class="stat-number" style="font-size: 82px; color: var(--purple-tech); text-shadow: 0 0 24px rgba(192,132,252,0.35);">5</div>
-            <div class="stat-label" style="font-size: 21px; color: var(--purple-tech);">Desarrolladores ADSO</div>
-            <p class="card-text" style="font-size: 20px; margin-top: 4px;">Proyecto integral concebido, diseñado y programado por aprendices de tu titulación.</p>
-          </div>
-          <div class="card-detail-box" style="width: 100%;">
-            <div class="card-detail-title" style="justify-content: center; color: var(--purple-tech);">💡 Talento SENA:</div>
-            <div class="card-detail-desc">Frontend, Backend, C++, Bases de Datos y Robots RPA construidos en etapa lectiva.</div>
-          </div>
-          <div class="card-footer-pill" style="align-self: center;">🎓 Hecho en casa por aprendices</div>
-        </div>
-      </div>
-
-      <div style="margin-top: 20px; font-size: 25px; color: var(--green-accent); font-weight: 800; letter-spacing: 0.5px;">
-        ¡Muchos éxitos en su etapa lectiva! ¿Preguntas, inquietudes o comentarios?
-      </div>
-    </section>
-
-  </main>
-
-  <!-- Barra de navegación inferior -->
-  <footer class="bottom-nav">
-    <button class="nav-btn" id="prevBtn" title="Anterior (Flecha Izquierda)">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
-    </button>
-    <div class="nav-hints">Navega con <b>←</b> / <b>→</b> o <b>Espacio</b></div>
-    <button class="nav-btn" id="nextBtn" title="Siguiente (Flecha Derecha / Espacio)">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
-    </button>
-    <button class="nav-btn" id="fullscreenBtn" title="Pantalla Completa (F)">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-    </button>
-  </footer>
+  <!-- Controles flotantes en la parte inferior para presentación en vivo -->
+  <div class="bottom-nav">
+    <button class="nav-btn" id="prevBtn" title="Anterior (←)">‹</button>
+    <div class="slide-counter" id="slideCounter">1 / 10</div>
+    <button class="nav-btn" id="nextBtn" title="Siguiente (→)">›</button>
+  </div>
 
   <script>
+    let currentSlide = 0;
     const slides = document.querySelectorAll('.slide');
-    const prevBtn = document.getElementById('prevBtn');
-    const nextBtn = document.getElementById('nextBtn');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const totalSlides = slides.length;
     const progressBar = document.getElementById('progressBar');
     const slideCounter = document.getElementById('slideCounter');
-    
-    let currentIndex = 0;
-    const totalSlides = slides.length;
 
-    function updateDeck(newIndex) {
-      if (newIndex < 0 || newIndex >= totalSlides) return;
-      slides[currentIndex].classList.remove('active');
-      currentIndex = newIndex;
-      slides[currentIndex].classList.add('active');
+    function updateDeck(index) {
+      if (index < 0) index = 0;
+      if (index >= totalSlides) index = totalSlides - 1;
+      currentSlide = index;
 
-      slideCounter.textContent = `${String(currentIndex + 1).padStart(2, '0')} / ${String(totalSlides).padStart(2, '0')}`;
-      progressBar.style.width = `${((currentIndex + 1) / totalSlides) * 100}%`;
+      slides.forEach((slide, i) => {
+        slide.classList.toggle('active', i === currentSlide);
+      });
+
+      if (progressBar) {
+        progressBar.style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+      }
+      if (slideCounter) {
+        slideCounter.textContent = `${currentSlide + 1} / ${totalSlides}`;
+      }
     }
 
-    prevBtn.addEventListener('click', () => updateDeck(currentIndex - 1));
-    nextBtn.addEventListener('click', () => updateDeck(currentIndex + 1));
+    // Exponer función globalmente para scripts como Playwright
+    window.updateDeck = updateDeck;
+
+    document.getElementById('prevBtn').addEventListener('click', () => updateDeck(currentSlide - 1));
+    document.getElementById('nextBtn').addEventListener('click', () => updateDeck(currentSlide + 1));
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
-        e.preventDefault();
-        updateDeck(currentIndex + 1);
+        updateDeck(currentSlide + 1);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        updateDeck(currentIndex - 1);
+        updateDeck(currentSlide - 1);
+      } else if (e.key === 'Home') {
+        updateDeck(0);
+      } else if (e.key === 'End') {
+        updateDeck(totalSlides - 1);
       } else if (e.key.toLowerCase() === 'f') {
-        toggleFullscreen();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
       }
     });
-
-    function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-      }
-    }
-
-    fullscreenBtn.addEventListener('click', toggleFullscreen);
-    updateDeck(0);
   </script>
 </body>
 </html>

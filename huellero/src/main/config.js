@@ -26,11 +26,14 @@ function getConfigPath() {
   return resolve(dir, 'config.json')
 }
 
+const DEFAULT_PROD_URL = 'https://asista.onrender.com'
+const DEFAULT_PROD_WS = 'wss://asista.onrender.com'
+
 const DEFAULTS = {
   deviceId: null,
   token: null,
-  backendUrl: process.env.HUELLERO_BACKEND_URL || 'http://localhost:3000',
-  wsUrl:      process.env.HUELLERO_WS_URL       || 'ws://localhost:3000',
+  backendUrl: process.env.HUELLERO_BACKEND_URL || (app?.isPackaged ? DEFAULT_PROD_URL : 'http://localhost:3000'),
+  wsUrl:      process.env.HUELLERO_WS_URL       || (app?.isPackaged ? DEFAULT_PROD_WS : 'ws://localhost:3000'),
   BIOMETRIC_MATCH_THRESHOLD: 21474,
 }
 
@@ -59,6 +62,28 @@ export function getConfig() {
     } else {
       cache = { ...DEFAULTS }
     }
+  }
+
+  // Auto-migración y saneamiento transparente de URLs:
+  let needPersist = false
+  // 1. Si el equipo tenía la URL obsoleta de Render ('huelleroactualizado-1'), migrar a 'asista'
+  if (cache.backendUrl && cache.backendUrl.includes('huelleroactualizado-1.onrender.com')) {
+    cache.backendUrl = DEFAULT_PROD_URL
+    cache.wsUrl = DEFAULT_PROD_WS
+    needPersist = true
+  }
+
+  // 2. Si la app está empaquetada (instalador de usuario) y apuntaba a localhost
+  if (app?.isPackaged && cache.backendUrl === 'http://localhost:3000') {
+    cache.backendUrl = DEFAULT_PROD_URL
+    cache.wsUrl = DEFAULT_PROD_WS
+    needPersist = true
+  }
+
+  if (needPersist) {
+    try {
+      writeFileSync(configPath, JSON.stringify(cache, null, 2), 'utf8')
+    } catch (_) {}
   }
 
   return cache

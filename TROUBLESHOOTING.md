@@ -1,5 +1,144 @@
 # Registro de Troubleshooting y Correcciones (Trazabilidad)
 
+## [2026-11-09 18:55] Corrección y Auto-migración de URL del Servidor en Aplicación de Escritorio (Huellero)
+
+- **Fecha y Hora:** 2026-11-09 18:55:00 -05:00
+- **Descripción del Problema / Bug:**
+  - Al abrir la aplicación de escritorio de Asista (Kiosko Huellero), aparecía persistentemente el aviso: *"Sin conexión con el servidor. Reintentando... (puede tardar si estaba inactivo)"*.
+- **Causa Raíz:**
+  - Los archivos de configuración persistidos en equipos de usuario (`%APPDATA%\huellero\config.json`) conservaban la URL del entorno anterior (`https://huelleroactualizado-1.onrender.com`), la cual fue dada de baja y responde con HTTP 503 Service Unavailable.
+  - Además, los valores por defecto (`DEFAULTS`) en `huellero/src/main/config.js` apuntaban genéricamente a `http://localhost:3000` sin conmutar automáticamente a producción en builds empaquetados (`app?.isPackaged`), y carecían de lógica de auto-migración para clientes con la URL obsoleta guardada en disco.
+- **Solución Aplicada:**
+  1. *Configuración Automática (`huellero/src/main/config.js`):*
+     - Definidas constantes `DEFAULT_PROD_URL = 'https://asista.onrender.com'` y `DEFAULT_PROD_WS = 'wss://asista.onrender.com'`.
+     - `DEFAULTS` conmuta automáticamente a la URL de producción si la app está empaquetada (`app?.isPackaged`) o `http://localhost:3000` si está en desarrollo.
+  2. *Auto-migración y Autocuración Transparente (`getConfig`):*
+     - Si la app detecta que el archivo local `config.json` contiene la URL obsoleta (`huelleroactualizado-1.onrender.com`) o `localhost` en una app empaquetada, migra automáticamente hacia `https://asista.onrender.com` y guarda el cambio sin requerir soporte técnico manual.
+  3. *Plantilla de Ejemplo:*
+     - Creado `huellero/config.example.json` con los valores oficiales de producción.
+- **Archivos Modificados:**
+  - `huellero/src/main/config.js`
+  - `huellero/config.example.json`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Prueba de conectividad HTTP contra `https://asista.onrender.com` con respuesta 200 OK (< 1s).
+  - Verificación de migración exitosa en `%APPDATA%\huellero\config.json` y `huellero/config.json`.
+  - Pruebas del backend ejecutadas sin regresiones (41/41 pasando).
+
+---
+
+## [2026-11-09 16:36] Integración Exclusiva del Isotipo ASISTA en Portada (Sustitución del Símbolo Check) y Limpieza de Láminas Restantes
+
+- **Fecha y Hora:** 2026-11-09 16:36:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario indicó: *"ponle solo en la primera pagina el logo del sistema (asista), cambia el simbolo del check por el de asista"*.
+  - Esto requería:
+    1. Reemplazar el símbolo del check dentro del contenedor superior de la portada por el isotipo oficial del sistema ASISTA.
+    2. Retirar cualquier logotipo de las diapositivas 2 a 10 (eliminando las insignias de esquina agregadas anteriormente) para que la identidad gráfica aparezca única y exclusivamente en la primera página.
+- **Causa Raíz:**
+  - En la portada existía un contenedor que alojaba un icono de checkmark o un marco anidado, y en las diapositivas 2 a 10 se había colocado el logo del SENA en la esquina superior derecha, lo cual divergía de la solicitud de mantener la marca únicamente en la portada.
+- **Solución Aplicada:**
+  1. *Generación de Isotipo Dactilar Transparente HD (`docs/asista_fingerprint_clean.png`):*
+     - Procesado el master de `huellero/build/icon.png` (1024x1024) para aislar el isotipo dactilar verde con la letra 'A' y el checkmark, generando un canal alfa transparente limpio y sin fondos oscuros anidados.
+  2. *Ajuste en `docs/presentacion_asista.html`:*
+     - **Slide 1:** Se integró `<img src="asista_fingerprint_clean.png" alt="Logo ASISTA" class="asista-hero-logo">` dentro de `.asista-hero-box`, sustituyendo al 100% el antiguo símbolo del check por el isotipo del sistema ASISTA con resplandor verde institucional.
+     - **Slides 2 a 10:** Se eliminaron las 9 etiquetas de insignia institucional (`.sena-corner-badge`) de las esquinas, dejando las láminas despejadas e idénticas a las capturas de referencia del usuario.
+  3. *Re-renderizado y Compilación de Entregables:*
+     - Ejecutado `node docs/export_slides.cjs` capturando las 10 láminas a resolución Retina 2x en `docs/slides_img/`.
+     - Compilado `docs/PRESENTACION_SISTEMA_ASISTA.pdf` (10 láminas en formato panorámico 16:9).
+     - Compilado `docs/PRESENTACION_SISTEMA_ASISTA.pptx` (y réplica `PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`) con guiones de orador actualizados.
+- **Archivos Modificados:**
+  - `docs/asista_fingerprint_clean.png`
+  - `docs/presentacion_asista.html`
+  - `docs/slides_img/*.png`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pdf`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pptx`
+  - `docs/PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Inspección visual vía `read_file` de `slide_01.png`, comprobando que el isotipo dactilar de ASISTA ocupa el lugar del check en la caja central de la portada.
+  - Inspección visual de `slide_02.png`, `slide_06.png` y `slide_10.png`, comprobando que las esquinas superiores están limpias sin logotipos.
+
+---
+
+## [2026-11-07 09:48] Restauración Fiel al 100% del Contenido Original de las 10 Diapositivas con Integración de Logos (ASISTA y SENA)
+
+- **Fecha y Hora:** 2026-11-07 09:48:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario solicitó restablecer de forma idéntica la redacción, orden y estructura exacta de las 10 diapositivas de la presentación oficial de inducción (`Sistema_ASISTA_·_Inducción_ADSO_(1).pdf`), tras haberse introducido textos o secciones ajenas en turnos anteriores.
+  - El requerimiento estricto: *"no cambien nada de informacion ni organizacion, solo quiero que agreges tanto el logo del proyecto como el del sena, el logo ponlo en la primera pagina y el logo del sena en las demas en una esquina"* y *"hazlo otra vez, pero igual a la presentacion que te pase"*.
+- **Causa Raíz:**
+  - En iteraciones previas se habían añadido títulos interpretativos adicionales y textos expandidos que rompían la estructura y síntesis de la presentación original que el usuario ya había estructurado y validado.
+- **Solución Aplicada:**
+  1. *Extracción y Cotejo Literal del PDF Original:*
+     - Se extrajeron y cotejaron palabra por palabra los textos de las 10 páginas del PDF original del usuario mediante scripts directos de Python (`pypdf`), garantizando fidelidad 100% en las 10 láminas.
+  2. *Reescritura Estricta de `docs/presentacion_asista.html`:*
+     - **Slide 1:** Portada con badge hero que aloja el logo oficial de ASISTA (`asista_logo.png`), título `SISTEMA ASISTA`, subtítulo exacto, cápsulas con los 5 autores y pie institucional.
+     - **Slide 2:** `FINALIDAD DEL SISTEMA` · `Menos filas. Más tiempo para formarte.` (4 tarjetas: `Sin filas`, `Consulta`, `Excusas`, `Móvil`) + pie.
+     - **Slide 3:** `OBJETIVOS` · `Automatizar la asistencia y proteger el debido proceso del aprendiz.` (4 tarjetas: `01 · Identificación biométrica 1:N`, `02 · Offline-first`, `03 · Debido proceso`, `04 · Robot RPA`).
+     - **Slide 4:** `ARQUITECTURA Y TECNOLOGÍA` · `Del sensor a Sofía Plus, en seis pasos` (6 cajas de paso: `1 · Sensor`, `2 · Huellero`, `3 · API`, `4 · Web`, `5 · Robot`, `6 · Destino`; 3 tarjetas inferiores: `Ambiente`, `Backend y nube`, `Frontend y RPA`).
+     - **Slide 5:** `TIEMPOS DE LLEGADA` · `El reloj corre desde que el instructor activa la clase` (4 tarjetas superiores de tiempos/estados con códigos de color institucional y 2 tarjetas inferiores explicativas).
+     - **Slide 6:** `EXCUSAS · ACUERDO 009 DE 2024` · `Tienes 5 días hábiles para justificar` (2 tarjetas gigantes: `5 días hábiles` y `Aprobada se descuentan las horas`) + pie.
+     - **Slide 7:** `SEGURIDAD Y DATOS PERSONALES` · `¿Mi huella está segura?` (4 tarjetas: `Sin imagen`, `Ley 1581`, `En tránsito`, `Contraseñas`) + pie.
+     - **Slide 8:** `ROBOT RPA · SOFÍA PLUS` · `Un robot lleva las novedades a Sofía Plus` (3 tarjetas de fases: `Fase 1 · Registro en espera`, `Fase 2 · Ejecución semanal`, `Fase 3 · Candado de seguridad`).
+     - **Slide 9:** `MONITOREO PREVENTIVO` · `El semáforo te avisa antes de que sea tarde` (3 tarjetas de semáforo: `Normal`, `En ruta`, `Riesgo de deserción`) + pie.
+     - **Slide 10:** `Gracias. ¿Preguntas?` con subtítulo exacto, 3 métricas (`129 aprendices registrados`, `< 1 s por registro de huella`, `5 desarrolladores`) y pie institucional.
+  3. *Ubicación de Logos Institucionales:*
+     - Diapositiva 1: Logo del proyecto ASISTA (`asista_logo.png`) en el recuadro superior verde.
+     - Diapositivas 2 a 10: Logo oficial del SENA (`sena_logo_transp.png`) fijado en la esquina superior derecha (`top: 55px; right: 90px; width: 66px`).
+  4. *Optimización Visual y Renderizado:*
+     - Agrandado el contenido y tipografía de tarjetas (cuerpo 21px-24px, títulos 34px-48px) para llenar armoniosamente la pantalla de 1920x1080 sin vacíos desproporcionados ni desbordamientos.
+     - Ocultada la barra de progreso en `docs/export_slides.cjs` para evitar líneas o bordes en las capturas.
+     - Captura automatizada con Playwright a escala 2x (`docs/slides_img/slide_01.png` a `slide_10.png`).
+     - Compilación limpia de `docs/PRESENTACION_SISTEMA_ASISTA.pdf`, `docs/PRESENTACION_SISTEMA_ASISTA.pptx` y copia `PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`.
+- **Archivos Modificados:**
+  - `docs/presentacion_asista.html`
+  - `docs/export_slides.cjs`
+  - `docs/slides_img/slide_01.png` ... `slide_10.png`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pdf`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pptx`
+  - `docs/PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Inspección visual directa vía `read_file` de `slide_01.png`, `slide_02.png`, `slide_04.png`, `slide_05.png`, `slide_06.png`, `slide_08.png`, `slide_10.png`.
+  - Confirmación de concordancia total con la redacción y organización de las páginas del PDF original facilitado por el usuario.
+
+---
+
+## [2026-11-07 09:25] Integración de Identidad Visual: Logo del Proyecto ASISTA en Portada y Logo Oficial SENA en Esquina de Diapositivas
+
+- **Fecha y Hora:** 2026-11-07 09:25:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  - El usuario solicitó mantener intacta toda la información, redacción y organización de las tarjetas, e incorporar ambos logos institucionales según una directiva de diseño específica:
+    1. El logo del proyecto (`asista_logo.png`) en la primera página (portada).
+    2. El logo oficial del SENA (`sena_logo_transp.png`) en una esquina de las demás diapositivas (slides 2 a 10).
+- **Causa Raíz:**
+  - En la versión anterior, la barra superior repetía estáticamente el icono del proyecto ASISTA en todas las diapositivas y el logo oficial del SENA no estaba presente en ninguna lámina.
+- **Solución Aplicada:**
+  1. *Creación de Activo Transparente del SENA (`docs/sena_logo_transp.png`):*
+     - Se procesó el archivo `docs/sena_logo.png` con canal alfa eliminando el fondo blanco para permitir su integración limpia sobre el fondo oscuro institucional (`#060b08`).
+  2. *Lógica Condicional en Navegación Superior (`docs/presentacion_asista.html`):*
+     - Creado el contenedor de esquina `.sena-corner-badge` con la insignia oficial del SENA en la esquina superior derecha junto al contador de diapositivas.
+     - En `updateDeck(newIndex)`:
+       - Para `newIndex === 0` (Portada): Se muestra el logo del proyecto ASISTA en el centro hero y en la cabecera, manteniendo oculta la insignia del SENA en la esquina.
+       - Para `newIndex >= 1` (Diapositivas 2 a 10): Se activa la insignia del SENA en la esquina superior derecha (`#senaCornerBadge`), y se oculta el icono de ASISTA en la etiqueta izquierda, dejando la cabecera limpia e institucional.
+  3. *Regeneración de Entregables Panorámicos:*
+     - Re-renderizado de las 10 diapositivas a 3840x2160 (escala 2x) con Playwright en `docs/slides_img/`.
+     - Compilado `docs/PRESENTACION_SISTEMA_ASISTA.pdf` con las 10 láminas actualizadas.
+     - Compilado `docs/PRESENTACION_SISTEMA_ASISTA.pptx` (y réplica `PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`) con notas del orador.
+- **Archivos Modificados:**
+  - `docs/presentacion_asista.html`
+  - `docs/sena_logo_transp.png`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pdf`
+  - `docs/PRESENTACION_SISTEMA_ASISTA.pptx`
+  - `docs/PRESENTACION_SISTEMA_ASISTA_MEJORADA.pptx`
+  - `docs/slides_img/*.png`
+  - `TROUBLESHOOTING.md`
+- **Verificación:**
+  - Inspección visual directa vía `read_file` de `slide_01.png`, `slide_02.png`, `slide_06.png` y `slide_10.png` verificando que la portada presenta el logo del proyecto ASISTA y que todas las demás diapositivas exhiben el logo del SENA en la esquina superior derecha, preservando al 100% el contenido y la organización.
+
+---
+
 ## [2026-11-06 23:05] Optimización del Orquestador RPA para Subida Activa de Novedades a Sofia Plus
 
 - **Fecha y Hora:** 2026-11-06 23:05:00 -05:00
