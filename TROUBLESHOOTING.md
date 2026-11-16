@@ -1884,3 +1884,37 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
   - Ejecución de Playwright contra `https://asista.onrender.com` finalizada con código 0.
   - Validación de existencia y tamaño de las 14 imágenes en `docs/capturas_manual/`.
   - Generación exitosa de la portada institucional en `docs/portada_manual_usuario.jpg`.
+
+## [2026-11-16 17:00] Modularización y Desacoplamiento de Vista Monolítica PanelInstructor.vue
+
+- **Fecha y Hora:** 2026-11-16 17:00:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  El archivo rontend/src/views/PanelInstructor.vue concentraba casi 2.600 líneas de código con múltiples responsabilidades acopladas en un único template gigante (modales de excusas, modales de inhabilitación de jornada, modales de asignación/desvinculación de docentes, pestaña del equipo ejecutor, historial de anomalías y barra de navegación por fechas con HUD de alerta). Esto dificultaba el mantenimiento y elevaba el riesgo de regresiones.
+- **Causa Raíz:**
+  Crecimiento acumulativo de funcionalidades en una única vista Vue sin separación en componentes de presentación y modales atómicos.
+- **Solución Aplicada:**
+  1. Se crearon 8 subcomponentes atómicos especializados en rontend/src/components/instructor/:
+     - ModalExcusa.vue: Gestión unificada de modales de excusa médica/institucional y descripción Sofía Plus.
+     - ModalInhabilitarJornada.vue: Diálogo de suspensión de jornada con motivos predefinidos y personalizado.
+     - ModalAgregarDocente.vue: Pestañas de vinculación de docente existente o registro de nuevo docente.
+     - ModalDesvincularDocente.vue: Confirmación destructiva de desvinculación de docente de la ficha.
+     - EquipoEjecutorTab.vue: Pestaña con fichas del docente líder y docentes comunes.
+     - HistorialAnomaliasTab.vue: Pestaña con tabla de fallas, tardanzas y exportador Excel/PDF.
+     - NavegadorDias.vue: Barra interactiva de cambio de día anterior/siguiente, picker e ir a hoy.
+     - HudJornadaInhabilitada.vue: Banner HUD de advertencia de jornada inhabilitada con botón de reactivación.
+  2. Se refactorizó PanelInstructor.vue como orquestador reactivo de alto nivel, reemplazando 562 líneas de markup repetitivo por componentes limpios vinculados mediante Props y Emits.
+- **Archivos Modificados:**
+  - rontend/src/views/PanelInstructor.vue
+  - rontend/src/components/instructor/ModalExcusa.vue
+  - rontend/src/components/instructor/ModalInhabilitarJornada.vue
+  - rontend/src/components/instructor/ModalAgregarDocente.vue
+  - rontend/src/components/instructor/ModalDesvincularDocente.vue
+  - rontend/src/components/instructor/EquipoEjecutorTab.vue
+  - rontend/src/components/instructor/HistorialAnomaliasTab.vue
+  - rontend/src/components/instructor/NavegadorDias.vue
+  - rontend/src/components/instructor/HudJornadaInhabilitada.vue
+  - TROUBLESHOOTING.md
+- **Verificación:**
+  - Compilación de producción validada: 
+pm run build:prod completado en 1.37s sin errores (332 módulos transformados).
+  - Sincronización exitosa con ackend/public/.
