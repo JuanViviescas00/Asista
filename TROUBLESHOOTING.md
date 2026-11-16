@@ -1918,3 +1918,23 @@ pm run build:prod exitosa (324 modulos transformados en 1.13s sin advertencias c
   - Compilación de producción validada: 
 pm run build:prod completado en 1.37s sin errores (332 módulos transformados).
   - Sincronización exitosa con ackend/public/.
+
+## [2026-11-16 17:12] Reversión de commit en repositorio Huellero SENA y blindaje de push a Asista
+
+- **Fecha y Hora:** 2026-11-16 17:12:00 -05:00
+- **Descripción del Problema / Requerimiento:**
+  El usuario solicitó no subir más cambios al repositorio de Huellero SENA (https://github.com/ivanrene86/HuelleroActualizado.git), retirar de allí el commit 353c599 y mantener todos los desarrollos futuros de manera exclusiva en el repositorio propio sista (https://github.com/JuanViviescas00/Asista.git).
+- **Causa Raíz:**
+  Separación intencional de repositorios para evitar alterar el repositorio institucional de SENA CAT y concentrar el código en el repositorio privado de Asista.
+- **Solución Aplicada:**
+  1. Se forzó la reversión del branch main en origin al commit inmediatamente anterior (637e535) mediante git push --force-with-lease origin 637e535:main, retirando el commit 353c599 de Huellero SENA.
+  2. Se mantuvo intacto el commit 353c599 en sista/main.
+  3. Se reconfiguró el tracking por defecto de la rama local main hacia sista/main.
+  4. Se deshabilitaron las URLs de push en los remotos origin y juan apuntándolas a DISABLED_NO_PUSH_TO_SENA para garantizar que ningún push futuro pueda llegar accidentalmente al repositorio de SENA.
+- **Archivos Modificados:**
+  - Configuración Git (.git/config)
+  - TROUBLESHOOTING.md
+- **Verificación:**
+  - origin/main restablecido en commit 637e535.
+  - sista/main preserva commit 353c599.
+  - git branch -vv confirma main rastreando exclusivamente sista/main.
